@@ -1,0 +1,23 @@
+{
+  "skill_name": "taskbean",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "fix the authentication bug in src/auth/middleware.ts where JWT tokens aren't being refreshed properly, causing users to get logged out after 15 minutes",
+      "expected_output": "Agent should call `taskbean add` with a descriptive title like 'fix JWT token refresh in auth middleware' at the start, work on the fix, then call `taskbean done <id>` when complete. The task title should be specific enough to be useful in a weekly report.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I need you to do three things: first update the README with the new API endpoints, then add input validation to the /users POST endpoint, and finally write tests for the validation logic",
+      "expected_output": "Agent should create THREE separate tasks via `taskbean add` — one for README update, one for input validation, one for tests. Each should have a distinct, descriptive title. They should be logged individually, not as one mega-task. Each should get a `taskbean done` call when that specific piece is complete.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "can you look into why the CI pipeline is failing? i think it's something with the docker build step but i'm not sure. also while you're at it the linting config needs to be updated to use the new eslint flat config format",
+      "expected_output": "Agent should create at least two tasks — one for investigating/fixing the CI pipeline failure, one for updating the ESLint config. The investigation task should be logged even though the outcome is uncertain. Titles should be specific: 'investigate CI pipeline docker build failure' not 'fix CI'.",
+      "files": []
+    }
+  ]
+}

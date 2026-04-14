@@ -1,0 +1,46 @@
+{
+  "id": "/taskbean",
+  "name": "taskbean",
+  "short_name": "taskbean",
+  "description": "Your local AI-powered task manager — powered by Foundry Local",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf3ea",
+  "theme_color": "#e85420",
+  "orientation": "any",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "categories": ["productivity", "utilities"],
+  "handle_links": "preferred",
+  "edge_side_panel": { "preferred_width": 480 },
+  "launch_handler": { "client_mode": "navigate-existing" },
+  "protocol_handlers": [
+    {
+      "protocol": "web+taskbean",
+      "url": "/?protocol=%s"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Focus Todos",
+      "short_name": "Todos",
+      "description": "Jump to the todo list",
+      "url": "/?view=todos"
+    },
+    {
+      "name": "Quick Add",
+      "short_name": "Add",
+      "description": "Open the app with the composer focused",
+      "url": "/?composer=1"
+    },
+    {
+      "name": "Nerd Mode",
+      "short_name": "Telemetry",
+      "description": "Open the app with the telemetry pane visible",
+      "url": "/?nerd=1"
+    }
+  ]
+}

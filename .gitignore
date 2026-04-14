@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+*.egg
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build / temp
+*.log
+server-out.txt
+server-err.txt
+
+# Foundry Local uploads
+foundry-todo-uploads/
+
+# User preferences / local config
+.taskbean-config.json
+.taskbean-config.json.migrated
+.todo-buddy-config.json
+.mcp.json
+
+# Playwright artifacts
+.playwright-cli/
+.playwright-mcp/
+test-results/
+
+# Package lock (keep package-lock.json, ignore pip)
+*.pyc

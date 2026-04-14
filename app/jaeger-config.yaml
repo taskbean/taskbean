@@ -1,0 +1,58 @@
+# Jaeger v2.17 configuration — built on OpenTelemetry Collector framework
+# This configures the all-in-one mode: collector + query in a single binary.
+
+service:
+  extensions: [jaeger_storage, jaeger_query]
+  pipelines:
+    traces/store:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+    traces/spanmetrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [spanmetrics]
+    metrics/spanmetrics:
+      receivers: [spanmetrics]
+      exporters: [prometheus]
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 512
+
+connectors:
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+    dimensions:
+      - name: http.method
+      - name: http.status_code
+      - name: gen_ai.request.model
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: memstore
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+extensions:
+  jaeger_storage:
+    backends:
+      memstore:
+        memory:
+          max_traces: 50000
+  jaeger_query:
+    storage:
+      traces: memstore
+    ui:
+      config_file: ""

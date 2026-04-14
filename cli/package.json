@@ -1,0 +1,20 @@
+{
+  "name": "taskbean",
+  "version": "0.4.0",
+  "description": "Task management CLI for AI coding agents. Push tasks from Copilot, Claude, or any agent.",
+  "type": "module",
+  "bin": {
+    "taskbean": "./bin/taskbean.js",
+    "bean": "./bin/taskbean.js"
+  },
+  "scripts": {
+    "test": "node --test src/**/*.test.js"
+  },
+  "keywords": ["cli", "task-management", "copilot", "agent-skill", "ai"],
+  "author": "Nicholas Brady",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "commander": "^13.0.0"
+  }
+}

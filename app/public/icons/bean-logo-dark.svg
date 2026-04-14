@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Squircle badge - deep espresso -->
+  <rect x="40" y="40" width="944" height="944" rx="188" ry="188" fill="#1A0808"/>
+
+  <!-- Terminal chevron > in warm cream, centered vertically, left of center -->
+  <!-- Chevron tip at x=420, arms extend left to x=270. Vertical center at 512. Half-height ~110 -->
+  <polyline
+    points="275,402 415,512 275,622"
+    fill="none"
+    stroke="#F0DCC8"
+    stroke-width="56"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Coffee bean - right side, same centerline -->
+  <!-- Bean center at roughly x=620, y=512, rx=85, ry=110 -->
+  <g transform="translate(620, 512)">
+    <!-- Bean body - full oval, light roast -->
+    <ellipse cx="0" cy="0" rx="88" ry="112" fill="#C08050"/>
+
+    <!-- Shadow half (right side) -->
+    <clipPath id="right-half">
+      <rect x="0" y="-115" width="92" height="230"/>
+    </clipPath>
+    <ellipse cx="0" cy="0" rx="88" ry="112" fill="#8B5530" clip-path="url(#right-half)"/>
+
+    <!-- Highlight on upper-left curve -->
+    <ellipse cx="-32" cy="-55" rx="28" ry="18" fill="#D4965E" opacity="0.7" transform="rotate(-20)"/>
+
+    <!-- Center crease - S-curve -->
+    <path
+      d="M 6,-95 C -22,-40 22,40 -6,95"
+      fill="none"
+      stroke="#6B3A20"
+      stroke-width="10"
+      stroke-linecap="round"
+    />
+  </g>
+</svg>

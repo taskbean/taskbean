@@ -1,0 +1,62 @@
+[
+  {
+    "query": "fix the authentication bug in src/auth/middleware.ts where JWT tokens aren't being refreshed properly. users are getting logged out after 15 minutes",
+    "should_trigger": true
+  },
+  {
+    "query": "I need you to do three things: update the README with the new API endpoints, add input validation to the /users POST endpoint, and write tests for the validation logic",
+    "should_trigger": true
+  },
+  {
+    "query": "can you look into why the CI pipeline is failing? i think it's something with the docker build step. also the eslint config needs updating to the flat config format",
+    "should_trigger": true
+  },
+  {
+    "query": "refactor the entire payment processing module to use the new Stripe SDK v2. there are about 8 files that need to be updated and the webhook handler needs to be rewritten",
+    "should_trigger": true
+  },
+  {
+    "query": "hey can you set up the new microservice for the notifications feature? needs dockerfile, kubernetes manifests, the grpc proto definitions, and a basic health check endpoint",
+    "should_trigger": true
+  },
+  {
+    "query": "im getting a weird error when i run npm test -- something about a missing module. can you debug it and also while youre at it update our jest config to use the new v30 syntax",
+    "should_trigger": true
+  },
+  {
+    "query": "migrate our database from postgres 14 to 16, update the connection pooling config, and make sure the backup scripts still work with the new version",
+    "should_trigger": true
+  },
+  {
+    "query": "i need to prepare for my 1-on-1 tomorrow, can you help me draft talking points about what our team accomplished this sprint?",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the difference between JWT and OAuth2? can you explain it simply?",
+    "should_trigger": false
+  },
+  {
+    "query": "read src/auth/middleware.ts and explain what it does",
+    "should_trigger": false
+  },
+  {
+    "query": "generate a weekly summary of my git commits across all repos",
+    "should_trigger": false
+  },
+  {
+    "query": "help me write a cover letter for a senior engineer position at Stripe. I've been doing a lot of backend work with Node.js and TypeScript",
+    "should_trigger": false
+  },
+  {
+    "query": "what are the best practices for structuring a monorepo with turborepo? I'm just researching, not building anything yet",
+    "should_trigger": false
+  },
+  {
+    "query": "review this PR diff and tell me if there are any security issues. dont change anything, just review it",
+    "should_trigger": false
+  },
+  {
+    "query": "install the taskbean CLI tool globally on my system and configure it for this project",
+    "should_trigger": false
+  }
+]

@@ -1,0 +1,39 @@
+# ── Agent Framework + AG-UI ───────────────────────────────────────────────────
+agent-framework
+agent-framework-ag-ui
+
+# ── Foundry Local (Windows NPU) ───────────────────────────────────────────────
+foundry-local-sdk-winml
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+python-multipart
+
+# ── Token counting ────────────────────────────────────────────────────────────
+tiktoken
+
+# ── Scheduling ────────────────────────────────────────────────────────────────
+apscheduler
+
+# ── Windows notifications ─────────────────────────────────────────────────────
+win10toast
+
+# ── MCP (MarkItDown file conversion) ─────────────────────────────────────────
+mcp
+
+# ── OpenTelemetry ─────────────────────────────────────────────────────────────
+opentelemetry-sdk>=1.29.0
+opentelemetry-semantic-conventions>=0.50b0
+opentelemetry-exporter-otlp-proto-grpc
+opentelemetry-exporter-otlp-proto-http
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-httpx
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+httpx
+python-dotenv
+
+# ── Dev / testing ─────────────────────────────────────────────────────────────
+pytest
+pytest-asyncio
