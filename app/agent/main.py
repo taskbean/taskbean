@@ -1278,16 +1278,22 @@ def _correlate_session(task: dict, copilot_conn) -> dict | None:
 
 
 async def _build_task_detail(task_id: str) -> dict:
-    """Build enriched task detail combining taskbean DB and Copilot session data."""
-    # 1. Get task from taskbean DB
-    taskbean_conn = _get_taskbean_db()
-    if taskbean_conn is None:
-        raise HTTPException(404, "taskbean database not found")
-    try:
-        row = taskbean_conn.execute("SELECT * FROM todos WHERE id = ?", (task_id,)).fetchone()
-    finally:
-        taskbean_conn.close()
-    if row is None:
+    """Build enriched task detail combining in-memory state, taskbean DB, and Copilot session data."""
+    # 1. Get task — check in-memory state first, then SQLite
+    task = None
+    mem_todo = next((t for t in state_mod.todos if t.get("id") == task_id), None)
+    if mem_todo:
+        task = dict(mem_todo)
+    else:
+        taskbean_conn = _get_taskbean_db()
+        if taskbean_conn:
+            try:
+                row = taskbean_conn.execute("SELECT * FROM todos WHERE id = ?", (task_id,)).fetchone()
+                if row:
+                    task = dict(row)
+            finally:
+                taskbean_conn.close()
+    if task is None:
         raise HTTPException(404, f"Task {task_id} not found")
 
     task = dict(row)

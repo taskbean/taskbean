@@ -3131,9 +3131,10 @@ async function refreshTodos() {
         localTodos = readCachedJson(STORAGE_KEYS.todos, []);
     }
     renderTodos();
-    // Update project count badge from local data
-    const projectNames = new Set(localTodos.filter(t => t.project).map(t => t.project));
-    document.getElementById('projectCount').textContent = projectNames.size || '0';
+    // Update project count badge — prefer the authoritative /api/projects cache,
+    // fall back to counting unique project names in local todos
+    const projCount = _projectsCache.length || new Set(localTodos.filter(t => t.project).map(t => t.project)).size;
+    document.getElementById('projectCount').textContent = projCount || '0';
     await processReminderNotifications();
 }
 
@@ -3204,6 +3205,16 @@ function updateTodoScrollHint() {
 let _projectsCache = [];
 let _expandedProject = null;
 let _usagePeriod = 'today';
+
+// Lightweight fetch to populate _projectsCache and badge on startup (no full render)
+async function fetchProjectCount() {
+    try {
+        const res = await fetch('/api/projects', { cache: 'no-store' });
+        _projectsCache = await res.json();
+        document.getElementById('projectCount').textContent = _projectsCache.length || '0';
+    } catch { /* offline */ }
+}
+
 async function renderProjects() {
     try {
         const res = await fetch('/api/projects', { cache: 'no-store' });
@@ -3587,10 +3598,8 @@ function renderTaskDetailCard(data) {
         <button class="task-detail-action" onclick="exportTaskPackage('${esc(t.id)}')">
             <i data-lucide="download"></i> Export
         </button>
-        ${s?.id ? `<button class="task-detail-action" onclick="window.open('file:///' + encodeURI('${esc(
-            (typeof process !== 'undefined' ? process.env?.HOME : '') || ''
-        )}/.copilot/session-state/${esc(s.id)}'), '_blank')" title="Open session folder">
-            <i data-lucide="external-link"></i> Session
+        ${s?.id ? `<button class="task-detail-action" onclick="navigator.clipboard.writeText('${esc(s.id)}').then(() => { const b=event.target.closest('.task-detail-action'); if(b){const o=b.innerHTML;b.innerHTML='<i data-lucide=\\'check\\' class=\\'icon-sm\\'></i> Copied ID';lucide.createIcons();setTimeout(()=>{b.innerHTML=o;lucide.createIcons()},1500)} })" title="Copy session ID: ${esc(s.id)}">
+            <i data-lucide="terminal"></i> Session
         </button>` : ''}
     </div>`;
 

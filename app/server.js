@@ -2596,7 +2596,9 @@ function correlateSession(task) {
 }
 
 function buildTaskDetail(taskId) {
-    const task = db.prepare('SELECT * FROM todos WHERE id = ?').get(taskId);
+    // Check in-memory todos first, then SQLite
+    let task = todos.find(t => t.id === taskId);
+    if (!task) task = db.prepare('SELECT * FROM todos WHERE id = ?').get(taskId);
     if (!task) return null;
 
     const sessionRow = correlateSession(task);
