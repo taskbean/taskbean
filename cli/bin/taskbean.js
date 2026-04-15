@@ -65,7 +65,8 @@ program
 program
   .command('install')
   .description('Install agent skill into a project')
-  .option('--global', 'Install globally (~/.agents/skills/)')
+  .option('--global', 'Install globally (~/)')
+  .option('--agent <agent>', 'Target agent: copilot, claude, codex, opencode, all', 'all')
   .option('--json', 'Output as JSON')
   .action(installCommand);
 

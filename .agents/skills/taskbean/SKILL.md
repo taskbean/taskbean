@@ -4,6 +4,8 @@ description: Automatically log tasks as you work so the user has a complete reco
 ---
 # taskbean — automatic work logging
 
+`bean` is a globally installed CLI command (installed via `npm install -g taskbean`). Run it directly — do NOT look for it inside this skill directory.
+
 The user relies on taskbean to reconstruct what they accomplished each day and week.Every task you log here shows up in their reports — this is how they communicate their work to their manager. Missing a task means it's invisible.
 
 ## When to log

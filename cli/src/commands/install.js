@@ -8,6 +8,8 @@ description: Automatically log tasks as you work so the user has a complete reco
 ---
 # taskbean — automatic work logging
 
+\`bean\` is a globally installed CLI command (installed via \`npm install -g taskbean\`). Run it directly — do NOT look for it inside this skill directory.
+
 The user relies on taskbean to reconstruct what they accomplished each day and week. Every task you log here shows up in their reports — this is how they communicate their work to their manager. Missing a task means it's invisible.
 
 ## When to log
@@ -66,33 +68,50 @@ Task titles end up in the user's weekly report. Write them the way you'd describ
 
 export function installCommand(opts) {
   const isGlobal = opts.global;
+  const agent = opts.agent || 'all';
+  const base = isGlobal ? homedir() : process.cwd();
 
-  let targetDir;
-  if (isGlobal) {
-    targetDir = join(homedir(), '.agents', 'skills', 'taskbean');
-  } else {
-    targetDir = join(process.cwd(), '.agents', 'skills', 'taskbean');
+  // Determine which skill directories to install into based on agent choice.
+  // .agents/skills/ is the cross-client interop path (Agent Skills spec).
+  // Client-specific paths ensure discovery by agents that scan their own dirs.
+  const targets = [];
+  if (agent === 'all' || agent === 'copilot') {
+    targets.push(join(base, '.agents', 'skills', 'taskbean'));
+    if (!isGlobal) targets.push(join(base, '.github', 'skills', 'taskbean'));
   }
-
-  if (!existsSync(targetDir)) {
-    mkdirSync(targetDir, { recursive: true });
+  if (agent === 'all' || agent === 'claude') {
+    targets.push(join(base, '.claude', 'skills', 'taskbean'));
   }
+  if (agent === 'all' || agent === 'codex') {
+    targets.push(join(base, '.codex', 'skills', 'taskbean'));
+  }
+  if (agent === 'all' || agent === 'opencode') {
+    targets.push(join(base, '.agents', 'skills', 'taskbean'));
+  }
+  // Deduplicate (e.g., .agents/skills appears for copilot + opencode)
+  const uniqueTargets = [...new Set(targets)];
 
-  const targetFile = join(targetDir, 'SKILL.md');
-
-  if (existsSync(targetFile)) {
-    if (opts.json) {
-      console.log(JSON.stringify({ status: 'already_installed', path: targetFile }));
-    } else {
-      console.log(`✅ Agent skill already installed at ${targetDir}`);
+  const results = [];
+  for (const targetDir of uniqueTargets) {
+    const targetFile = join(targetDir, 'SKILL.md');
+    if (existsSync(targetFile)) {
+      results.push({ status: 'already_installed', path: targetFile });
+      continue;
     }
-    return;
+    mkdirSync(targetDir, { recursive: true });
+    writeFileSync(targetFile, SKILL_MD);
+    results.push({ status: 'installed', path: targetFile });
   }
 
-  writeFileSync(targetFile, SKILL_MD);
   if (opts.json) {
-    console.log(JSON.stringify({ status: 'installed', path: targetFile }));
+    console.log(JSON.stringify(results.length === 1 ? results[0] : results));
   } else {
-    console.log(`📋 Agent skill installed at ${targetDir}`);
+    for (const r of results) {
+      if (r.status === 'installed') {
+        console.log(`📋 Installed: ${r.path}`);
+      } else {
+        console.log(`✅ Already installed: ${r.path}`);
+      }
+    }
   }
 }
