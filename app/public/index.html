@@ -172,41 +172,49 @@ header {
 }
 
 /* Offline startup overlay — shown when PWA launches without a reachable server */
-.offline-overlay { display: none; position: fixed; inset: 0; z-index: 2000; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; gap: 0; text-align: center; padding: 24px; transition: opacity .3s; }
+.offline-overlay { display: none; position: fixed; inset: 0; z-index: 2000; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; gap: 0; text-align: center; padding: 24px; transition: opacity .3s; overscroll-behavior: contain; }
 .offline-overlay.show { display: flex; }
 .offline-overlay.fade-out { opacity: 0; }
-.offline-overlay .overlay-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px 28px 24px; max-width: 440px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px; box-shadow: 0 8px 32px rgba(0,0,0,.12); }
+.offline-overlay .overlay-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px 28px 24px; max-width: 420px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px; box-shadow: 0 8px 32px rgba(0,0,0,.12); }
 .offline-overlay .overlay-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 .offline-overlay .overlay-icon.disconnected { background: var(--orange-soft); color: var(--orange); }
-.offline-overlay .overlay-icon.connecting { background: transparent; animation: none; }
+.offline-overlay .overlay-icon.connecting { background: transparent; }
 .offline-overlay .overlay-icon.connecting img.bean-spin { width: 40px; height: 40px; animation: spin 1.5s linear infinite; }
 .offline-overlay .overlay-icon.connected { background: var(--green-soft); color: var(--green); }
-.offline-overlay h2 { font-size: 17px; font-weight: 700; margin: 0; }
+.offline-overlay h2 { font-size: 17px; font-weight: 700; margin: 0; text-wrap: balance; }
 .offline-overlay .overlay-subtitle { font-size: 13px; color: var(--muted); max-width: 360px; line-height: 1.5; margin: 0; }
 .offline-overlay .overlay-actions { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; margin-top: 4px; }
 .offline-overlay .btn-row { display: flex; gap: 8px; align-items: center; justify-content: center; }
-.offline-overlay .start-btn { background: var(--green); color: #000; border: none; padding: 10px 24px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: filter .15s; }
+.offline-overlay .start-btn { background: var(--accent); color: #fff; border: none; padding: 10px 24px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: filter .15s, opacity .15s; }
 .offline-overlay .start-btn:hover { filter: brightness(1.1); }
-.offline-overlay .retry-btn { background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all .15s; }
-.offline-overlay .retry-btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+.offline-overlay .start-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.offline-overlay .retry-btn { background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background .15s, color .15s, border-color .15s; }
+.offline-overlay .retry-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.offline-overlay .retry-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .offline-overlay .retry-btn:disabled { opacity: .6; cursor: wait; }
-.offline-overlay .retry-spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,.2); border-top-color: #000; border-radius: 50%; animation: spin .6s linear infinite; }
-.offline-overlay .cmd-row { display: flex; align-items: center; gap: 8px; }
-.offline-overlay code { background: var(--surface2); padding: 8px 14px; border-radius: 8px; font-size: 12px; border: 1px solid var(--border); display: inline-block; user-select: all; font-family: 'Cascadia Code','Fira Code',monospace; }
-.offline-overlay .copy-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); padding: 6px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all .15s; }
-.offline-overlay .copy-btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+.offline-overlay .retry-spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,.2); border-top-color: currentColor; border-radius: 50%; animation: spin .6s linear infinite; }
+.offline-overlay .cmd-hint { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.offline-overlay .cmd-hint code { background: var(--surface2); padding: 4px 10px; border-radius: 6px; font-size: 11px; border: 1px solid var(--border); font-family: 'DM Mono','Cascadia Code',monospace; user-select: all; }
+.offline-overlay .cmd-hint button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px; display: flex; transition: color .15s; }
+.offline-overlay .cmd-hint button:hover { color: var(--accent); }
+.offline-overlay .cmd-hint button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.offline-overlay .cmd-hint button i { width: 12px; height: 12px; }
 .offline-overlay .overlay-divider { width: 100%; height: 1px; background: var(--border); margin: 4px 0; }
 .offline-overlay .auto-retry-status { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .offline-overlay .auto-retry-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--orange); animation: pulse 1.5s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 @keyframes spin { to { transform: rotate(360deg); } }
-.offline-overlay .skip-link { font-size: 11px; color: var(--muted); cursor: pointer; text-decoration: underline; }
-.offline-overlay .skip-link:hover { color: var(--text); }
-.offline-overlay .tip { font-size: 10px; color: var(--muted); max-width: 360px; line-height: 1.4; }
+.offline-overlay .skip-btn { font-size: 11px; color: var(--muted); cursor: pointer; text-decoration: underline; background: none; border: none; font-family: inherit; padding: 4px 8px; border-radius: 4px; transition: color .15s; }
+.offline-overlay .skip-btn:hover { color: var(--text); }
+.offline-overlay .skip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .offline-overlay .overlay-footer { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 8px; }
-.offline-overlay .first-run-steps { text-align: left; width: 100%; padding: 0; margin: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.offline-overlay .first-run-steps li { font-size: 12px; color: var(--text); display: flex; align-items: flex-start; gap: 8px; line-height: 1.4; }
-.offline-overlay .step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #000; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.offline-overlay .tip { font-size: 10px; color: var(--muted); max-width: 360px; line-height: 1.4; display: flex; align-items: flex-start; gap: 5px; }
+.offline-overlay .tip i { width: 12px; height: 12px; flex-shrink: 0; margin-top: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  .offline-overlay .bean-spin { animation: none !important; }
+  .offline-overlay .auto-retry-dot { animation: none !important; }
+  .offline-overlay .retry-spinner { animation: none !important; }
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    MODEL PICKER
@@ -1327,43 +1335,32 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 
 <div id="offlineOverlay" class="offline-overlay">
   <div class="overlay-card">
-    <img src="/icons/taskbean-logo.png" alt="taskbean" style="height:48px;margin-bottom:8px;">
-    <div class="overlay-icon disconnected" id="overlayIcon">
-      <i data-lucide="wifi-off" style="width:24px;height:24px"></i>
+    <img src="/icons/taskbean-logo.png" alt="taskbean" width="180" height="48" style="margin-bottom:8px;">
+    <div class="overlay-icon connecting" id="overlayIcon">
+      <img src="/icons/taskbean-only.png" alt="" width="40" height="40" class="bean-spin">
     </div>
-    <h2 id="overlayTitle">Server not running</h2>
-    <p class="overlay-subtitle" id="overlaySubtitle">taskbean needs the local server to power AI features.</p>
+    <h2 id="overlayTitle">Connecting…</h2>
+    <p class="overlay-subtitle" id="overlaySubtitle" aria-live="polite">Looking for the local server</p>
 
-    <!-- Returning user: protocol registered → show Start Server as primary -->
-    <div class="overlay-actions" id="overlayReturning" style="display:none">
+    <!-- Single recovery panel — hidden initially, shown after timeout -->
+    <div class="overlay-actions" id="overlayRecovery" style="display:none">
       <div class="btn-row">
         <button class="start-btn" onclick="startServerFromOverlay()"><i data-lucide="play" class="icon-sm"></i> Start Server</button>
         <button id="retryBtn" class="retry-btn" onclick="retryConnection()"><i data-lucide="refresh-cw" class="icon-sm"></i> Retry</button>
       </div>
-      <div class="auto-retry-status" id="autoRetryStatus"><span class="auto-retry-dot"></span> Auto-retrying every 5 seconds…</div>
-    </div>
-
-    <!-- First-run user: protocol unknown → show setup steps -->
-    <div class="overlay-actions" id="overlayFirstRun" style="display:none">
-      <ol class="first-run-steps">
-        <li><span class="step-num">1</span> Open the <b>taskbean</b> folder you downloaded</li>
-        <li><span class="step-num">2</span> Double-click <b>launch.cmd</b></li>
-        <li><span class="step-num">3</span> Come back here — the app will reconnect automatically</li>
-      </ol>
-      <div class="cmd-row">
-        <code>launch.cmd</code>
-        <button class="copy-btn" onclick="navigator.clipboard.writeText('launch.cmd');this.innerHTML='<i data-lucide=&quot;check&quot; class=&quot;icon-sm&quot;></i> Copied!';lucide.createIcons();setTimeout(()=>{this.innerHTML='<i data-lucide=&quot;clipboard&quot; class=&quot;icon-sm&quot;></i> Copy';lucide.createIcons()},1500)"><i data-lucide="clipboard" class="icon-sm"></i> Copy</button>
+      <div class="cmd-hint">
+        or run <code>launch.cmd</code>
+        <button aria-label="Copy command" onclick="copyOverlayCmd(this)"><i data-lucide="clipboard"></i></button>
       </div>
-      <div class="auto-retry-status" id="autoRetryStatusFirstRun"><span class="auto-retry-dot"></span> Waiting for server… auto-retrying every 5s</div>
+      <div class="auto-retry-status" id="autoRetryStatus"><span class="auto-retry-dot"></span> Auto-retrying every 3&nbsp;s</div>
     </div>
 
     <div class="overlay-divider"></div>
     <div class="overlay-footer">
-      <span class="skip-link" onclick="dismissOfflineOverlay()">Continue in offline mode →</span>
-      <p class="tip">💡 Enable "Run on Windows startup" in <b>Settings ⚙</b> so the server starts automatically next time.</p>
+      <button class="skip-btn" onclick="dismissOfflineOverlay()">Continue in offline mode →</button>
+      <p class="tip"><i data-lucide="lightbulb"></i> Enable "Run on Windows startup" in <b>Settings</b> so the server starts automatically.</p>
     </div>
   </div>
-  <a class="coffee-btn" href="https://buymeacoffee.com/nicholasdbrady" target="_blank" rel="noopener" style="margin-top:16px"><span class="coffee-emoji">☕</span> Buy Nick a Coffee</a>
 </div>
 
 <div class="main">
@@ -2143,29 +2140,34 @@ function showOfflineOverlay() {
     if (offlineOverlayDismissed) return;
     const el = document.getElementById('offlineOverlay');
     el.classList.add('show');
+    lucide.createIcons();
 
-    // Determine which panel to show based on cached protocol status
-    const cached = (() => { try { const c = JSON.parse(localStorage.getItem('taskbean-protocol')); return typeof c === 'boolean' ? c : null; } catch { return null; } })();
-    const known = protocolRegistered ?? cached;
-    const returningEl = document.getElementById('overlayReturning');
-    const firstRunEl = document.getElementById('overlayFirstRun');
-    if (known === true) {
-        // Returning user — protocol is registered, Start Server should work
-        returningEl.style.display = '';
-        firstRunEl.style.display = 'none';
-    } else {
-        // First-run or unknown — show setup instructions
-        returningEl.style.display = 'none';
-        firstRunEl.style.display = '';
+    // Phase 1: "Connecting…" with spinning bean — auto-try protocol if available
+    const known = protocolRegistered ?? (() => { try { const c = JSON.parse(localStorage.getItem('taskbean-protocol')); return typeof c === 'boolean' ? c : null; } catch { return null; } })();
+    if (known === true || known === null) {
+        // Silently attempt protocol launch (no UI change yet)
+        try { window.open('taskbean://start', '_self'); } catch {}
     }
 
-    lucide.createIcons();
     startAutoRetry();
+
+    // Phase 2: After 8s without connection → show recovery panel
+    setTimeout(() => {
+        if (serverReachable || offlineOverlayDismissed) return;
+        const icon = document.getElementById('overlayIcon');
+        const title = document.getElementById('overlayTitle');
+        const subtitle = document.getElementById('overlaySubtitle');
+        const recovery = document.getElementById('overlayRecovery');
+        if (icon) { icon.className = 'overlay-icon disconnected'; icon.innerHTML = '<i data-lucide="wifi-off" style="width:24px;height:24px"></i>'; }
+        if (title) title.textContent = 'Server not running';
+        if (subtitle) subtitle.textContent = 'Start the local server to power AI features.';
+        if (recovery) recovery.style.display = '';
+        lucide.createIcons();
+    }, 8000);
 }
 
 function hideOfflineOverlay() {
     const el = document.getElementById('offlineOverlay');
-    // Animate to connected state briefly before hiding
     const icon = document.getElementById('overlayIcon');
     const title = document.getElementById('overlayTitle');
     if (icon) { icon.className = 'overlay-icon connected'; icon.innerHTML = '<i data-lucide="check-circle" style="width:24px;height:24px"></i>'; }
@@ -2197,7 +2199,7 @@ function startAutoRetry() {
                 await Promise.all([refreshTodos(), loadTemplates()]);
             }
         } catch {}
-    }, 5000);
+    }, 3000);
 }
 
 function stopAutoRetry() {
@@ -2225,7 +2227,14 @@ async function retryConnection() {
     lucide.createIcons();
 }
 
-let protocolRegistered = null; // null = unknown, true/false = checked
+function copyOverlayCmd(btn) {
+    navigator.clipboard.writeText('launch.cmd');
+    btn.innerHTML = '<i data-lucide="check"></i>';
+    lucide.createIcons();
+    setTimeout(() => { btn.innerHTML = '<i data-lucide="clipboard"></i>'; lucide.createIcons(); }, 1500);
+}
+
+let protocolRegistered = null;
 
 async function checkProtocolRegistered() {
     if (protocolRegistered !== null) return protocolRegistered;
@@ -2237,16 +2246,14 @@ async function checkProtocolRegistered() {
             return protocolRegistered;
         }
     } catch {}
-    // Server unreachable — fall back to cached value
     try { const cached = JSON.parse(localStorage.getItem('taskbean-protocol')); if (typeof cached === 'boolean') { protocolRegistered = cached; return cached; } } catch {}
     return false;
 }
 
 async function ensureProtocolRegistered() {
     if (await checkProtocolRegistered()) return true;
-    // Server must be reachable to register
     if (!serverReachable) {
-        addChat('info', 'terminal', 'Protocol handler not set up yet. Double-click launch.cmd in the app folder to set up, then retry.');
+        addChat('info', 'terminal', 'Protocol handler not set up. Run <code>launch.cmd</code> from the app folder, then retry.');
         return false;
     }
     try {
@@ -2266,44 +2273,14 @@ function launchServerViaProtocol() {
 }
 
 function startServerFromOverlay() {
-    // Use cached protocol status when server is unreachable
-    const known = protocolRegistered ?? (() => { try { const c = JSON.parse(localStorage.getItem('taskbean-protocol')); return typeof c === 'boolean' ? c : null; } catch { return null; } })();
-    if (known === false) {
-        // Show first-run panel instead
-        const returningEl = document.getElementById('overlayReturning');
-        const firstRunEl = document.getElementById('overlayFirstRun');
-        if (returningEl) returningEl.style.display = 'none';
-        if (firstRunEl) firstRunEl.style.display = '';
-        return;
-    }
     launchServerViaProtocol();
-
-    // Update icon to "connecting" state
+    // Transition to connecting state
     const icon = document.getElementById('overlayIcon');
-    if (icon) { icon.className = 'overlay-icon connecting'; icon.innerHTML = '<img src="/icons/taskbean-only.png" alt="" class="bean-spin">'; }
     const title = document.getElementById('overlayTitle');
-    if (title) title.textContent = 'Starting server…';
-    lucide.createIcons();
-
     const status = document.getElementById('autoRetryStatus');
-    if (status) status.innerHTML = '<span class="auto-retry-dot" style="background:var(--green)"></span> Server launching… auto-retrying every 5s';
-
-    // If protocol was unknown (first-run), show fallback hint after 10s if server still not up
-    if (known === null) {
-        setTimeout(() => {
-            if (!serverReachable) {
-                if (status) status.innerHTML = '<span class="auto-retry-dot"></span> Server didn\'t start — double-click <b>launch.cmd</b> in the app folder to set up.';
-                // Switch to first-run view
-                const returningEl = document.getElementById('overlayReturning');
-                const firstRunEl = document.getElementById('overlayFirstRun');
-                if (returningEl) returningEl.style.display = 'none';
-                if (firstRunEl) firstRunEl.style.display = '';
-                if (icon) { icon.className = 'overlay-icon disconnected'; icon.innerHTML = '<i data-lucide="wifi-off" style="width:24px;height:24px"></i>'; }
-                if (title) title.textContent = 'Server not running';
-                lucide.createIcons();
-            }
-        }, 10_000);
-    }
+    if (icon) { icon.className = 'overlay-icon connecting'; icon.innerHTML = '<img src="/icons/taskbean-only.png" alt="" width="40" height="40" class="bean-spin">'; }
+    if (title) title.textContent = 'Starting server\u2026';
+    if (status) status.innerHTML = '<span class="auto-retry-dot" style="background:var(--green)"></span> Server launching\u2026 auto-retrying every 3\u00a0s';
 }
 
 function isStandalone() {
