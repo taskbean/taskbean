@@ -1,10 +1,23 @@
 <div align="center">
 
-# 🫘 taskbean
+<a href="https://github.com/taskbean/taskbean">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://socialify.git.ci/taskbean/taskbean/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Plus&pulls=1&stargazers=1&theme=Dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://socialify.git.ci/taskbean/taskbean/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Plus&pulls=1&stargazers=1&theme=Light" />
+    <img alt="taskbean" src="https://socialify.git.ci/taskbean/taskbean/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Plus&pulls=1&stargazers=1&theme=Auto" width="720" />
+  </picture>
+</a>
 
-**Task management for AI coding agents — and the humans who use them.**
+<br />
 
-No cloud. No subscription. No data leaves your machine.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="app/public/icons/taskbean-wordmark-light.png" />
+  <source media="(prefers-color-scheme: light)" srcset="app/public/icons/taskbean-wordmark.png" />
+  <img alt="taskbean" src="app/public/icons/taskbean-wordmark.png" height="80" />
+</picture>
+
+<br /><br />
+**No cloud. No subscription. No data leaves your machine.**
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows)](https://www.microsoft.com/windows)
@@ -147,6 +160,16 @@ All data stays local in a single SQLite database:
 ```
 
 Both the CLI and the desktop app read and write to this file. No cloud sync, no accounts, no telemetry.
+
+## Star History
+
+<a href="https://www.star-history.com/#taskbean/taskbean&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=taskbean/taskbean&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=taskbean/taskbean&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=taskbean/taskbean&type=Date" width="600" />
+ </picture>
+</a>
 
 ## License
 

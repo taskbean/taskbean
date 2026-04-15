@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskbean-v13';
+const CACHE_NAME = 'taskbean-v15';
 const SHELL_ASSETS = [
   '/manifest.json',
   '/icons/icon-192.png',
