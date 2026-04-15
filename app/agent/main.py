@@ -1663,7 +1663,7 @@ async def root():
     from fastapi.responses import FileResponse
     index = _PUBLIC / "index.html"
     if index.exists():
-        return FileResponse(str(index))
+        return FileResponse(str(index), headers={"Cache-Control": "no-cache"})
     return JSONResponse({"status": "ok", "message": "Foundry Todo Agent running"})
 
 
@@ -1676,7 +1676,7 @@ async def spa_fallback(full_path: str):
     # Fall back to index.html for SPA client-side routes
     index = _PUBLIC / "index.html"
     if index.exists():
-        return FileResponse(str(index))
+        return FileResponse(str(index), headers={"Cache-Control": "no-cache"})
     return JSONResponse({"detail": "Not found"}, status_code=404)
 
 

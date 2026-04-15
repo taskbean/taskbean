@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskbean-v6';
+const CACHE_NAME = 'taskbean-v12';
 const SHELL_ASSETS = [
   '/',
   '/index.html',
