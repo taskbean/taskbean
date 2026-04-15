@@ -65,6 +65,9 @@ function handleApi(req, res) {
       const task = getRow('SELECT * FROM todos WHERE id = ?', [id]);
       res.writeHead(200);
       res.end(JSON.stringify(task));
+    }).catch(err => {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: 'bad_request', message: err.message }));
     });
     return;
   }

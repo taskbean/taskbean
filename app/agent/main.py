@@ -963,6 +963,18 @@ async def get_projects() -> list:
         rows = conn.execute(
             "SELECT name, path FROM projects WHERE tracked = 1 ORDER BY name"
         ).fetchall()
+        # Batch-fetch todo counts for all tracked projects in one query
+        names = [r["name"] for r in rows]
+        todo_counts: dict[str, dict] = {}
+        if names:
+            placeholders = ",".join("?" * len(names))
+            for row in conn.execute(
+                f"SELECT project, COUNT(*) as total, "
+                f"SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as done "
+                f"FROM todos WHERE project IN ({placeholders}) GROUP BY project",
+                names,
+            ).fetchall():
+                todo_counts[row["project"]] = {"total": row["total"] or 0, "done": row["done"] or 0}
     finally:
         conn.close()
 
@@ -970,32 +982,15 @@ async def get_projects() -> list:
     for r in rows:
         name = r["name"]
         project_todos = [t for t in state_mod.todos if t.get("project") == name]
-        # Also count todos from SQLite that have matching project field
-        conn2 = _get_taskbean_db()
-        sqlite_total = sqlite_done = sqlite_pending = 0
-        if conn2:
-            try:
-                row = conn2.execute(
-                    "SELECT COUNT(*) as total, "
-                    "SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as done "
-                    "FROM todos WHERE project = ?",
-                    (name,),
-                ).fetchone()
-                if row:
-                    sqlite_total = row["total"] or 0
-                    sqlite_done = row["done"] or 0
-                    sqlite_pending = sqlite_total - sqlite_done
-            finally:
-                conn2.close()
+        sc = todo_counts.get(name, {"total": 0, "done": 0})
         mem_total = len(project_todos)
         mem_done = sum(1 for t in project_todos if t.get("completed"))
-        mem_pending = mem_total - mem_done
         result.append({
             "name": name,
             "path": r["path"],
-            "total": sqlite_total + mem_total,
-            "done": sqlite_done + mem_done,
-            "pending": sqlite_pending + mem_pending,
+            "total": sc["total"] + mem_total,
+            "done": sc["done"] + mem_done,
+            "pending": (sc["total"] - sc["done"]) + (mem_total - mem_done),
         })
     return result
 
@@ -1047,12 +1042,12 @@ async def get_copilot_usage(date: str = "today") -> dict:
         conn = sqlite3.connect(f"file:{copilot_db}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
 
-        if date == "week":
-            date_clause = "date(created_at) >= date('now', '-7 days', 'localtime')"
-        elif date == "all":
-            date_clause = "1=1"
-        else:
-            date_clause = "date(created_at) = date('now', 'localtime')"
+        _DATE_CLAUSES = {
+            "today": "date(created_at) = date('now', 'localtime')",
+            "week": "date(created_at) >= date('now', '-7 days', 'localtime')",
+            "all": "1=1",
+        }
+        date_clause = _DATE_CLAUSES.get(date, _DATE_CLAUSES["today"])
 
         sessions = conn.execute(
             f"SELECT id, cwd, summary, created_at FROM sessions WHERE {date_clause} ORDER BY created_at DESC"
