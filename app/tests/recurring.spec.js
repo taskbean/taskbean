@@ -259,4 +259,106 @@ test.describe('taskbean — Recurring', () => {
     });
   });
 
+  test.describe('Toggle Enable/Disable', () => {
+    test('toggling a built-in reminder ON then OFF works', async ({ page }) => {
+      const errors = [];
+      page.on('pageerror', err => errors.push(err.message));
+      await page.goto('/');
+
+      // Switch to Recurring tab
+      await page.locator('#tabRecurring').click();
+      await page.waitForLoadState('networkidle');
+
+      // Ensure we have a known starting state: deactivate all via API, then reload
+      await page.evaluate(async () => {
+        const res = await fetch('/api/templates');
+        const data = await res.json();
+        for (const t of data.active) {
+          if (t.active) {
+            await fetch('/api/templates/deactivate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: t.id })
+            });
+          }
+        }
+      });
+
+      // Reload to get clean disabled state
+      await page.reload();
+      await page.waitForTimeout(1000);
+      await page.locator('#tabRecurring').click();
+
+      // Show disabled reminders via the eye button
+      await page.locator('#panelEyeBtn').click();
+      await page.waitForTimeout(500);
+
+      // All built-in templates should now be visible and disabled
+      const disabledToggle = page.locator('#recurringActiveList .template-card.disabled .template-toggle.off').first();
+      await expect(disabledToggle).toBeVisible({ timeout: 5000 });
+
+      // Get the card's name for later verification
+      const card = disabledToggle.locator('..');
+      const cardName = await card.locator('.name').textContent();
+
+      // Click toggle to ENABLE
+      await disabledToggle.click();
+      await page.waitForTimeout(1500);
+
+      // The template should now be active — toggle gains .on
+      const activeCard = page.locator('#recurringActiveList .template-card:not(.disabled)', { hasText: cardName });
+      await expect(activeCard).toBeVisible({ timeout: 5000 });
+      await expect(activeCard.locator('.template-toggle.on')).toBeVisible();
+
+      // Click toggle to DISABLE again
+      await activeCard.locator('.template-toggle.on').click();
+      await page.waitForTimeout(1500);
+
+      // The template should be disabled again
+      const reDisabledCard = page.locator('#recurringActiveList .template-card.disabled', { hasText: cardName });
+      await expect(reDisabledCard).toBeVisible({ timeout: 5000 });
+      await expect(reDisabledCard.locator('.template-toggle.off')).toBeVisible();
+
+      // No JS errors during the flow (filter out browser navigation noise)
+      const realErrors = errors.filter(e => !e.includes('Transition was aborted'));
+      expect(realErrors).toHaveLength(0);
+    });
+
+    test('toggling produces chat confirmation messages', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForTimeout(1000);
+      await page.locator('#tabRecurring').click();
+
+      // Deactivate all templates to get a clean state
+      await page.evaluate(async () => {
+        const res = await fetch('/api/templates');
+        const data = await res.json();
+        for (const t of data.active) {
+          if (t.active) {
+            await fetch('/api/templates/deactivate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: t.id })
+            });
+          }
+        }
+      });
+
+      await page.reload();
+      await page.waitForTimeout(1000);
+      await page.locator('#tabRecurring').click();
+      await page.locator('#panelEyeBtn').click();
+      await page.waitForTimeout(500);
+
+      // Enable a template
+      const toggle = page.locator('#recurringActiveList .template-card.disabled .template-toggle.off').first();
+      await expect(toggle).toBeVisible({ timeout: 5000 });
+      await toggle.click();
+      await page.waitForTimeout(1500);
+
+      // Should see "Activated:" chat message
+      await expect(page.locator('#chatFeed').locator('.msg-content', { hasText: /Activated:/ })).toBeVisible({ timeout: 5000 });
+    });
+  });
+
 });
