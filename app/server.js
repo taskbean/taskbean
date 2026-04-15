@@ -2531,6 +2531,166 @@ app.get('/api/copilot-usage', (req, res) => {
     }
 });
 
+// ── Task Detail (enriched with Copilot session data) ──────────────────────
+
+function parseSessionEvents(sessionId) {
+    const evPath = path.join(os.homedir(), '.copilot', 'session-state', sessionId, 'events.jsonl');
+    const result = { model: null, outputTokens: 0, turns: 0, tools: {}, taskCompleteSummary: null };
+    if (!fs.existsSync(evPath)) return result;
+    try {
+        const lines = fs.readFileSync(evPath, 'utf-8').split('\n');
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+                const ev = JSON.parse(line);
+                if (ev.type === 'session.start') result.model = ev.data?.selectedModel || 'unknown';
+                else if (ev.type === 'user.message') result.turns++;
+                else if (ev.type === 'assistant.message') result.outputTokens += (ev.data?.outputTokens || 0);
+                else if (ev.type === 'tool.execution_start') {
+                    const name = ev.data?.toolName || 'unknown';
+                    result.tools[name] = (result.tools[name] || 0) + 1;
+                }
+                else if (ev.type === 'session.task_complete') result.taskCompleteSummary = ev.data?.summary;
+                else if (ev.type === 'session.model_change') result.model = ev.data?.newModel || result.model;
+            } catch {}
+        }
+    } catch {}
+    return result;
+}
+
+function correlateSession(task) {
+    const copilotDbPath = path.join(os.homedir(), '.copilot', 'session-store.db');
+    if (!fs.existsSync(copilotDbPath)) return null;
+    let cdb;
+    try {
+        cdb = new Database(copilotDbPath, { readonly: true, fileMustExist: true });
+        cdb.pragma('busy_timeout = 3000');
+    } catch { return null; }
+
+    try {
+        const project = task.project || '';
+        const createdAt = task.created_at || '';
+        let candidates = [];
+
+        // Strategy 1: project path + time proximity
+        if (project && createdAt) {
+            candidates = cdb.prepare(
+                `SELECT id, cwd, summary, repository, branch, created_at FROM sessions
+                 WHERE cwd LIKE ? AND abs(strftime('%s', created_at) - strftime('%s', ?)) < 1800
+                 ORDER BY abs(strftime('%s', created_at) - strftime('%s', ?)) ASC LIMIT 5`
+            ).all(`%${project}%`, createdAt, createdAt);
+        }
+
+        // Strategy 2: time only
+        if (!candidates.length && createdAt) {
+            candidates = cdb.prepare(
+                `SELECT id, cwd, summary, repository, branch, created_at FROM sessions
+                 WHERE abs(strftime('%s', created_at) - strftime('%s', ?)) < 1800
+                 ORDER BY abs(strftime('%s', created_at) - strftime('%s', ?)) ASC LIMIT 5`
+            ).all(createdAt, createdAt);
+        }
+
+        return candidates.length ? candidates[0] : null;
+    } catch { return null; }
+    finally { try { cdb.close(); } catch {} }
+}
+
+function buildTaskDetail(taskId) {
+    const task = db.prepare('SELECT * FROM todos WHERE id = ?').get(taskId);
+    if (!task) return null;
+
+    const sessionRow = correlateSession(task);
+    let sessionData = null, files = [], refs = [], tools = {}, checkpoint = null;
+
+    if (sessionRow) {
+        const sid = sessionRow.id;
+        const evData = parseSessionEvents(sid);
+        tools = evData.tools;
+
+        sessionData = {
+            id: sid, summary: sessionRow.summary, model: evData.model,
+            branch: sessionRow.branch, repository: sessionRow.repository,
+            outputTokens: evData.outputTokens, turns: evData.turns,
+            taskCompleteSummary: evData.taskCompleteSummary, createdAt: sessionRow.created_at,
+        };
+
+        // Files, refs, checkpoint from Copilot DB
+        const copilotDbPath = path.join(os.homedir(), '.copilot', 'session-store.db');
+        let cdb2;
+        try {
+            cdb2 = new Database(copilotDbPath, { readonly: true, fileMustExist: true });
+            cdb2.pragma('busy_timeout = 3000');
+            files = cdb2.prepare('SELECT file_path, tool_name, turn_index FROM session_files WHERE session_id = ? ORDER BY turn_index').all(sid)
+                .map(r => ({ path: r.file_path, tool: r.tool_name, turn: r.turn_index }));
+            refs = cdb2.prepare('SELECT ref_type, ref_value FROM session_refs WHERE session_id = ?').all(sid)
+                .map(r => ({ type: r.ref_type, value: r.ref_value }));
+            const cpRow = cdb2.prepare('SELECT title, overview, work_done, technical_details FROM checkpoints WHERE session_id = ? ORDER BY checkpoint_number DESC LIMIT 1').get(sid);
+            if (cpRow) checkpoint = { title: cpRow.title, overview: cpRow.overview, workDone: cpRow.work_done, technicalDetails: cpRow.technical_details };
+        } catch {}
+        finally { try { cdb2?.close(); } catch {} }
+    }
+
+    return {
+        task: { id: task.id, title: task.title, completed: !!task.completed, project: task.project, source: task.source, created_at: task.created_at },
+        session: sessionData, files, refs, tools, checkpoint,
+    };
+}
+
+app.get('/api/task-detail/:taskId', (req, res) => {
+    const detail = buildTaskDetail(req.params.taskId);
+    if (!detail) return res.status(404).json({ error: 'Task not found' });
+    res.json(detail);
+});
+
+app.get('/api/task-detail/:taskId/export', (req, res) => {
+    const detail = buildTaskDetail(req.params.taskId);
+    if (!detail) return res.status(404).json({ error: 'Task not found' });
+
+    if (req.query.format === 'json') return res.json(detail);
+
+    // Markdown export
+    const t = detail.task, s = detail.session;
+    const status = t.completed ? '✅' : '⏳';
+    let lines = [`## ${status} ${t.title}`, ''];
+
+    const meta = [];
+    if (t.project) meta.push(`**Project**: ${t.project}`);
+    if (s?.branch) meta.push(`**Branch**: ${s.branch}`);
+    if (t.created_at) { try { meta.push(`**Date**: ${new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`); } catch {} }
+    if (meta.length) lines.push(meta.join(' · '));
+
+    if (s) {
+        const ai = [];
+        if (s.model) ai.push(`**AI Model**: ${s.model}`);
+        if (s.turns) ai.push(`**Turns**: ${s.turns}`);
+        if (s.outputTokens) ai.push(`**Tokens**: ${s.outputTokens.toLocaleString()}`);
+        if (ai.length) lines.push(ai.join(' · '));
+    }
+    lines.push('');
+
+    const summary = s?.taskCompleteSummary || detail.checkpoint?.overview;
+    if (summary) { lines.push('### Summary', summary, ''); }
+
+    if (detail.files.length) {
+        lines.push('### Files Changed');
+        detail.files.forEach(f => lines.push(`- \`${f.path}\` — ${f.tool || 'unknown'}${f.turn != null ? ` (turn ${f.turn})` : ''}`));
+        lines.push('');
+    }
+
+    if (Object.keys(detail.tools).length) {
+        const toolStrs = Object.entries(detail.tools).sort((a, b) => b[1] - a[1]).map(([n, c]) => `${n} ×${c}`);
+        lines.push('### Tools Used', toolStrs.join(', '), '');
+    }
+
+    if (detail.refs.length) {
+        lines.push('### References');
+        detail.refs.forEach(r => lines.push(`- ${r.type}: ${r.value}`));
+        lines.push('');
+    }
+
+    res.type('text/markdown').send(lines.join('\n'));
+});
+
 app.get('/api/report', (req, res) => {
     todos = dbGetAllTodos();
     const dateRange = req.query.date || 'week';

@@ -10,6 +10,8 @@ Endpoints mirror the original Node.js server:
   GET  /api/projects
   GET  /api/projects/tasks
   GET  /api/copilot-usage
+  GET  /api/task-detail/:id
+  GET  /api/task-detail/:id/export
   GET  /api/templates
   POST /api/templates/activate
   POST /api/templates/deactivate
@@ -1145,6 +1147,319 @@ async def get_copilot_usage(date: str = "today") -> dict:
         }
     except Exception as e:
         return {"available": False, "error": str(e)}
+
+
+# ── Task Detail (enriched with Copilot session data) ─────────────────────────
+
+
+def _get_copilot_db():
+    """Open the Copilot CLI session-store DB (read-only). Returns None if missing."""
+    import sqlite3
+    db_path = os.path.join(os.path.expanduser("~"), ".copilot", "session-store.db")
+    if not os.path.exists(db_path):
+        return None
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _parse_session_events(session_id: str) -> dict:
+    """Parse events.jsonl for a session. Returns model, outputTokens, turns, tools, taskCompleteSummary."""
+    state_dir = os.path.join(os.path.expanduser("~"), ".copilot", "session-state")
+    ev_path = os.path.join(state_dir, session_id, "events.jsonl")
+    result = {"model": None, "outputTokens": 0, "turns": 0, "tools": {}, "taskCompleteSummary": None}
+    if not os.path.exists(ev_path):
+        return result
+    try:
+        with open(ev_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                    ev_type = ev.get("type", "")
+                    data = ev.get("data") or {}
+
+                    if ev_type == "session.start":
+                        result["model"] = data.get("selectedModel", "unknown")
+                    elif ev_type == "user.message":
+                        result["turns"] += 1
+                    elif ev_type == "assistant.message":
+                        result["outputTokens"] += data.get("outputTokens", 0)
+                    elif ev_type == "tool.execution_complete":
+                        tool_name = data.get("model") or "unknown"
+                        # tool_name on execution_complete is the model; toolName is on execution_start
+                    elif ev_type == "tool.execution_start":
+                        tool_name = data.get("toolName", "unknown")
+                        result["tools"][tool_name] = result["tools"].get(tool_name, 0) + 1
+                    elif ev_type == "session.task_complete":
+                        result["taskCompleteSummary"] = data.get("summary")
+                    elif ev_type == "session.model_change":
+                        result["model"] = data.get("newModel") or data.get("model") or result["model"]
+                except (json.JSONDecodeError, KeyError):
+                    pass
+    except OSError:
+        pass
+    return result
+
+
+def _correlate_session(task: dict, copilot_conn) -> dict | None:
+    """Find the best Copilot session matching a task by project/time/title."""
+    if copilot_conn is None:
+        return None
+
+    project = task.get("project") or ""
+    title = task.get("title") or ""
+    created_at = task.get("created_at") or ""
+
+    candidates = []
+
+    # Strategy 1: cwd contains project name AND created_at within ±30min
+    if project and created_at:
+        try:
+            rows = copilot_conn.execute(
+                "SELECT id, cwd, summary, repository, branch, created_at FROM sessions "
+                "WHERE cwd LIKE ? AND abs(strftime('%s', created_at) - strftime('%s', ?)) < 1800 "
+                "ORDER BY abs(strftime('%s', created_at) - strftime('%s', ?)) ASC LIMIT 5",
+                (f"%{project}%", created_at, created_at),
+            ).fetchall()
+            candidates.extend(rows)
+        except Exception:
+            pass
+
+    # Strategy 2: time-based only (±30min) if no project match yet
+    if not candidates and created_at:
+        try:
+            rows = copilot_conn.execute(
+                "SELECT id, cwd, summary, repository, branch, created_at FROM sessions "
+                "WHERE abs(strftime('%s', created_at) - strftime('%s', ?)) < 1800 "
+                "ORDER BY abs(strftime('%s', created_at) - strftime('%s', ?)) ASC LIMIT 5",
+                (created_at, created_at),
+            ).fetchall()
+            candidates.extend(rows)
+        except Exception:
+            pass
+
+    # Strategy 3: check task_complete summaries for title match
+    if not candidates and title:
+        state_dir = os.path.join(os.path.expanduser("~"), ".copilot", "session-state")
+        try:
+            recent = copilot_conn.execute(
+                "SELECT id, cwd, summary, repository, branch, created_at FROM sessions "
+                "ORDER BY created_at DESC LIMIT 50"
+            ).fetchall()
+            title_lower = title.lower()
+            for s in recent:
+                ev_path = os.path.join(state_dir, s["id"], "events.jsonl")
+                if not os.path.exists(ev_path):
+                    continue
+                try:
+                    with open(ev_path, "r", encoding="utf-8", errors="replace") as f:
+                        for line in f:
+                            if "session.task_complete" in line:
+                                ev = json.loads(line.strip())
+                                summary = (ev.get("data") or {}).get("summary", "")
+                                if title_lower in summary.lower():
+                                    candidates.append(s)
+                                    break
+                except (OSError, json.JSONDecodeError):
+                    pass
+                if candidates:
+                    break
+        except Exception:
+            pass
+
+    if not candidates:
+        return None
+
+    best = candidates[0]
+    return dict(best)
+
+
+async def _build_task_detail(task_id: str) -> dict:
+    """Build enriched task detail combining taskbean DB and Copilot session data."""
+    # 1. Get task from taskbean DB
+    taskbean_conn = _get_taskbean_db()
+    if taskbean_conn is None:
+        raise HTTPException(404, "taskbean database not found")
+    try:
+        row = taskbean_conn.execute("SELECT * FROM todos WHERE id = ?", (task_id,)).fetchone()
+    finally:
+        taskbean_conn.close()
+    if row is None:
+        raise HTTPException(404, f"Task {task_id} not found")
+
+    task = dict(row)
+
+    # 2. Correlate with Copilot session
+    copilot_conn = _get_copilot_db()
+    try:
+        session_row = _correlate_session(task, copilot_conn)
+    finally:
+        if copilot_conn:
+            copilot_conn.close()
+
+    session_data = None
+    files = []
+    refs = []
+    tools = {}
+    checkpoint = None
+
+    if session_row:
+        sid = session_row["id"]
+
+        # Parse events.jsonl in a thread (blocking I/O)
+        ev_data = await asyncio.to_thread(_parse_session_events, sid)
+        tools = ev_data["tools"]
+
+        session_data = {
+            "id": sid,
+            "summary": session_row.get("summary"),
+            "model": ev_data["model"],
+            "branch": session_row.get("branch"),
+            "repository": session_row.get("repository"),
+            "outputTokens": ev_data["outputTokens"],
+            "turns": ev_data["turns"],
+            "taskCompleteSummary": ev_data["taskCompleteSummary"],
+            "createdAt": session_row.get("created_at"),
+        }
+
+        # Get files, refs, checkpoint from Copilot DB
+        copilot_conn2 = _get_copilot_db()
+        if copilot_conn2:
+            try:
+                file_rows = copilot_conn2.execute(
+                    "SELECT file_path, tool_name, turn_index FROM session_files WHERE session_id = ? ORDER BY turn_index",
+                    (sid,),
+                ).fetchall()
+                files = [{"path": r["file_path"], "tool": r["tool_name"], "turn": r["turn_index"]} for r in file_rows]
+
+                ref_rows = copilot_conn2.execute(
+                    "SELECT ref_type, ref_value FROM session_refs WHERE session_id = ?",
+                    (sid,),
+                ).fetchall()
+                refs = [{"type": r["ref_type"], "value": r["ref_value"]} for r in ref_rows]
+
+                cp_row = copilot_conn2.execute(
+                    "SELECT title, overview, work_done, technical_details FROM checkpoints "
+                    "WHERE session_id = ? ORDER BY checkpoint_number DESC LIMIT 1",
+                    (sid,),
+                ).fetchone()
+                if cp_row:
+                    checkpoint = {
+                        "title": cp_row["title"],
+                        "overview": cp_row["overview"],
+                        "workDone": cp_row["work_done"],
+                        "technicalDetails": cp_row["technical_details"],
+                    }
+            finally:
+                copilot_conn2.close()
+
+    return {
+        "task": {
+            "id": task["id"],
+            "title": task.get("title"),
+            "completed": bool(task.get("completed")),
+            "project": task.get("project"),
+            "source": task.get("source"),
+            "created_at": task.get("created_at"),
+        },
+        "session": session_data,
+        "files": files,
+        "refs": refs,
+        "tools": tools,
+        "checkpoint": checkpoint,
+    }
+
+
+@app.get("/api/task-detail/{task_id}")
+async def get_task_detail(task_id: str) -> dict:
+    """Return enriched task detail with correlated Copilot session data."""
+    return await _build_task_detail(task_id)
+
+
+@app.get("/api/task-detail/{task_id}/export")
+async def export_task_detail(task_id: str, format: str = "md") -> Any:
+    """Export task detail as markdown or JSON."""
+    detail = await _build_task_detail(task_id)
+
+    if format == "json":
+        return detail
+
+    # Build markdown export
+    task = detail["task"]
+    session = detail["session"]
+    status = "✅" if task["completed"] else "⏳"
+    title = task.get("title") or "Untitled"
+
+    lines = [f"## {status} {title}", ""]
+
+    # Metadata line
+    meta_parts = []
+    if task.get("project"):
+        meta_parts.append(f"**Project**: {task['project']}")
+    if session and session.get("branch"):
+        meta_parts.append(f"**Branch**: {session['branch']}")
+    if task.get("created_at"):
+        try:
+            dt = datetime.fromisoformat(task["created_at"].replace("Z", "+00:00"))
+            meta_parts.append(f"**Date**: {dt.strftime('%b %#d, %Y')}")
+        except (ValueError, OSError):
+            meta_parts.append(f"**Date**: {task['created_at'][:10]}")
+    if meta_parts:
+        lines.append(" · ".join(meta_parts))
+
+    if session:
+        ai_parts = []
+        if session.get("model"):
+            ai_parts.append(f"**AI Model**: {session['model']}")
+        if session.get("turns"):
+            ai_parts.append(f"**Turns**: {session['turns']}")
+        if session.get("outputTokens"):
+            ai_parts.append(f"**Tokens**: {session['outputTokens']:,}")
+        if ai_parts:
+            lines.append(" · ".join(ai_parts))
+
+    lines.append("")
+
+    # Summary
+    summary = None
+    if session and session.get("taskCompleteSummary"):
+        summary = session["taskCompleteSummary"]
+    elif detail.get("checkpoint") and detail["checkpoint"].get("overview"):
+        summary = detail["checkpoint"]["overview"]
+
+    if summary:
+        lines.append("### Summary")
+        lines.append(summary)
+        lines.append("")
+
+    # Files changed
+    if detail["files"]:
+        lines.append("### Files Changed")
+        for f in detail["files"]:
+            tool_str = f.get("tool") or "unknown"
+            turn_str = f" (turn {f['turn']})" if f.get("turn") is not None else ""
+            lines.append(f"- `{f['path']}` — {tool_str}{turn_str}")
+        lines.append("")
+
+    # Tools used
+    if detail["tools"]:
+        tool_strs = [f"{name} ×{count}" for name, count in sorted(detail["tools"].items(), key=lambda x: -x[1])]
+        lines.append("### Tools Used")
+        lines.append(", ".join(tool_strs))
+        lines.append("")
+
+    # Refs
+    if detail["refs"]:
+        lines.append("### References")
+        for r in detail["refs"]:
+            lines.append(f"- {r['type']}: {r['value']}")
+        lines.append("")
+
+    md_content = "\n".join(lines)
+    return PlainTextResponse(content=md_content, media_type="text/markdown")
 
 
 # ── Recurring templates ───────────────────────────────────────────────────────
