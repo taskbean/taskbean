@@ -5,6 +5,7 @@ import { doneCommand } from '../src/commands/done.js';
 import { listCommand } from '../src/commands/list.js';
 import { reportCommand } from '../src/commands/report.js';
 import { trackCommand } from '../src/commands/track.js';
+import { installCommand } from '../src/commands/install.js';
 
 program
   .name('bean')
@@ -60,5 +61,12 @@ program
   .option('--name <name>', 'Project display name')
   .option('--json', 'Output as JSON')
   .action(trackCommand);
+
+program
+  .command('install')
+  .description('Install agent skill into a project')
+  .option('--global', 'Install globally (~/.agents/skills/)')
+  .option('--json', 'Output as JSON')
+  .action(installCommand);
 
 program.parse();
