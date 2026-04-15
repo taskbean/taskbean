@@ -209,8 +209,23 @@ async def command_endpoint(request_body: AGUIRequest) -> StreamingResponse:
         if key not in state:
             state[key] = copy.deepcopy(value)
 
-    user_msg = ""
+    # Truncate task context system messages to fit model's context window (80% budget)
     msgs = input_data.get("messages", [])
+    if msgs and msgs[0].get("role") == "system" and "[Task Context]" in (msgs[0].get("content") or ""):
+        from agent.context import count_tokens, get_input_budget, truncate_to_budget
+        max_in = agent_mod.MODEL_CONTEXT.get("maxInputTokens")
+        max_out = agent_mod.MODEL_CONTEXT.get("maxOutputTokens")
+        budget = get_input_budget(max_in, max_out)
+        if budget:
+            # Use 80% of the budget for the context, leave 20% for user messages + response
+            ctx_budget = int(budget * 0.80)
+            original = msgs[0]["content"]
+            truncated, was_truncated = truncate_to_budget(original, ctx_budget)
+            if was_truncated:
+                msgs[0]["content"] = truncated
+                logger.info("Task context truncated: %d → %d tokens (budget=%d)", count_tokens(original), count_tokens(truncated), ctx_budget)
+
+    user_msg = ""
     for m in reversed(msgs):
         if m.get("role") == "user":
             content = m.get("content", "")
