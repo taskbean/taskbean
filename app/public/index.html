@@ -76,7 +76,9 @@
    BASE
    ═══════════════════════════════════════════════════════════════════ */
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: row; overflow: hidden; }
+html, body { height: 100%; width: 100%; overflow: hidden; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+.app-row { flex: 1; display: flex; flex-direction: row; min-height: 0; overflow: hidden; }
 
 /* Force Lucide icons to a sane size */
 svg[data-lucide], .lucide { width: 16px; height: 16px; display: inline-block; vertical-align: middle; flex-shrink: 0; }
@@ -106,13 +108,13 @@ header {
    NAV RAIL — left-docked vertical navigation
    ═══════════════════════════════════════════════════════════════════ */
 .nav-rail {
-  width: 48px; min-height: 100vh; background: var(--surface); border-right: 1px solid var(--border);
+  width: 48px; background: var(--surface); border-right: 1px solid var(--border);
   display: flex; flex-direction: column; flex-shrink: 0; transition: width .25s cubic-bezier(.4,0,.2,1); overflow: hidden; z-index: 100;
 }
 .nav-rail.expanded { width: 280px; }
 
 .nav-rail-top {
-  display: flex; align-items: center; gap: 8px; padding: 8px; min-height: 42px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  display: flex; align-items: center; gap: 8px; padding: 8px; height: 44px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
 .nav-rail-toggle {
   width: 32px; height: 32px; border-radius: 6px; border: none; background: none; color: var(--muted);
@@ -122,7 +124,7 @@ header {
 .nav-rail-wordmark { height: 22px; opacity: 0; transition: opacity .15s .05s; pointer-events: none; }
 .nav-rail.expanded .nav-rail-wordmark { opacity: 1; pointer-events: auto; }
 
-.nav-rail-items { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 8px 6px; overflow-y: auto; }
+.nav-rail-items { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 8px 6px; overflow-y: auto; overflow-x: hidden; }
 
 .nav-item {
   display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; border: none; background: none;
@@ -148,7 +150,7 @@ header {
 .nav-item-sep { height: 1px; background: var(--border); margin: 4px 8px; flex-shrink: 0; }
 
 .nav-rail-bottom {
-  display: flex; flex-direction: column; gap: 2px; padding: 8px 6px; border-top: 1px solid var(--border); flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 6px; border-top: 1px solid var(--border); flex-shrink: 0; overflow: hidden;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -325,12 +327,17 @@ header {
    LAYOUT: sidebar + chat
    ═══════════════════════════════════════════════════════════════════ */
 .app-shell { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
-.main { flex: 1; display: flex; overflow: hidden; }
-.left-panel { width: 280px; min-width: 240px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--surface); flex-shrink: 0; }
+.main { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+.left-panel { width: 280px; min-width: 240px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--surface); flex-shrink: 0; min-height: 0; }
 .right-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 
-.panel-header { padding: 10px 14px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.panel-header { padding: 10px 14px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; height: 44px; }
 .panel-header .count { color: var(--muted); font-weight: 400; font-size: 11px; }
+.panel-header-title { font-size: 12px; font-weight: 600; }
+.panel-header-actions { display: flex; align-items: center; gap: 2px; }
+.panel-header-btn { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: none; background: none; color: var(--muted); cursor: pointer; border-radius: 6px; transition: all .15s; }
+.panel-header-btn:hover { background: var(--surface2); color: var(--text); }
+.panel-header-btn.active-toggle { color: var(--accent); }
 /* Sidebar tab bar overrides */
 .sidebar-tab-bar { padding: 0; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border); display: flex; align-items: stretch; flex-shrink: 0; justify-content: flex-end; }
 
@@ -457,6 +464,7 @@ header {
 
 /* Inline title editing */
 .todo-title-input { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 6px; font-size: 12px; color: var(--text); width: 100%; font-family: inherit; outline: none; }
+.todo-title-input:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
 
 /* Overdue styling */
 .todo-meta .overdue-badge { color: var(--red); font-weight: 600; }
@@ -725,7 +733,7 @@ header {
 .nerd-panel.open { width: 400px; min-width: 320px; max-width: 600px; resize: horizontal; overflow: auto; }
 
 .nerd-header {
-  padding: 8px 12px;
+  padding: 8px 12px; height: 44px;
   background: color-mix(in srgb, var(--surface2) 85%, transparent);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
@@ -1267,6 +1275,13 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 
 <a href="#chatInput" class="a11y-skip-link" onclick="event.preventDefault();document.getElementById('chatInput').focus()">Skip to chat</a>
 
+<div id="offlineBanner" class="connection-banner" role="status">
+  <i data-lucide="wifi-off" class="icon-sm"></i>
+  Offline mode — showing last synced data. Commands, uploads, and live AI actions need the local server.
+</div>
+
+<div class="app-row">
+
 <!-- ═══ Nav Rail (left-docked) ═══ -->
 <nav class="nav-rail expanded" id="navRail">
   <div class="nav-rail-top">
@@ -1292,15 +1307,6 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       <span class="nav-label">Projects</span>
       <span class="nav-badge" id="projectCount">0</span>
     </button>
-    <div class="nav-item-sep"></div>
-    <button class="nav-item" onclick="handleSidebarEye()" id="sidebarEyeBtn" title="Toggle completed">
-      <i data-lucide="eye" id="sidebarEyeIcon"></i>
-      <span class="nav-label">Toggle Completed</span>
-    </button>
-    <button class="nav-item" onclick="handleSidebarAdd()" id="sidebarAddBtn" title="Add task">
-      <i data-lucide="plus"></i>
-      <span class="nav-label">Add Task</span>
-    </button>
   </div>
   <div class="nav-rail-bottom">
     <button class="nav-item" onclick="openSettings()" title="Settings">
@@ -1318,11 +1324,6 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 <div class="app-shell">
 
 <header style="display:none"></header>
-
-<div id="offlineBanner" class="connection-banner" role="status">
-  <i data-lucide="wifi-off" class="icon-sm"></i>
-  Offline mode — showing last synced data. Commands, uploads, and live AI actions need the local server.
-</div>
 
 <div id="offlineOverlay" class="offline-overlay">
   <div class="overlay-card">
@@ -1368,6 +1369,17 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 <div class="main">
   <!-- Left: Tabbed sidebar (My Todos / Recurring) -->
   <div class="left-panel">
+    <div class="panel-header" id="leftPanelHeader">
+      <span class="panel-header-title" id="leftPanelTitle">Tasks</span>
+      <span class="panel-header-actions">
+        <button class="panel-header-btn" onclick="handleSidebarEye()" id="panelEyeBtn" title="Toggle completed">
+          <i data-lucide="eye" id="panelEyeIcon"></i>
+        </button>
+        <button class="panel-header-btn" onclick="handleSidebarAdd()" id="panelAddBtn" title="Add task">
+          <i data-lucide="plus"></i>
+        </button>
+      </span>
+    </div>
     <!-- Tab: My Todos -->
     <div class="sidebar-tab-content active" id="tabContentTodos">
       <div class="todo-list-container">
@@ -2301,14 +2313,14 @@ function syncInstallButton() {
         btn.hidden = false;
         btn.disabled = true;
         btn.classList.add('muted-btn');
-        btn.innerHTML = '<i data-lucide="check" class="icon-sm"></i> Installed';
+        btn.innerHTML = '<i data-lucide="check" class="icon-sm"></i> <span class="nav-label">Installed</span>';
         lucide.createIcons();
         return;
     }
     btn.disabled = !deferredInstallPrompt;
     btn.hidden = !deferredInstallPrompt;
     btn.classList.remove('muted-btn');
-    btn.innerHTML = '<i data-lucide="download" class="icon-sm"></i> Install';
+    btn.innerHTML = '<i data-lucide="download" class="icon-sm"></i> <span class="nav-label">Install</span>';
     lucide.createIcons();
 }
 
@@ -3359,21 +3371,32 @@ function toggleNavRail() {
     }
 })();
 function updateSidebarActionButtons() {
-    const eyeBtn = document.getElementById('sidebarEyeBtn');
-    const eyeIcon = document.getElementById('sidebarEyeIcon');
-    const addBtn = document.getElementById('sidebarAddBtn');
+    const eyeBtn = document.getElementById('panelEyeBtn');
+    const eyeIcon = document.getElementById('panelEyeIcon');
+    const addBtn = document.getElementById('panelAddBtn');
+    const titleEl = document.getElementById('leftPanelTitle');
     if (_activeSidebarTab === 'todos') {
         const isOn = _showCompletedTodos;
         eyeBtn.title = isOn ? 'Hide completed todos' : 'Show completed todos';
         eyeBtn.classList.toggle('active-toggle', !isOn);
         eyeIcon.setAttribute('data-lucide', isOn ? 'eye' : 'eye-off');
         addBtn.title = 'Add a todo';
-    } else {
+        if (titleEl) titleEl.textContent = 'Tasks';
+    } else if (_activeSidebarTab === 'recurring') {
         const isOn = _showDisabledReminders;
         eyeBtn.title = isOn ? 'Hide disabled reminders' : 'Show disabled reminders';
         eyeBtn.classList.toggle('active-toggle', isOn);
         eyeIcon.setAttribute('data-lucide', isOn ? 'eye' : 'eye-off');
         addBtn.title = 'Create recurring reminder';
+        if (titleEl) titleEl.textContent = 'Recurring';
+    } else if (_activeSidebarTab === 'projects') {
+        eyeBtn.style.display = 'none';
+        addBtn.style.display = 'none';
+        if (titleEl) titleEl.textContent = 'Projects';
+    }
+    if (_activeSidebarTab !== 'projects') {
+        eyeBtn.style.display = '';
+        addBtn.style.display = '';
     }
     lucide.createIcons();
 }
@@ -6365,9 +6388,18 @@ async function initApp() {
     if ('serviceWorker' in navigator) {
         try {
             swRegistration = await navigator.serviceWorker.register('/sw.js');
+            // Check for SW updates on load — ensures new code is picked up after server restart
+            swRegistration.update();
         } catch (err) {
             console.error('Service worker registration failed:', err);
         }
+        // Reload once when a new SW takes control (ensures fresh HTML after update)
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            refreshing = true;
+            location.reload();
+        });
     }
 
     // Handle launches via web+taskbean:// protocol or Launch Handler API
@@ -6958,5 +6990,6 @@ document.addEventListener('keydown', e => {
 });
 </script>
 </div><!-- /.app-shell -->
+</div><!-- /.app-row -->
 </body>
 </html>

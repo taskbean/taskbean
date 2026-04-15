@@ -1,7 +1,5 @@
-const CACHE_NAME = 'taskbean-v12';
+const CACHE_NAME = 'taskbean-v13';
 const SHELL_ASSETS = [
-  '/',
-  '/index.html',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -10,7 +8,7 @@ const SHELL_ASSETS = [
   '/vendor/fast-json-patch.min.js'
 ];
 
-// Install: cache the app shell
+// Install: cache static assets only (NOT index.html — that's network-first)
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
@@ -38,7 +36,7 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Fetch: skip API, cache-first for shell, network-first for rest
+// Fetch: skip API, network-first for navigation, cache-first for static assets
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
@@ -47,34 +45,36 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Navigation: preload-first, then cache-first with network fallback
+  // Navigation: network-first (always get fresh HTML), cache as offline fallback
   if (e.request.mode === 'navigate') {
     e.respondWith((async () => {
-      // Try navigation preload first (faster than cache for online users)
-      const preloadResponse = await e.preloadResponse;
-      if (preloadResponse) {
-        // Update cache in background
-        const clone = preloadResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone)).catch(() => {});
-        return preloadResponse;
-      }
-
-      // Fall back to cache-first with network update
-      const cached = await caches.match('/index.html');
-      const networkUpdate = fetch(e.request).then((response) => {
+      try {
+        // Try navigation preload first
+        const preloadResponse = await e.preloadResponse;
+        if (preloadResponse) {
+          const clone = preloadResponse.clone();
+          e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone)));
+          return preloadResponse;
+        }
+        // Otherwise fetch from network
+        const response = await fetch(e.request);
         if (response.ok) {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone)).catch(() => {});
+          e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone)));
         }
         return response;
-      }).catch(() => null);
-
-      return cached || networkUpdate;
+      } catch {
+        // Offline: fall back to cached index.html
+        const cached = await caches.match('/index.html');
+        return cached || new Response('Offline — no cached page available', {
+          status: 503, headers: { 'Content-Type': 'text/plain' }
+        });
+      }
     })());
     return;
   }
 
-  // Shell assets: cache-first, background refresh
+  // Static assets: cache-first with background refresh
   const isShellAsset = SHELL_ASSETS.includes(url.pathname);
   if (isShellAsset) {
     e.respondWith(
@@ -82,7 +82,7 @@ self.addEventListener('fetch', (e) => {
         const networkUpdate = fetch(e.request).then((response) => {
           if (response.ok) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone)).catch(() => {});
+            e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone)));
           }
           return response;
         }).catch(() => null);
@@ -98,7 +98,7 @@ self.addEventListener('fetch', (e) => {
     fetch(e.request).then((response) => {
       if (response.ok) {
         const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone)).catch(() => {});
+        e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone)));
       }
       return response;
     }).catch(() => caches.match(e.request))

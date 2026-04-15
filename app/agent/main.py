@@ -1667,7 +1667,9 @@ async def spa_fallback(full_path: str):
     from fastapi.responses import FileResponse
     candidate = _PUBLIC / full_path
     if candidate.is_file():
-        return FileResponse(str(candidate))
+        # Serve sw.js with no-cache so browser always checks for updates
+        headers = {"Cache-Control": "no-cache"} if full_path == "sw.js" else {}
+        return FileResponse(str(candidate), headers=headers)
     # Fall back to index.html for SPA client-side routes
     index = _PUBLIC / "index.html"
     if index.exists():
