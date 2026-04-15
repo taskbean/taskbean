@@ -3275,7 +3275,7 @@ function renderTemplates(builtIn, active, activeSet) {
 function renderRecurringActiveList(builtIn, active, activeSet) {
     const el = document.getElementById('recurringActiveList');
     if (!el) return;
-    const jsStr = s => JSON.stringify(s);
+    const jsStr = s => JSON.stringify(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
     const map = {}; active.forEach(a => map[a.title] = a);
     const builtInTitles = new Set(builtIn.map(b => b.title));
 
