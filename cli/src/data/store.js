@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -15,10 +15,10 @@ export function getDb() {
     mkdirSync(DB_DIR, { recursive: true });
   }
 
-  _db = new Database(DB_PATH);
-  _db.pragma('journal_mode = WAL');
-  _db.pragma('foreign_keys = ON');
-  _db.pragma('busy_timeout = 5000');
+  _db = new DatabaseSync(DB_PATH);
+  _db.exec('PRAGMA journal_mode = WAL');
+  _db.exec('PRAGMA foreign_keys = ON');
+  _db.exec('PRAGMA busy_timeout = 5000');
 
   // Ensure todos table exists (same schema as the main PWA app)
   _db.exec(`

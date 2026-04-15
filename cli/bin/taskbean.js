@@ -9,7 +9,7 @@ import { trackCommand } from '../src/commands/track.js';
 program
   .name('bean')
   .description('🫘 Task management CLI for AI coding agents')
-  .version('0.4.0');
+  .version('0.5.0');
 
 // === Agent Contract (3 commands) ===
 
