@@ -413,65 +413,254 @@ header {
 .template-card.disabled:hover { opacity: .75; }
 
 /* ── Task Detail Card ── */
-.task-detail { padding: 24px; animation: slide-up .2s ease; overflow-y: auto; height: 100%; }
-.task-detail-back { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); cursor: pointer; background: none; border: none; font-family: inherit; padding: 4px 8px; border-radius: 6px; margin-bottom: 12px; transition: all .15s; }
-.task-detail-back:hover { color: var(--text); background: var(--surface2); }
-.task-detail-header { margin-bottom: 16px; }
-.task-detail-status { font-size: 20px; margin-right: 6px; vertical-align: middle; }
-.task-detail-title { font-size: 17px; font-weight: 600; line-height: 1.4; color: var(--text); }
-.task-detail-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-.task-detail-badge { font-size: 9px; padding: 3px 8px; border-radius: 99px; font-weight: 600; font-family: 'DM Mono', monospace; border: 1px solid var(--border); color: var(--muted); background: var(--surface2); }
-.task-detail-badge.accent { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.task-detail-badge.green { border-color: var(--green); color: var(--green); }
-.task-detail-badge.purple { border-color: var(--purple, #9b59b6); color: var(--purple, #9b59b6); }
+.task-detail {
+  padding: 0; overflow-y: auto; height: 100%;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.task-detail-inner {
+  max-width: 720px; margin: 0 auto; padding: 28px 32px 40px;
+  animation: td-enter .4s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes td-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
-.task-detail-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
-.task-detail-metric { text-align: center; padding: 10px 4px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border); }
-.task-detail-metric-value { font-size: 18px; font-weight: 700; font-family: 'DM Mono', monospace; line-height: 1.2; color: var(--text); }
-.task-detail-metric-label { font-size: 8px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-top: 3px; }
+/* Back button */
+.task-detail-back {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted);
+  cursor: pointer; background: none; border: none; font-family: inherit; padding: 6px 10px;
+  border-radius: 8px; margin-bottom: 20px; transition: all .2s; letter-spacing: .2px;
+}
+.task-detail-back:hover { color: var(--accent); background: var(--accent-soft); }
+
+/* Header zone */
+.task-detail-hero {
+  margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
+}
+.task-detail-status-line {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.task-detail-status-chip {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700;
+  padding: 3px 10px; border-radius: 6px; letter-spacing: .5px; text-transform: uppercase;
+}
+.task-detail-status-chip.done { background: var(--green-soft); color: var(--green); }
+.task-detail-status-chip.pending { background: var(--orange-soft); color: var(--orange); }
+.task-detail-date { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
+.task-detail-title {
+  font-size: 20px; font-weight: 700; line-height: 1.35; color: var(--text);
+  letter-spacing: -.2px; margin-bottom: 12px;
+}
+.task-detail-meta {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+}
+.task-detail-badge {
+  font-size: 10px; padding: 4px 10px; border-radius: 6px; font-weight: 500;
+  font-family: 'DM Mono', monospace; background: var(--surface2); color: var(--muted);
+  display: inline-flex; align-items: center; gap: 4px; border: 1px solid transparent;
+  transition: border-color .15s;
+}
+.task-detail-badge:hover { border-color: var(--border); }
+.task-detail-badge.accent { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.task-detail-badge.purple { background: var(--purple-soft); color: var(--purple, #9b59b6); }
+
+/* Metrics strip — horizontal flowing bar, not grid */
+.task-detail-metrics {
+  display: flex; gap: 1px; margin-bottom: 20px; border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--border);
+}
+.task-detail-metric {
+  flex: 1; text-align: center; padding: 14px 8px 12px; background: var(--surface2);
+  position: relative; transition: background .15s;
+}
+.task-detail-metric:hover { background: var(--surface); }
+.task-detail-metric-value {
+  font-size: 22px; font-weight: 800; font-family: 'DM Mono', monospace; line-height: 1; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.task-detail-metric-label {
+  font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
+  margin-top: 5px; font-weight: 500;
+}
 .task-detail-metric.accent .task-detail-metric-value { color: var(--accent); }
 .task-detail-metric.green .task-detail-metric-value { color: var(--green); }
 .task-detail-metric.orange .task-detail-metric-value { color: var(--orange); }
 .task-detail-metric.purple .task-detail-metric-value { color: var(--purple, #9b59b6); }
 
-.task-detail-section { margin-bottom: 12px; padding: 14px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border); }
-.task-detail-section-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-.task-detail-section-title i { width: 12px; height: 12px; }
-.task-detail-section-body { font-size: 12px; line-height: 1.6; color: var(--text); }
+/* Sections — clean cards with reveal animation */
+.task-detail-section {
+  margin-bottom: 10px; border-radius: 10px; background: var(--surface2);
+  border: 1px solid var(--border); overflow: hidden;
+  animation: td-section .35s cubic-bezier(.16,1,.3,1) both;
+}
+.task-detail-section:nth-child(1) { animation-delay: .05s; }
+.task-detail-section:nth-child(2) { animation-delay: .1s; }
+.task-detail-section:nth-child(3) { animation-delay: .15s; }
+.task-detail-section:nth-child(4) { animation-delay: .2s; }
+.task-detail-section:nth-child(5) { animation-delay: .25s; }
+@keyframes td-section {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.task-detail-section-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--muted); padding: 12px 16px 10px; display: flex; align-items: center; gap: 7px;
+  cursor: pointer; user-select: none; transition: color .15s;
+}
+.task-detail-section-title:hover { color: var(--text); }
+.task-detail-section-title i { width: 13px; height: 13px; opacity: .6; }
+.task-detail-section-title .td-section-count {
+  font-weight: 400; color: var(--muted); font-size: 9px; margin-left: 2px;
+}
+.task-detail-section-title .td-chevron {
+  margin-left: auto; transition: transform .2s; opacity: .4; width: 12px; height: 12px;
+}
+.task-detail-section.collapsed .td-chevron { transform: rotate(-90deg); }
+.task-detail-section-body { padding: 0 16px 14px; }
 .task-detail-section.collapsed .task-detail-section-body { display: none; }
 
-.task-detail-summary { white-space: pre-wrap; font-size: 12px; line-height: 1.6; color: var(--text); }
-.task-detail-summary h2, .task-detail-summary h3 { font-size: 12px; font-weight: 600; margin: 8px 0 4px; color: var(--accent); }
-.task-detail-summary code { font-family: 'DM Mono', monospace; font-size: 10px; background: var(--bg); padding: 1px 4px; border-radius: 3px; }
+/* Summary — proper markdown rendering */
+.task-detail-summary {
+  font-size: 13px; line-height: 1.7; color: var(--text);
+}
+.task-detail-summary p { margin-bottom: 10px; }
+.task-detail-summary p:last-child { margin-bottom: 0; }
+.task-detail-summary h2 {
+  font-size: 14px; font-weight: 700; margin: 16px 0 6px; color: var(--text);
+  padding-bottom: 4px; border-bottom: 1px solid var(--border);
+}
+.task-detail-summary h3 {
+  font-size: 13px; font-weight: 700; margin: 12px 0 4px; color: var(--accent);
+}
+.task-detail-summary code {
+  font-family: 'DM Mono', monospace; font-size: 11px; background: var(--bg);
+  padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); color: var(--accent);
+}
+.task-detail-summary pre {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px 12px; margin: 8px 0; overflow-x: auto; font-size: 11px;
+  font-family: 'DM Mono', monospace; line-height: 1.5; color: var(--text);
+}
+.task-detail-summary ul, .task-detail-summary ol {
+  margin: 6px 0 10px 20px; font-size: 13px;
+}
+.task-detail-summary li { margin-bottom: 3px; }
+.task-detail-summary strong { color: var(--text); font-weight: 600; }
+.task-detail-summary hr {
+  border: none; height: 1px; background: var(--border); margin: 12px 0;
+}
 
-.task-detail-file { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 11px; border-bottom: 1px solid var(--border); }
+/* Clamp summary with expand toggle */
+.task-detail-summary-wrap { position: relative; }
+.task-detail-summary-wrap.clamped .task-detail-summary {
+  max-height: 200px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+}
+.task-detail-summary-toggle {
+  display: none; width: 100%; text-align: center; padding: 8px; font-size: 10px;
+  color: var(--accent); cursor: pointer; font-weight: 600; letter-spacing: .3px;
+  background: none; border: none; font-family: inherit; transition: opacity .15s;
+}
+.task-detail-summary-toggle:hover { opacity: .7; }
+.task-detail-summary-wrap.clamped .task-detail-summary-toggle { display: block; }
+
+/* Files — tighter rows with subtle hover */
+.task-detail-file {
+  display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 11px;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 40%, transparent);
+  transition: background .1s; margin: 0 -4px; padding-left: 4px; padding-right: 4px; border-radius: 4px;
+}
 .task-detail-file:last-child { border-bottom: none; }
-.task-detail-file-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text); }
-.task-detail-file-tool { font-size: 8px; padding: 2px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-family: 'DM Mono', monospace; }
-.task-detail-file-turn { font-size: 9px; color: var(--muted); font-family: 'DM Mono', monospace; }
+.task-detail-file:hover { background: var(--bg); }
+.task-detail-file-icon { color: var(--accent); flex-shrink: 0; opacity: .7; }
+.task-detail-file-path {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text);
+}
+.task-detail-file-tool {
+  font-size: 9px; padding: 2px 7px; border-radius: 4px; font-family: 'DM Mono', monospace;
+  font-weight: 500; flex-shrink: 0;
+}
+.task-detail-file-tool.create { background: var(--green-soft); color: var(--green); }
+.task-detail-file-tool.edit { background: var(--accent-soft); color: var(--accent); }
+.task-detail-file-tool.view { background: var(--muted-soft); color: var(--muted); }
+.task-detail-file-turn {
+  font-size: 9px; color: var(--muted); font-family: 'DM Mono', monospace; flex-shrink: 0;
+}
 
+/* Tools — proportional bar chips */
 .task-detail-tool-grid { display: flex; flex-wrap: wrap; gap: 6px; }
-.task-detail-tool-chip { font-size: 10px; padding: 4px 10px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); font-family: 'DM Mono', monospace; color: var(--text); }
-.task-detail-tool-chip .tool-count { color: var(--accent); font-weight: 600; margin-left: 2px; }
+.task-detail-tool-chip {
+  font-size: 10px; padding: 5px 10px; border-radius: 6px; background: var(--bg);
+  border: 1px solid var(--border); font-family: 'DM Mono', monospace; color: var(--text);
+  display: inline-flex; align-items: center; gap: 6px; transition: border-color .15s;
+}
+.task-detail-tool-chip:hover { border-color: var(--accent); }
+.task-detail-tool-chip .tool-count {
+  color: var(--accent); font-weight: 700;
+}
+.task-detail-tool-chip .tool-bar {
+  width: 24px; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden;
+}
+.task-detail-tool-chip .tool-bar-fill {
+  height: 100%; border-radius: 2px; background: var(--accent); transition: width .4s ease;
+}
 
-.task-detail-ref { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 11px; }
-.task-detail-ref-type { font-size: 8px; padding: 2px 6px; border-radius: 4px; background: var(--surface); color: var(--muted); text-transform: uppercase; font-family: 'DM Mono', monospace; letter-spacing: .5px; }
-.task-detail-ref-value { font-family: 'DM Mono', monospace; color: var(--text); }
+/* Refs */
+.task-detail-ref {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 11px;
+}
+.task-detail-ref-type {
+  font-size: 9px; padding: 2px 7px; border-radius: 4px; text-transform: uppercase;
+  font-family: 'DM Mono', monospace; letter-spacing: .5px; font-weight: 500;
+}
+.task-detail-ref-type.pr { background: var(--green-soft); color: var(--green); }
+.task-detail-ref-type.issue { background: var(--purple-soft); color: var(--purple, #9b59b6); }
+.task-detail-ref-type.commit { background: var(--accent-soft); color: var(--accent); }
+.task-detail-ref-value { font-family: 'DM Mono', monospace; color: var(--text); font-weight: 500; }
 
-.task-detail-actions { display: flex; gap: 8px; margin-top: 16px; }
-.task-detail-action { display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 11px; font-family: inherit; cursor: pointer; transition: all .15s; }
-.task-detail-action:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+/* Action buttons — bottom bar */
+.task-detail-actions {
+  display: flex; gap: 8px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border);
+}
+.task-detail-action {
+  display: inline-flex; align-items: center; gap: 5px; padding: 8px 16px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+  font-size: 11px; font-family: inherit; cursor: pointer; transition: all .2s; font-weight: 500;
+}
+.task-detail-action:hover {
+  border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
+  transform: translateY(-1px); box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 15%, transparent);
+}
+.task-detail-action:active { transform: translateY(0); }
 .task-detail-action i { width: 14px; height: 14px; }
 
-.task-detail-skeleton { background: linear-gradient(90deg, var(--surface2) 25%, var(--surface) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.5s infinite; border-radius: 6px; }
+/* Skeleton loading */
+.task-detail-skeleton {
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface) 50%, var(--surface2) 75%);
+  background-size: 200% 100%; animation: skeleton-shimmer 1.5s infinite; border-radius: 6px;
+}
 @keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-.task-detail-empty { text-align: center; color: var(--muted); padding: 40px 20px; }
+/* Empty / error state */
+.task-detail-empty { text-align: center; color: var(--muted); padding: 60px 20px; }
 .task-detail-empty p { font-size: 12px; margin-top: 8px; }
+
+/* No-session info box */
+.task-detail-no-session {
+  text-align: center; padding: 20px; color: var(--muted); font-size: 11px;
+  border: 1px dashed var(--border); border-radius: 10px; margin-bottom: 16px;
+  line-height: 1.6;
+}
 
 /* Responsive: stack metrics on mobile */
 @media (max-width: 600px) {
-  .task-detail-metrics { grid-template-columns: repeat(2, 1fr); }
+  .task-detail-inner { padding: 20px 16px 32px; }
+  .task-detail-metrics { flex-wrap: wrap; }
+  .task-detail-metric { flex: 1 1 45%; }
+  .task-detail-title { font-size: 17px; }
 }
 
 @keyframes slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
@@ -3382,15 +3571,16 @@ async function openTaskDetail(taskId) {
         detailEl.innerHTML = renderTaskDetailCard(data);
         lucide.createIcons();
     } catch (err) {
-        detailEl.innerHTML = `
+        detailEl.innerHTML = `<div class="task-detail-inner">
             <button class="task-detail-back" onclick="closeTaskDetail()">
-                <i data-lucide="arrow-left" class="icon-sm"></i> Back
+                <i data-lucide="arrow-left" class="icon-sm"></i> Back to chat
             </button>
             <div class="task-detail-empty">
                 <i data-lucide="alert-circle" class="icon-xl" style="color:var(--red)"></i>
                 <p>Failed to load task details</p>
                 <p style="font-size:10px;margin-top:4px;color:var(--muted)">${esc(err.message)}</p>
-            </div>`;
+            </div>
+        </div>`;
         lucide.createIcons();
     }
 }
@@ -3415,24 +3605,25 @@ function closeTaskDetail() {
 }
 
 function renderTaskDetailSkeleton() {
-    return `
+    return `<div class="task-detail-inner">
         <button class="task-detail-back" onclick="closeTaskDetail()">
-            <i data-lucide="arrow-left" class="icon-sm"></i> Back
+            <i data-lucide="arrow-left" class="icon-sm"></i> Back to chat
         </button>
-        <div class="task-detail-header">
-            <div class="task-detail-skeleton" style="height:22px;width:70%;margin-bottom:8px"></div>
+        <div style="margin-bottom:20px">
+            <div class="task-detail-skeleton" style="height:14px;width:60px;margin-bottom:10px"></div>
+            <div class="task-detail-skeleton" style="height:24px;width:80%;margin-bottom:12px"></div>
             <div style="display:flex;gap:6px">
-                <div class="task-detail-skeleton" style="height:18px;width:80px"></div>
-                <div class="task-detail-skeleton" style="height:18px;width:100px"></div>
+                <div class="task-detail-skeleton" style="height:22px;width:70px;border-radius:6px"></div>
+                <div class="task-detail-skeleton" style="height:22px;width:90px;border-radius:6px"></div>
+                <div class="task-detail-skeleton" style="height:22px;width:110px;border-radius:6px"></div>
             </div>
         </div>
-        <div class="task-detail-metrics">
-            ${[1,2,3,4].map(() => '<div class="task-detail-metric"><div class="task-detail-skeleton" style="height:20px;width:40px;margin:0 auto 4px"></div><div class="task-detail-skeleton" style="height:10px;width:50px;margin:0 auto"></div></div>').join('')}
+        <div style="display:flex;gap:1px;border-radius:10px;overflow:hidden;border:1px solid var(--border);margin-bottom:20px">
+            ${[1,2,3,4].map(() => '<div style="flex:1;padding:14px 8px;background:var(--surface2);text-align:center"><div class="task-detail-skeleton" style="height:22px;width:32px;margin:0 auto 5px"></div><div class="task-detail-skeleton" style="height:8px;width:40px;margin:0 auto"></div></div>').join('')}
         </div>
-        <div class="task-detail-section">
-            <div class="task-detail-skeleton" style="height:12px;width:80px;margin-bottom:8px"></div>
-            <div class="task-detail-skeleton" style="height:60px;width:100%"></div>
-        </div>`;
+        <div class="task-detail-skeleton" style="height:120px;width:100%;border-radius:10px;margin-bottom:10px"></div>
+        <div class="task-detail-skeleton" style="height:80px;width:100%;border-radius:10px"></div>
+    </div>`;
 }
 
 function fmtTokens(n) {
@@ -3459,6 +3650,39 @@ function fmtRelativeTime(isoStr) {
     } catch { return ''; }
 }
 
+function renderMarkdownHtml(raw) {
+    if (!raw) return '';
+    // Proper markdown → HTML (enough for task summaries)
+    let html = raw
+        // Code blocks (```...```)
+        .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+            `<pre><code>${esc(code.trim())}</code></pre>`)
+        // Headings
+        .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        // Horizontal rules
+        .replace(/^---+$/gm, '<hr>')
+        // Bold
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        // Inline code
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        // Unordered lists
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        // Wrap consecutive <li> in <ul>
+        .replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
+        // Ordered lists (1. 2. 3.)
+        .replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    // Paragraphs: split on double newlines, wrap non-tag lines
+    html = html.split(/\n{2,}/).map(block => {
+        block = block.trim();
+        if (!block) return '';
+        if (/^<(h[2-4]|ul|ol|pre|hr|li|div|p)/.test(block)) return block;
+        return `<p>${block.replace(/\n/g, '<br>')}</p>`;
+    }).join('\n');
+    return html;
+}
+
 function renderTaskDetailCard(data) {
     const t = data.task || {};
     const s = data.session;
@@ -3467,19 +3691,46 @@ function renderTaskDetailCard(data) {
     const tools = data.tools || {};
     const cp = data.checkpoint;
 
-    const statusIcon = t.completed ? '✅' : '⬚';
+    const isDone = t.completed;
     const taskDate = t.created_at || t.createdAt || '';
     const dateStr = taskDate ? new Date(taskDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
-    // Build meta badges
+    // Action buttons (at the top)
+    const actions = `<div class="task-detail-actions" style="margin-top:0;padding-top:0;border-top:none;margin-bottom:0">
+        <button class="task-detail-action" onclick="copyTaskPackage('${esc(t.id)}')">
+            <i data-lucide="clipboard-copy"></i> Copy
+        </button>
+        <button class="task-detail-action" onclick="exportTaskPackage('${esc(t.id)}')">
+            <i data-lucide="download"></i> Export
+        </button>
+        ${s?.id ? `<button class="task-detail-action" onclick="navigator.clipboard.writeText('${esc(s.id)}').then(() => { const b=event.target.closest('.task-detail-action'); if(b){const o=b.innerHTML;b.innerHTML='<i data-lucide=\\'check\\' class=\\'icon-sm\\'></i> Copied ID';lucide.createIcons();setTimeout(()=>{b.innerHTML=o;lucide.createIcons()},1500)} })" title="Copy session ID: ${esc(s.id)}">
+            <i data-lucide="terminal"></i> Session
+        </button>` : ''}
+    </div>`;
+
+    // Meta badges
     let badges = '';
     if (t.project) badges += `<span class="task-detail-badge accent">${esc(t.project)}</span>`;
-    if (s?.branch) badges += `<span class="task-detail-badge"><i data-lucide="git-branch" class="icon-xs" style="vertical-align:middle;margin-right:2px"></i>${esc(s.branch)}</span>`;
-    if (s?.model) badges += `<span class="task-detail-badge purple"><i data-lucide="brain" class="icon-xs" style="vertical-align:middle;margin-right:2px"></i>${esc(s.model)}</span>`;
-    if (t.source === 'agent') badges += `<span class="task-detail-badge"><i data-lucide="bot" class="icon-xs" style="vertical-align:middle;margin-right:2px"></i>agent</span>`;
-    if (dateStr) badges += `<span class="task-detail-badge">${dateStr}</span>`;
+    if (s?.branch) badges += `<span class="task-detail-badge"><i data-lucide="git-branch" class="icon-xs"></i>${esc(s.branch)}</span>`;
+    if (s?.model) badges += `<span class="task-detail-badge purple"><i data-lucide="cpu" class="icon-xs"></i>${esc(s.model)}</span>`;
+    if (t.source === 'agent') badges += `<span class="task-detail-badge"><i data-lucide="bot" class="icon-xs"></i>agent</span>`;
 
-    // Metrics (only shown if session exists)
+    // Hero header
+    const hero = `<div class="task-detail-hero">
+        <div class="task-detail-status-line">
+            <span class="task-detail-status-chip ${isDone ? 'done' : 'pending'}">
+                <i data-lucide="${isDone ? 'check-circle' : 'clock'}" class="icon-sm"></i>
+                ${isDone ? 'Completed' : 'In Progress'}
+            </span>
+            ${dateStr ? `<span class="task-detail-date">${dateStr}</span>` : ''}
+            <div style="flex:1"></div>
+            ${actions}
+        </div>
+        <div class="task-detail-title">${esc(t.title || 'Untitled task')}</div>
+        <div class="task-detail-meta">${badges}</div>
+    </div>`;
+
+    // Metrics strip
     let metricsHtml = '';
     if (s) {
         metricsHtml = `<div class="task-detail-metrics">
@@ -3490,23 +3741,21 @@ function renderTaskDetailCard(data) {
         </div>`;
     }
 
-    // Summary section
+    // Summary section with clamping
     let summaryHtml = '';
     const summaryText = s?.taskCompleteSummary || cp?.overview || s?.summary || '';
     if (summaryText) {
-        // Basic markdown rendering for summary
-        const rendered = summaryText
-            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-            .replace(/\n/g, '<br>');
+        const rendered = renderMarkdownHtml(summaryText);
         summaryHtml = `<div class="task-detail-section">
             <div class="task-detail-section-title" onclick="this.parentElement.classList.toggle('collapsed')">
                 <i data-lucide="file-text"></i> Summary
+                <i data-lucide="chevron-down" class="td-chevron"></i>
             </div>
             <div class="task-detail-section-body">
-                <div class="task-detail-summary">${rendered}</div>
+                <div class="task-detail-summary-wrap clamped" id="summaryWrap">
+                    <div class="task-detail-summary">${rendered}</div>
+                    <button class="task-detail-summary-toggle" onclick="event.stopPropagation();document.getElementById('summaryWrap').classList.toggle('clamped');this.textContent=this.textContent==='Show more'?'Show less':'Show more'">Show more</button>
+                </div>
             </div>
         </div>`;
     }
@@ -3516,31 +3765,36 @@ function renderTaskDetailCard(data) {
     if (files.length > 0) {
         const fileRows = files.map(f => {
             const shortPath = (f.path || '').replace(/^.*[\\\/](?=(?:app|cli|src|lib|test|agent)[\\\/])/, '');
+            const toolClass = (f.tool || 'edit').toLowerCase();
             return `<div class="task-detail-file">
-                <i data-lucide="${f.tool === 'create' ? 'file-plus' : 'file-pen'}" class="icon-sm" style="color:var(--accent);flex-shrink:0"></i>
+                <i data-lucide="${f.tool === 'create' ? 'file-plus-2' : f.tool === 'view' ? 'eye' : 'file-pen'}" class="icon-sm task-detail-file-icon"></i>
                 <span class="task-detail-file-path" title="${esc(f.path)}">${esc(shortPath || f.path)}</span>
-                <span class="task-detail-file-tool">${esc(f.tool || 'edit')}</span>
-                ${f.turn != null ? `<span class="task-detail-file-turn">turn ${f.turn}</span>` : ''}
+                <span class="task-detail-file-tool ${toolClass}">${esc(f.tool || 'edit')}</span>
+                ${f.turn != null ? `<span class="task-detail-file-turn">t${f.turn}</span>` : ''}
             </div>`;
         }).join('');
         filesHtml = `<div class="task-detail-section">
             <div class="task-detail-section-title" onclick="this.parentElement.classList.toggle('collapsed')">
-                <i data-lucide="folder-open"></i> Files Changed <span style="font-weight:400;color:var(--muted);margin-left:4px">(${files.length})</span>
+                <i data-lucide="folder-open"></i> Files Changed <span class="td-section-count">${files.length}</span>
+                <i data-lucide="chevron-down" class="td-chevron"></i>
             </div>
             <div class="task-detail-section-body">${fileRows}</div>
         </div>`;
     }
 
-    // Tools section
+    // Tools section with proportion bars
     let toolsHtml = '';
     const toolEntries = Object.entries(tools).sort((a,b) => b[1] - a[1]);
     if (toolEntries.length > 0) {
-        const chips = toolEntries.map(([name, count]) =>
-            `<span class="task-detail-tool-chip">${esc(name)}<span class="tool-count"> ×${count}</span></span>`
-        ).join('');
+        const maxCount = toolEntries[0][1];
+        const chips = toolEntries.map(([name, count]) => {
+            const pct = Math.round((count / maxCount) * 100);
+            return `<span class="task-detail-tool-chip">${esc(name)}<span class="tool-count">×${count}</span><span class="tool-bar"><span class="tool-bar-fill" style="width:${pct}%"></span></span></span>`;
+        }).join('');
         toolsHtml = `<div class="task-detail-section">
             <div class="task-detail-section-title" onclick="this.parentElement.classList.toggle('collapsed')">
-                <i data-lucide="wrench"></i> Tools Used
+                <i data-lucide="wrench"></i> Tools Used <span class="td-section-count">${toolEntries.length}</span>
+                <i data-lucide="chevron-down" class="td-chevron"></i>
             </div>
             <div class="task-detail-section-body">
                 <div class="task-detail-tool-grid">${chips}</div>
@@ -3553,32 +3807,31 @@ function renderTaskDetailCard(data) {
     if (refs.length > 0) {
         const refRows = refs.map(r => {
             const icon = r.type === 'pr' ? 'git-pull-request' : r.type === 'issue' ? 'circle-dot' : 'git-commit';
+            const typeClass = r.type || 'commit';
             return `<div class="task-detail-ref">
                 <i data-lucide="${icon}" class="icon-sm" style="color:var(--accent)"></i>
-                <span class="task-detail-ref-type">${esc(r.type)}</span>
+                <span class="task-detail-ref-type ${typeClass}">${esc(r.type)}</span>
                 <span class="task-detail-ref-value">#${esc(r.value)}</span>
             </div>`;
         }).join('');
         refsHtml = `<div class="task-detail-section">
             <div class="task-detail-section-title" onclick="this.parentElement.classList.toggle('collapsed')">
-                <i data-lucide="link"></i> References
+                <i data-lucide="link"></i> References <span class="td-section-count">${refs.length}</span>
+                <i data-lucide="chevron-down" class="td-chevron"></i>
             </div>
             <div class="task-detail-section-body">${refRows}</div>
         </div>`;
     }
 
-    // Checkpoint technical details (if available)
+    // Technical details (collapsed by default)
     let techHtml = '';
     if (cp?.workDone || cp?.technicalDetails) {
         const techText = (cp.workDone || '') + (cp.technicalDetails ? '\n\n' + cp.technicalDetails : '');
-        const rendered = techText
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-            .replace(/\n/g, '<br>');
+        const rendered = renderMarkdownHtml(techText);
         techHtml = `<div class="task-detail-section collapsed">
             <div class="task-detail-section-title" onclick="this.parentElement.classList.toggle('collapsed')">
                 <i data-lucide="code"></i> Technical Details
-                <i data-lucide="chevron-down" class="icon-xs" style="margin-left:auto"></i>
+                <i data-lucide="chevron-down" class="td-chevron"></i>
             </div>
             <div class="task-detail-section-body">
                 <div class="task-detail-summary">${rendered}</div>
@@ -3589,33 +3842,18 @@ function renderTaskDetailCard(data) {
     // No-session notice
     let noSessionHtml = '';
     if (!s) {
-        noSessionHtml = `<div style="text-align:center;padding:16px;color:var(--muted);font-size:11px;border:1px dashed var(--border);border-radius:8px;margin-bottom:12px">
-            <i data-lucide="info" class="icon-sm" style="vertical-align:middle;margin-right:4px"></i>
-            No linked Copilot CLI session found. Session details are shown when tasks are created by an AI agent.
+        noSessionHtml = `<div class="task-detail-no-session">
+            <i data-lucide="info" class="icon-sm" style="vertical-align:middle;margin-right:4px;opacity:.5"></i>
+            No linked Copilot CLI session found.<br>
+            Session details appear when tasks are created by an AI agent.
         </div>`;
     }
 
-    // Action buttons
-    const actions = `<div class="task-detail-actions">
-        <button class="task-detail-action" onclick="copyTaskPackage('${esc(t.id)}')">
-            <i data-lucide="clipboard-copy"></i> Copy
-        </button>
-        <button class="task-detail-action" onclick="exportTaskPackage('${esc(t.id)}')">
-            <i data-lucide="download"></i> Export
-        </button>
-        ${s?.id ? `<button class="task-detail-action" onclick="navigator.clipboard.writeText('${esc(s.id)}').then(() => { const b=event.target.closest('.task-detail-action'); if(b){const o=b.innerHTML;b.innerHTML='<i data-lucide=\\'check\\' class=\\'icon-sm\\'></i> Copied ID';lucide.createIcons();setTimeout(()=>{b.innerHTML=o;lucide.createIcons()},1500)} })" title="Copy session ID: ${esc(s.id)}">
-            <i data-lucide="terminal"></i> Session
-        </button>` : ''}
-    </div>`;
-
-    return `
+    return `<div class="task-detail-inner">
         <button class="task-detail-back" onclick="closeTaskDetail()">
             <i data-lucide="arrow-left" class="icon-sm"></i> Back to chat
         </button>
-        <div class="task-detail-header">
-            <div><span class="task-detail-status">${statusIcon}</span><span class="task-detail-title">${esc(t.title || 'Untitled task')}</span></div>
-            <div class="task-detail-meta">${badges}</div>
-        </div>
+        ${hero}
         ${metricsHtml}
         ${noSessionHtml}
         ${summaryHtml}
@@ -3623,8 +3861,7 @@ function renderTaskDetailCard(data) {
         ${toolsHtml}
         ${refsHtml}
         ${techHtml}
-        ${actions}
-    `;
+    </div>`;
 }
 
 async function copyTaskPackage(taskId) {
