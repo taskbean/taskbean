@@ -212,7 +212,6 @@ async def command_endpoint(request_body: AGUIRequest) -> StreamingResponse:
     # Truncate task context system messages to fit model's context window (80% budget)
     msgs = input_data.get("messages", [])
     if msgs and msgs[0].get("role") == "system" and "[Task Context]" in (msgs[0].get("content") or ""):
-        from agent.context import count_tokens, get_input_budget, truncate_to_budget
         max_in = agent_mod.MODEL_CONTEXT.get("maxInputTokens")
         max_out = agent_mod.MODEL_CONTEXT.get("maxOutputTokens")
         budget = get_input_budget(max_in, max_out)
