@@ -662,15 +662,63 @@ header {
 }
 
 /* Mini chat zone — inline responses below card */
-.task-detail-chat {
-  flex-shrink: 0; max-height: 40vh; overflow-y: auto; padding: 8px 16px;
-  border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px;
-  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+/* Ask bar — inline question input inside the card */
+.task-detail-ask {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--surface2);
+  margin-bottom: 20px; transition: border-color .15s, box-shadow .15s;
 }
-.task-detail-chat:empty { display: none !important; padding: 0; border: none; }
-.task-detail-chat .chat-msg { max-width: 90%; }
-.task-detail-chat .chat-msg.user { align-self: flex-end; }
-.task-detail-chat .chat-msg.ai { align-self: flex-start; }
+.task-detail-ask:focus-within {
+  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.task-detail-ask i.ask-icon { width: 15px; height: 15px; color: var(--muted); flex-shrink: 0; }
+.task-detail-ask input {
+  flex: 1; border: none; background: transparent; font-size: 12.5px; color: var(--text);
+  font-family: inherit; outline: none; min-width: 0; padding: 4px 0;
+}
+.task-detail-ask input::placeholder { color: var(--muted); }
+.task-detail-ask-btn {
+  width: 28px; height: 28px; border-radius: 7px; border: none; background: var(--accent);
+  color: var(--bg); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: opacity .15s, transform .15s;
+}
+.task-detail-ask-btn:hover { opacity: .85; }
+.task-detail-ask-btn:active { transform: scale(.92); }
+.task-detail-ask-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.task-detail-ask-btn:disabled { opacity: .4; cursor: default; transform: none; }
+.task-detail-ask-btn i { width: 14px; height: 14px; }
+
+/* Answer zone — slides in below the ask bar */
+.task-detail-answer {
+  border-radius: 10px; border: 1px solid var(--border); background: var(--surface2);
+  margin-bottom: 20px; overflow: hidden;
+  animation: td-answer-in .3s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes td-answer-in {
+  from { opacity: 0; max-height: 0; margin-bottom: 0; }
+  to   { opacity: 1; max-height: 60vh; margin-bottom: 20px; }
+}
+.task-detail-answer-q {
+  font-size: 11px; color: var(--muted); padding: 10px 14px 0; font-style: italic;
+  display: flex; align-items: center; gap: 6px;
+}
+.task-detail-answer-q i { width: 12px; height: 12px; opacity: .5; }
+.task-detail-answer-q .ask-copy-btn {
+  margin-left: auto; font-style: normal; padding: 2px 4px; border-radius: 4px;
+  border: none; background: transparent; color: var(--muted); cursor: pointer;
+  display: inline-flex; align-items: center; opacity: 0; transition: opacity .15s, color .15s;
+}
+.task-detail-answer:hover .ask-copy-btn { opacity: 1; }
+.task-detail-answer-q .ask-copy-btn:hover { color: var(--accent); }
+.task-detail-answer-q .ask-copy-btn:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 1px; }
+.task-detail-answer-q .ask-copy-btn i { width: 11px; height: 11px; }
+.task-detail-answer-body {
+  font-size: 13px; line-height: 1.65; color: var(--text); padding: 8px 14px 12px;
+}
+.task-detail-answer-body .typing-cursor { animation: blink .6s step-end infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .task-detail-answer { animation: none; }
+}
 
 /* Responsive: stack metrics on mobile */
 @media (max-width: 600px) {
@@ -3559,7 +3607,8 @@ async function loadProjectTasks(name) {
 // ── Task Detail Card ──
 let _taskDetailOpen = false;
 let _taskDetailCache = {};
-let _taskConversationHistory = [];
+let _activeTaskDetailData = null;  // explicitly tracks the currently-open task
+let _askStreamController = null;   // AbortController for in-flight ask requests
 
 function buildTaskContext(data) {
     if (!data) return '';
@@ -3611,53 +3660,37 @@ function buildTaskContext(data) {
 }
 
 function getActiveTaskDetail() {
-    // Return the most recently opened task's detail data
-    return Object.values(_taskDetailCache).pop() || null;
+    return _activeTaskDetailData;
 }
 
 async function openTaskDetail(taskId) {
     _taskDetailOpen = true;
-    _taskConversationHistory = [];
+    _activeTaskDetailData = null;
+
+    // Abort any in-flight ask
+    if (_askStreamController) { _askStreamController.abort(); _askStreamController = null; }
 
     // Target the .right-panel which contains panel-header, chatFeed, input-bar
     const rightPanel = document.querySelector('.right-panel');
     if (!rightPanel) return;
 
-    // Hide chat feed and header, but KEEP input-bar visible for task questions
+    // Hide chat feed, header, AND input-bar — ask bar is inside the card
     const chatFeed = document.getElementById('chatFeed');
     const panelHeader = rightPanel.querySelector('.panel-header');
+    const inputBar = rightPanel.querySelector('.input-bar');
     if (chatFeed) chatFeed.style.display = 'none';
     if (panelHeader) panelHeader.style.display = 'none';
+    if (inputBar) inputBar.style.display = 'none';
 
-    // Swap placeholder to task-contextual hint
-    const chatInput = document.getElementById('chatInput');
-    if (chatInput) {
-        chatInput._originalPlaceholder = chatInput.placeholder;
-        chatInput.placeholder = 'Ask about this task, session, or project\u2026';
-    }
-
-    // Create or get detail container inside right-panel (before input-bar)
+    // Create or get detail container inside right-panel
     let detailEl = document.getElementById('taskDetailPanel');
     if (!detailEl) {
         detailEl = document.createElement('div');
         detailEl.id = 'taskDetailPanel';
         detailEl.className = 'task-detail';
-        const inputBar = rightPanel.querySelector('.input-bar');
-        rightPanel.insertBefore(detailEl, inputBar);
+        rightPanel.appendChild(detailEl);
     }
     detailEl.style.display = 'block';
-
-    // Create mini chat zone between card and input bar
-    let miniChat = document.getElementById('taskDetailChat');
-    if (!miniChat) {
-        miniChat = document.createElement('div');
-        miniChat.id = 'taskDetailChat';
-        miniChat.className = 'task-detail-chat';
-        const inputBar = rightPanel.querySelector('.input-bar');
-        rightPanel.insertBefore(miniChat, inputBar);
-    }
-    miniChat.innerHTML = '';
-    miniChat.style.display = '';
 
     // Show skeleton while loading
     detailEl.innerHTML = renderTaskDetailSkeleton();
@@ -3668,8 +3701,12 @@ async function openTaskDetail(taskId) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         _taskDetailCache[taskId] = data;
+        _activeTaskDetailData = data;
         detailEl.innerHTML = renderTaskDetailCard(data);
         lucide.createIcons();
+        // Focus the ask input for immediate typing
+        const askInput = detailEl.querySelector('.task-detail-ask input');
+        if (askInput) askInput.focus();
     } catch (err) {
         detailEl.innerHTML = `<div class="task-detail-inner">
             <button class="task-detail-back" onclick="closeTaskDetail()">
@@ -3687,26 +3724,22 @@ async function openTaskDetail(taskId) {
 
 function closeTaskDetail() {
     _taskDetailOpen = false;
-    _taskConversationHistory = [];
+    _activeTaskDetailData = null;
+    if (_askStreamController) { _askStreamController.abort(); _askStreamController = null; }
     const detailEl = document.getElementById('taskDetailPanel');
     if (detailEl) {
         detailEl.style.display = 'none';
         detailEl.innerHTML = '';
     }
-    // Clear mini chat zone
-    const miniChat = document.getElementById('taskDetailChat');
-    if (miniChat) { miniChat.innerHTML = ''; miniChat.style.display = 'none'; }
-    // Restore chat content and placeholder
+    // Restore chat content, header, and input bar
     const rightPanel = document.querySelector('.right-panel');
     if (rightPanel) {
         const chatFeed = document.getElementById('chatFeed');
         const panelHeader = rightPanel.querySelector('.panel-header');
+        const inputBar = rightPanel.querySelector('.input-bar');
         if (chatFeed) chatFeed.style.display = '';
         if (panelHeader) panelHeader.style.display = '';
-    }
-    const chatInput = document.getElementById('chatInput');
-    if (chatInput && chatInput._originalPlaceholder) {
-        chatInput.placeholder = chatInput._originalPlaceholder;
+        if (inputBar) inputBar.style.display = '';
     }
 }
 
@@ -3959,6 +3992,16 @@ function renderTaskDetailCard(data) {
         <button class="task-detail-back" onclick="closeTaskDetail()">
             <i data-lucide="arrow-left" class="icon-sm"></i> Back to chat
         </button>
+        <div class="task-detail-ask">
+            <i data-lucide="message-circle-question" class="ask-icon"></i>
+            <input type="text" placeholder="Ask about this task, session, or project\u2026" spellcheck="false"
+                   aria-label="Ask about this task" autocomplete="off"
+                   onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askAboutTask(this.value);this.value='';}" />
+            <button class="task-detail-ask-btn" aria-label="Ask" onclick="const i=this.previousElementSibling;askAboutTask(i.value);i.value='';">
+                <i data-lucide="arrow-up"></i>
+            </button>
+        </div>
+        <div id="taskDetailAnswer" class="task-detail-answer" style="display:none"></div>
         ${hero}
         ${metricsHtml}
         ${noSessionHtml}
@@ -3998,6 +4041,93 @@ async function exportTaskPackage(taskId) {
         URL.revokeObjectURL(url);
     } catch (err) {
         console.error('Export failed:', err);
+    }
+}
+
+async function askAboutTask(question) {
+    question = (question || '').trim();
+    if (!question || !_taskDetailOpen) return;
+    const data = getActiveTaskDetail();
+    if (!data) return;
+
+    // Abort any previous in-flight ask
+    if (_askStreamController) { _askStreamController.abort(); }
+    _askStreamController = new AbortController();
+    const signal = _askStreamController.signal;
+
+    const answerEl = document.getElementById('taskDetailAnswer');
+    if (!answerEl) return;
+
+    // Show the question + loading state
+    answerEl.style.display = '';
+    answerEl.style.animation = 'none'; void answerEl.offsetHeight; answerEl.style.animation = '';
+    answerEl.innerHTML = `
+        <div class="task-detail-answer-q"><i data-lucide="user"></i> ${esc(question)}<button class="ask-copy-btn" aria-label="Copy answer" style="visibility:hidden"><i data-lucide="clipboard"></i></button></div>
+        <div class="task-detail-answer-body"><span class="typing-cursor">\u25CB</span></div>`;
+    lucide.createIcons();
+
+    const bodyEl = answerEl.querySelector('.task-detail-answer-body');
+    let streamText = '';
+
+    try {
+        const taskContext = buildTaskContext(data);
+        const messages = [
+            { id: genId(), role: 'system', content: taskContext },
+            { id: genId(), role: 'user', content: question }
+        ];
+
+        const res = await fetch('/api/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'traceparent': generateTraceparent() },
+            body: JSON.stringify({
+                threadId: 'ask-' + genId(),
+                runId: genId(),
+                state: { todos: localTodos, recurringTemplates: activeTemplates },
+                messages,
+                tools: [],
+                context: [],
+                forwardedProps: {}
+            }),
+            signal
+        });
+
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+        await processAGUISSE(res, {
+            onTextContent(ev) {
+                if (signal.aborted) return;
+                streamText += ev.delta;
+                if (bodyEl) bodyEl.innerHTML = esc(streamText).replace(/\n/g, '<br>') + '<span class="typing-cursor">\u25CB</span>';
+                answerEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            },
+            onTextEnd() {
+                if (signal.aborted) return;
+                if (bodyEl) bodyEl.innerHTML = esc(streamText).replace(/\n/g, '<br>');
+                // Reveal the inline copy button on the question line
+                const copyBtn = answerEl.querySelector('.ask-copy-btn');
+                if (copyBtn) {
+                    copyBtn.style.visibility = '';
+                    copyBtn.onclick = () => {
+                        navigator.clipboard.writeText(streamText);
+                        copyBtn.innerHTML = '<i data-lucide="check"></i>';
+                        lucide.createIcons();
+                        setTimeout(() => { copyBtn.innerHTML = '<i data-lucide="clipboard"></i>'; lucide.createIcons(); }, 1500);
+                    };
+                }
+            },
+            onStateSnapshot() {},
+            onStateDelta() {},
+            onToolCallStart() {},
+            onToolCallEnd() {},
+            onError(ev) { throw new Error(ev.message || 'AI error'); },
+            onStreamDrop() {}
+        });
+    } catch (err) {
+        if (signal.aborted) return;
+        if (bodyEl) bodyEl.innerHTML = `<span style="color:var(--red);font-size:12px"><i data-lucide="alert-circle" class="icon-sm" style="vertical-align:middle;margin-right:4px"></i>${esc(err.message)}</span>`;
+        lucide.createIcons();
+    } finally {
+        if (_askStreamController?.signal === signal) _askStreamController = null;
     }
 }
 function fmtTime(iso) { try { return new Date(iso).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}); } catch { return iso||''; } }
@@ -4694,10 +4824,6 @@ let _streamBubble = null;
 let _streamContent = '';
 
 function _getStreamTarget() {
-    // When task detail card is open, stream into mini chat zone; otherwise chatFeed
-    if (_taskDetailOpen) {
-        return document.getElementById('taskDetailChat') || document.getElementById('chatFeed');
-    }
     return document.getElementById('chatFeed');
 }
 
@@ -4751,26 +4877,10 @@ async function sendCommand(cmd) {
     isProcessing = true; { const _sb = document.getElementById('sendBtn'); if (_sb) _sb.disabled = true; }
     chatInput.value = ''; autoResize();
 
-    // Determine if we're in task-detail context mode
-    const isTaskContext = _taskDetailOpen && getActiveTaskDetail();
-
-    // Add user message to appropriate feed and history
+    // Add user message to chat feed and history
     const userMsgId = genId();
-    if (isTaskContext) {
-        // Show user message in the mini chat zone
-        const miniChat = document.getElementById('taskDetailChat');
-        if (miniChat) {
-            const userDiv = document.createElement('div');
-            userDiv.className = 'chat-msg user';
-            userDiv.innerHTML = `<span class="msg-content">${esc(cmd)}</span>`;
-            miniChat.appendChild(userDiv);
-            miniChat.scrollTop = miniChat.scrollHeight;
-        }
-        _taskConversationHistory.push({ id: userMsgId, role: 'user', content: cmd });
-    } else {
-        addChat('user','message-square', esc(cmd));
-        conversationHistory.push({ id: userMsgId, role: 'user', content: cmd });
-    }
+    addChat('user','message-square', esc(cmd));
+    conversationHistory.push({ id: userMsgId, role: 'user', content: cmd });
     showTypingIndicator();
 
     setStatus('loader', _pick(COFFEE_BUSY), 'busy');
@@ -4781,33 +4891,7 @@ async function sendCommand(cmd) {
 
     try {
         const runId = genId();
-
-        // Build messages — inject task context as system message if in task detail mode
-        let messages;
         const commandState = { todos: localTodos, recurringTemplates: activeTemplates };
-
-        if (isTaskContext) {
-            const taskData = getActiveTaskDetail();
-            const taskContext = buildTaskContext(taskData);
-            messages = [
-                { id: genId(), role: 'system', content: taskContext },
-                ..._taskConversationHistory
-            ];
-            // Add structured task context to state for the agent
-            commandState.taskContext = {
-                task: taskData.task,
-                session: taskData.session ? {
-                    model: taskData.session.model,
-                    turns: taskData.session.turns,
-                    tokens: taskData.session.outputTokens,
-                    branch: taskData.session.branch,
-                } : null,
-                filesChanged: taskData.files?.length || 0,
-                toolsUsed: Object.keys(taskData.tools || {}).length,
-            };
-        } else {
-            messages = conversationHistory;
-        }
 
         const res = await fetch('/api/command', {
             method: 'POST',
@@ -4816,7 +4900,7 @@ async function sendCommand(cmd) {
                 threadId: agThreadId,
                 runId,
                 state: commandState,
-                messages,
+                messages: conversationHistory,
                 tools: [],
                 context: [],
                 forwardedProps: {}
@@ -4886,19 +4970,11 @@ async function sendCommand(cmd) {
             }
         });
 
-        // Store assistant reply in the appropriate conversation history
+        // Store assistant reply in conversation history
         if (assistantText) {
-            if (isTaskContext) {
-                _taskConversationHistory.push({ id: assistantMsgId || genId(), role: 'assistant', content: assistantText });
-                if (_taskConversationHistory.length > 20) {
-                    _taskConversationHistory = _taskConversationHistory.slice(-20);
-                }
-            } else {
-                conversationHistory.push({ id: assistantMsgId || genId(), role: 'assistant', content: assistantText });
-                // Keep history bounded to avoid unbounded context growth
-                if (conversationHistory.length > MAX_HISTORY) {
-                    conversationHistory = conversationHistory.slice(-MAX_HISTORY);
-                }
+            conversationHistory.push({ id: assistantMsgId || genId(), role: 'assistant', content: assistantText });
+            if (conversationHistory.length > MAX_HISTORY) {
+                conversationHistory = conversationHistory.slice(-MAX_HISTORY);
             }
         }
 
