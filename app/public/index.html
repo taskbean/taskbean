@@ -3347,24 +3347,26 @@ let _taskDetailCache = {};
 
 async function openTaskDetail(taskId) {
     _taskDetailOpen = true;
-    const chatCol = document.querySelector('.chat-column') || document.querySelector('[class*="chat"]');
-    const mainArea = chatCol || document.getElementById('chatMessages')?.parentElement;
-    if (!mainArea) return;
 
-    // Save existing content reference
-    if (!mainArea._savedDisplay) {
-        mainArea._savedChildren = [...mainArea.children].map(c => ({ el: c, display: c.style.display }));
-        mainArea._savedDisplay = true;
-        mainArea._savedChildren.forEach(c => c.el.style.display = 'none');
-    }
+    // Target the .right-panel which contains panel-header, chatFeed, input-bar
+    const rightPanel = document.querySelector('.right-panel');
+    if (!rightPanel) return;
 
-    // Create or get detail container
+    // Hide chat children (header, feed, input) but keep them in DOM
+    const chatFeed = document.getElementById('chatFeed');
+    const inputBar = rightPanel.querySelector('.input-bar');
+    const panelHeader = rightPanel.querySelector('.panel-header');
+    if (chatFeed) chatFeed.style.display = 'none';
+    if (inputBar) inputBar.style.display = 'none';
+    if (panelHeader) panelHeader.style.display = 'none';
+
+    // Create or get detail container inside right-panel
     let detailEl = document.getElementById('taskDetailPanel');
     if (!detailEl) {
         detailEl = document.createElement('div');
         detailEl.id = 'taskDetailPanel';
         detailEl.className = 'task-detail';
-        mainArea.appendChild(detailEl);
+        rightPanel.appendChild(detailEl);
     }
     detailEl.style.display = 'block';
 
@@ -3401,11 +3403,14 @@ function closeTaskDetail() {
         detailEl.innerHTML = '';
     }
     // Restore chat content
-    const chatCol = document.querySelector('.chat-column') || document.querySelector('[class*="chat"]');
-    const mainArea = chatCol || document.getElementById('chatMessages')?.parentElement;
-    if (mainArea && mainArea._savedDisplay) {
-        mainArea._savedChildren.forEach(c => c.el.style.display = c.display);
-        mainArea._savedDisplay = false;
+    const rightPanel = document.querySelector('.right-panel');
+    if (rightPanel) {
+        const chatFeed = document.getElementById('chatFeed');
+        const inputBar = rightPanel.querySelector('.input-bar');
+        const panelHeader = rightPanel.querySelector('.panel-header');
+        if (chatFeed) chatFeed.style.display = '';
+        if (inputBar) inputBar.style.display = '';
+        if (panelHeader) panelHeader.style.display = '';
     }
 }
 
