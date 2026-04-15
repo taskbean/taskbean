@@ -832,3 +832,64 @@ async def test_update_todo_state_function(clean_state):
     result = state_mod.update_todo("fake-id", title="nope")
     assert result is None
 
+
+# ── Task Detail & Export ──────────────────────────────────────────────────────
+
+async def test_task_detail_not_found(client: httpx.AsyncClient) -> None:
+    """GET /api/task-detail/<bad-id> returns 404."""
+    r = await client.get("/api/task-detail/nonexistent-uuid")
+    assert r.status_code == 404
+
+
+async def test_task_detail_basic(client: httpx.AsyncClient, clean_state) -> None:
+    """GET /api/task-detail/<id> returns enriched detail for an existing task."""
+    # Create a task via the API
+    cr = await client.post("/api/todos", json={"title": "detail probe", "project": "test-project"})
+    assert cr.status_code == 201
+    todo_id = cr.json()["id"]
+
+    r = await client.get(f"/api/task-detail/{todo_id}")
+    assert r.status_code == 200
+    data = r.json()
+
+    # task block
+    assert data["task"]["id"] == todo_id
+    assert data["task"]["title"] == "detail probe"
+    assert data["task"]["completed"] is False
+
+    # session may be null in test env (no correlated Copilot session)
+    assert "session" in data
+
+    # files, refs, tools present as correct types
+    assert isinstance(data["files"], list)
+    assert isinstance(data["refs"], list)
+    assert isinstance(data["tools"], dict)
+
+
+async def test_task_detail_export_json(client: httpx.AsyncClient, clean_state) -> None:
+    """GET /api/task-detail/<id>/export?format=json returns JSON with task key."""
+    cr = await client.post("/api/todos", json={"title": "export json probe"})
+    assert cr.status_code == 201
+    todo_id = cr.json()["id"]
+
+    r = await client.get(f"/api/task-detail/{todo_id}/export", params={"format": "json"})
+    assert r.status_code == 200
+    assert "application/json" in r.headers.get("content-type", "")
+    data = r.json()
+    assert "task" in data
+
+
+async def test_task_detail_export_md(client: httpx.AsyncClient, clean_state) -> None:
+    """GET /api/task-detail/<id>/export?format=md returns markdown with the task title."""
+    cr = await client.post("/api/todos", json={"title": "export md probe"})
+    assert cr.status_code == 201
+    todo_id = cr.json()["id"]
+
+    r = await client.get(f"/api/task-detail/{todo_id}/export", params={"format": "md"})
+    assert r.status_code == 200
+    ct = r.headers.get("content-type", "")
+    assert "text/markdown" in ct or "text/plain" in ct
+    body = r.text
+    assert "export md probe" in body
+    assert body.lstrip().startswith("##")
+
