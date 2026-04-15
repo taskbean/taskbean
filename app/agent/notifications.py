@@ -6,13 +6,25 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+# Try modern winotify first, fall back to legacy win10toast
+_toaster_backend: str = "none"
+_winotify_available = False
+_win10toast_toaster = None
+
 try:
-    from win10toast import ToastNotifier
-    _toaster = ToastNotifier()
-    _toaster_available = True
+    from winotify import Notification as WiNotification, audio as winotify_audio
+    _winotify_available = True
+    _toaster_backend = "winotify"
 except Exception:
-    _toaster = None
-    _toaster_available = False
+    pass
+
+if not _winotify_available:
+    try:
+        from win10toast import ToastNotifier
+        _win10toast_toaster = ToastNotifier()
+        _toaster_backend = "win10toast"
+    except Exception:
+        pass
 
 import app_config
 import state as state_mod
@@ -95,9 +107,17 @@ def send_notification(title: str, message: str, force: bool = False) -> None:
         return
 
     telem.emit("reminder.fired", {"title": f"{title} — {message}"[:100]})
-    if _toaster_available and _toaster:
+
+    if _toaster_backend == "winotify":
         try:
-            _toaster.show_toast(title, message, duration=8, threaded=True)
+            toast = WiNotification(app_id="taskbean", title=title, msg=message, duration="short")
+            toast.set_audio(winotify_audio.Default, loop=False)
+            toast.show()
+        except Exception as e:
+            logger.warning("winotify notification failed: %s", e)
+    elif _toaster_backend == "win10toast" and _win10toast_toaster:
+        try:
+            _win10toast_toaster.show_toast(title, message, duration=8, threaded=True)
         except Exception as e:
             logger.warning("Toast notification failed: %s", e)
     else:
