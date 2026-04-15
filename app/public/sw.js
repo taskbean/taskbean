@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskbean-v15';
+const CACHE_NAME = 'taskbean-v16';
 const SHELL_ASSETS = [
   '/manifest.json',
   '/icons/icon-192.png',
@@ -7,6 +7,9 @@ const SHELL_ASSETS = [
   '/vendor/lucide.min.js',
   '/vendor/fast-json-patch.min.js'
 ];
+
+// Read-only API endpoints eligible for network-first caching
+const CACHEABLE_API = ['/api/todos', '/api/config', '/api/models', '/api/recurring', '/api/templates', '/api/projects'];
 
 // Install: cache static assets only (NOT index.html — that's network-first)
 self.addEventListener('install', (e) => {
@@ -36,12 +39,31 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Fetch: skip API, network-first for navigation, cache-first for static assets
+// Fetch: network-first for cacheable APIs, skip SSE/POST, cache-first for static
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // Never cache API calls or SSE streams
   if (url.pathname.startsWith('/api/')) {
+    // Only cache GET requests to whitelisted read endpoints
+    if (e.request.method === 'GET' && CACHEABLE_API.some(p => url.pathname === p)) {
+      e.respondWith((async () => {
+        try {
+          const response = await fetch(e.request);
+          if (response.ok) {
+            const clone = response.clone();
+            e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone)));
+          }
+          return response;
+        } catch {
+          const cached = await caches.match(e.request);
+          return cached || new Response(JSON.stringify([]), {
+            status: 503, headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      })());
+      return;
+    }
+    // All other API calls (POST, SSE, health, etc.) — pass through
     return;
   }
 
