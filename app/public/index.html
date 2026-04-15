@@ -118,7 +118,7 @@ header {
 }
 .nav-rail-toggle {
   width: 32px; height: 32px; border-radius: 6px; border: none; background: none; color: var(--muted);
-  cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .15s;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .15s, color .15s;
 }
 .nav-rail-toggle:hover { background: var(--surface2); color: var(--text); }
 .nav-rail-wordmark { height: 22px; opacity: 0; transition: opacity .15s .05s; pointer-events: none; }
@@ -129,7 +129,7 @@ header {
 .nav-item {
   display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; border: none; background: none;
   color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; font-family: inherit; white-space: nowrap;
-  transition: all .15s; position: relative; width: 100%;
+  transition: background .15s, color .15s; position: relative; width: 100%;
 }
 .nav-item:hover { background: var(--surface2); color: var(--text); }
 .nav-item.active { color: var(--accent); background: var(--accent-soft); }
@@ -1285,7 +1285,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 <!-- ═══ Nav Rail (left-docked) ═══ -->
 <nav class="nav-rail expanded" id="navRail">
   <div class="nav-rail-top">
-    <button class="nav-rail-toggle" onclick="toggleNavRail()" title="Toggle sidebar">
+    <button class="nav-rail-toggle" onclick="toggleNavRail()" title="Toggle sidebar" aria-label="Toggle sidebar">
       <i data-lucide="panel-left-close" class="icon-sm" id="navRailIcon"></i>
     </button>
     <img src="/icons/taskbean-wordmark-light.png" alt="taskbean" class="nav-rail-wordmark wordmark-light" style="height:22px">
@@ -3352,9 +3352,6 @@ function toggleNavRail() {
     rail.classList.toggle('expanded');
     const expanded = rail.classList.contains('expanded');
     icon.setAttribute('data-lucide', expanded ? 'panel-left-close' : 'panel-left-open');
-    // Toggle left-panel visibility
-    const leftPanel = document.querySelector('.left-panel');
-    if (leftPanel) leftPanel.style.display = expanded ? '' : 'none';
     lucide.createIcons();
     localStorage.setItem('taskbean-nav-expanded', expanded);
 }
@@ -3368,8 +3365,6 @@ function toggleNavRail() {
             rail.classList.remove('expanded');
             const icon = document.getElementById('navRailIcon');
             if (icon) icon.setAttribute('data-lucide', 'panel-left-open');
-            const leftPanel = document.querySelector('.left-panel');
-            if (leftPanel) leftPanel.style.display = 'none';
         }
     }
 })();
