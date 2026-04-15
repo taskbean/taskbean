@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// Suppress node:sqlite experimental warning from polluting JSON output
+process.removeAllListeners('warning');
+process.on('warning', (w) => { if (w.name !== 'ExperimentalWarning') console.warn(w); });
+
 import { program } from 'commander';
 import { addCommand } from '../src/commands/add.js';
 import { doneCommand } from '../src/commands/done.js';
@@ -66,7 +70,8 @@ program
   .command('install')
   .description('Install agent skill into a project')
   .option('--global', 'Install globally (~/)')
-  .option('--agent <agent>', 'Target agent: copilot, claude, codex, opencode, all', 'all')
+  .option('--agent <agent>', 'Target agent: copilot, claude, codex, opencode, all')
+  .option('--force', 'Overwrite existing SKILL.md (upgrade)')
   .option('--json', 'Output as JSON')
   .action(installCommand);
 

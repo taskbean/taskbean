@@ -1,18 +1,20 @@
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { homedir } from 'os';
 
-const DB_DIR = join(homedir(), '.taskbean');
-const DB_PATH = join(DB_DIR, 'taskbean.db');
+const DB_DIR = process.env.TASKBEAN_HOME || join(homedir(), '.taskbean');
+const DB_PATH = process.env.TASKBEAN_DB || join(DB_DIR, 'taskbean.db');
 
 let _db = null;
 
 export function getDb() {
   if (_db) return _db;
 
-  if (!existsSync(DB_DIR)) {
-    mkdirSync(DB_DIR, { recursive: true });
+  // Ensure parent directory of the DB file exists
+  const dbParent = dirname(DB_PATH);
+  if (!existsSync(dbParent)) {
+    mkdirSync(dbParent, { recursive: true });
   }
 
   _db = new DatabaseSync(DB_PATH);
