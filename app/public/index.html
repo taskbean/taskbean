@@ -430,27 +430,29 @@ header {
 .task-detail-back {
   display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted);
   cursor: pointer; background: none; border: none; font-family: inherit; padding: 6px 10px;
-  border-radius: 8px; margin-bottom: 20px; transition: all .2s; letter-spacing: .2px;
+  border-radius: 8px; margin-bottom: 20px; transition: color .15s, background .15s; letter-spacing: .2px;
 }
 .task-detail-back:hover { color: var(--accent); background: var(--accent-soft); }
+.task-detail-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Header zone */
 .task-detail-hero {
   margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
 }
 .task-detail-status-line {
-  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
 }
 .task-detail-status-chip {
   display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700;
-  padding: 3px 10px; border-radius: 6px; letter-spacing: .5px; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 6px; letter-spacing: .5px; text-transform: uppercase;
+  height: 26px;
 }
 .task-detail-status-chip.done { background: var(--green-soft); color: var(--green); }
 .task-detail-status-chip.pending { background: var(--orange-soft); color: var(--orange); }
-.task-detail-date { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
+.task-detail-date { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; line-height: 26px; }
 .task-detail-title {
   font-size: 20px; font-weight: 700; line-height: 1.35; color: var(--text);
-  letter-spacing: -.2px; margin-bottom: 12px;
+  letter-spacing: -.2px; margin-bottom: 12px; text-wrap: balance;
 }
 .task-detail-meta {
   display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
@@ -459,7 +461,7 @@ header {
   font-size: 10px; padding: 4px 10px; border-radius: 6px; font-weight: 500;
   font-family: 'DM Mono', monospace; background: var(--surface2); color: var(--muted);
   display: inline-flex; align-items: center; gap: 4px; border: 1px solid transparent;
-  transition: border-color .15s;
+  transition: border-color .15s; height: 26px;
 }
 .task-detail-badge:hover { border-color: var(--border); }
 .task-detail-badge.accent { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
@@ -580,8 +582,8 @@ header {
   font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text);
 }
 .task-detail-file-tool {
-  font-size: 9px; padding: 2px 7px; border-radius: 4px; font-family: 'DM Mono', monospace;
-  font-weight: 500; flex-shrink: 0;
+  font-size: 9px; padding: 3px 8px; border-radius: 4px; font-family: 'DM Mono', monospace;
+  font-weight: 500; flex-shrink: 0; height: 20px; display: inline-flex; align-items: center;
 }
 .task-detail-file-tool.create { background: var(--green-soft); color: var(--green); }
 .task-detail-file-tool.edit { background: var(--accent-soft); color: var(--accent); }
@@ -596,6 +598,7 @@ header {
   font-size: 10px; padding: 5px 10px; border-radius: 6px; background: var(--bg);
   border: 1px solid var(--border); font-family: 'DM Mono', monospace; color: var(--text);
   display: inline-flex; align-items: center; gap: 6px; transition: border-color .15s;
+  height: 26px;
 }
 .task-detail-tool-chip:hover { border-color: var(--accent); }
 .task-detail-tool-chip .tool-count {
@@ -626,16 +629,19 @@ header {
   display: flex; gap: 8px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border);
 }
 .task-detail-action {
-  display: inline-flex; align-items: center; gap: 5px; padding: 8px 16px; border-radius: 8px;
+  display: inline-flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 6px;
   border: 1px solid var(--border); background: var(--surface2); color: var(--text);
-  font-size: 11px; font-family: inherit; cursor: pointer; transition: all .2s; font-weight: 500;
+  font-size: 10px; font-family: inherit; cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s, transform .1s, box-shadow .15s;
+  font-weight: 500; height: 26px;
 }
 .task-detail-action:hover {
   border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
   transform: translateY(-1px); box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 15%, transparent);
 }
 .task-detail-action:active { transform: translateY(0); }
-.task-detail-action i { width: 14px; height: 14px; }
+.task-detail-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.task-detail-action i { width: 12px; height: 12px; }
 
 /* Skeleton loading */
 .task-detail-skeleton {
@@ -661,7 +667,16 @@ header {
   .task-detail-metrics { flex-wrap: wrap; }
   .task-detail-metric { flex: 1 1 45%; }
   .task-detail-title { font-size: 17px; }
+  .task-detail-status-line { gap: 6px; }
 }
+/* Reduced motion: disable card animations */
+@media (prefers-reduced-motion: reduce) {
+  .task-detail-inner, .task-detail-section { animation: none !important; }
+  .task-detail-action:hover { transform: none; }
+  .td-chevron { transition: none; }
+}
+/* Focus-visible for collapsible section titles (keyboard nav) */
+.task-detail-section-title:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
 
 @keyframes slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
