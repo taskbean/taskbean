@@ -1,15 +1,13 @@
-import { getDb, allRows } from '../data/store.js';
+import { allRows } from '../data/store.js';
 
-export async function projectsCommand(opts) {
-  const db = await getDb();
-
-  const projects = allRows(db, `
-    SELECT p.*, 
-      (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as total_tasks,
-      (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') as done_tasks,
-      (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'pending') as pending_tasks,
-      (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'in_progress') as active_tasks
+export function projectsCommand(opts) {
+  const projects = allRows(`
+    SELECT p.*,
+      (SELECT COUNT(*) FROM todos t WHERE t.project = p.name) as total_tasks,
+      (SELECT COUNT(*) FROM todos t WHERE t.project = p.name AND t.completed = 1) as done_tasks,
+      (SELECT COUNT(*) FROM todos t WHERE t.project = p.name AND t.completed = 0) as pending_tasks
     FROM projects p
+    WHERE p.tracked = 1
     ORDER BY p.created_at DESC
   `);
 

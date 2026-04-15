@@ -8,8 +8,10 @@ import { addCommand } from '../src/commands/add.js';
 import { doneCommand } from '../src/commands/done.js';
 import { listCommand } from '../src/commands/list.js';
 import { reportCommand } from '../src/commands/report.js';
-import { trackCommand } from '../src/commands/track.js';
+import { trackCommand, untrackCommand } from '../src/commands/track.js';
 import { installCommand } from '../src/commands/install.js';
+import { projectsCommand } from '../src/commands/projects.js';
+import { serveCommand } from '../src/commands/serve.js';
 
 program
   .name('bean')
@@ -74,5 +76,24 @@ program
   .option('--force', 'Overwrite existing SKILL.md (upgrade)')
   .option('--json', 'Output as JSON')
   .action(installCommand);
+
+program
+  .command('untrack')
+  .description('Stop tracking a project')
+  .option('--path <path>', 'Project path (default: cwd)')
+  .option('--json', 'Output as JSON')
+  .action(untrackCommand);
+
+program
+  .command('projects')
+  .description('List tracked projects')
+  .option('--json', 'Output as JSON')
+  .action(projectsCommand);
+
+program
+  .command('serve')
+  .description('Start the taskbean PWA server')
+  .option('--port <port>', 'Port to listen on', '3000')
+  .action(serveCommand);
 
 program.parse();

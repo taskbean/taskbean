@@ -7,6 +7,9 @@ Endpoints mirror the original Node.js server:
   GET  /api/todos
   PATCH /api/todos/:id
   DELETE /api/todos/:id
+  GET  /api/projects
+  GET  /api/projects/tasks
+  GET  /api/copilot-usage
   GET  /api/templates
   POST /api/templates/activate
   POST /api/templates/deactivate
@@ -934,6 +937,187 @@ async def delete_todo(todo_id: str) -> dict:
         raise HTTPException(404, "Not found")
     state_mod.todos.pop(idx)
     return {"success": True}
+
+
+# ── Projects (reads from CLI's SQLite DB) ─────────────────────────────────────
+
+
+def _get_taskbean_db():
+    """Open the shared taskbean SQLite DB (read-only)."""
+    import sqlite3
+    db_path = os.path.join(os.path.expanduser("~"), ".taskbean", "taskbean.db")
+    if not os.path.exists(db_path):
+        return None
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+@app.get("/api/projects")
+async def get_projects() -> list:
+    """Return tracked projects from CLI's SQLite DB, merged with in-memory todo counts."""
+    conn = _get_taskbean_db()
+    if not conn:
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT name, path FROM projects WHERE tracked = 1 ORDER BY name"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    result = []
+    for r in rows:
+        name = r["name"]
+        project_todos = [t for t in state_mod.todos if t.get("project") == name]
+        # Also count todos from SQLite that have matching project field
+        conn2 = _get_taskbean_db()
+        sqlite_total = sqlite_done = sqlite_pending = 0
+        if conn2:
+            try:
+                row = conn2.execute(
+                    "SELECT COUNT(*) as total, "
+                    "SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as done "
+                    "FROM todos WHERE project = ?",
+                    (name,),
+                ).fetchone()
+                if row:
+                    sqlite_total = row["total"] or 0
+                    sqlite_done = row["done"] or 0
+                    sqlite_pending = sqlite_total - sqlite_done
+            finally:
+                conn2.close()
+        mem_total = len(project_todos)
+        mem_done = sum(1 for t in project_todos if t.get("completed"))
+        mem_pending = mem_total - mem_done
+        result.append({
+            "name": name,
+            "path": r["path"],
+            "total": sqlite_total + mem_total,
+            "done": sqlite_done + mem_done,
+            "pending": sqlite_pending + mem_pending,
+        })
+    return result
+
+
+@app.get("/api/projects/tasks")
+async def get_project_tasks(project: str = "") -> list:
+    """Return todos for a specific project (from both in-memory state and SQLite)."""
+    if not project:
+        return []
+    # In-memory todos
+    mem_todos = [t for t in state_mod.todos if t.get("project") == project]
+    # SQLite todos
+    conn = _get_taskbean_db()
+    db_todos = []
+    if conn:
+        try:
+            rows = conn.execute(
+                "SELECT id, title, emoji, due_date as dueDate, due_time as dueTime, "
+                "completed, source, priority, notes, tags, project, created_at as createdAt "
+                "FROM todos WHERE project = ? ORDER BY created_at DESC",
+                (project,),
+            ).fetchall()
+            db_todos = [dict(r) for r in rows]
+            # Normalize completed to bool
+            for t in db_todos:
+                t["completed"] = bool(t["completed"])
+        finally:
+            conn.close()
+    # Deduplicate by id (in-memory wins)
+    mem_ids = {t["id"] for t in mem_todos}
+    combined = mem_todos + [t for t in db_todos if t["id"] not in mem_ids]
+    return combined
+
+
+# ── Copilot Usage Stats ──────────────────────────────────────────────────────
+
+
+@app.get("/api/copilot-usage")
+async def get_copilot_usage(date: str = "today") -> dict:
+    """Read Copilot CLI session stats from ~/.copilot/session-store.db."""
+    import sqlite3
+
+    copilot_db = os.path.join(os.path.expanduser("~"), ".copilot", "session-store.db")
+    session_state = os.path.join(os.path.expanduser("~"), ".copilot", "session-state")
+    if not os.path.exists(copilot_db):
+        return {"available": False}
+
+    try:
+        conn = sqlite3.connect(f"file:{copilot_db}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+
+        if date == "week":
+            date_clause = "date(created_at) >= date('now', '-7 days', 'localtime')"
+        elif date == "all":
+            date_clause = "1=1"
+        else:
+            date_clause = "date(created_at) = date('now', 'localtime')"
+
+        sessions = conn.execute(
+            f"SELECT id, cwd, summary, created_at FROM sessions WHERE {date_clause} ORDER BY created_at DESC"
+        ).fetchall()
+        conn.close()
+
+        total_tokens = 0
+        total_messages = 0
+        total_turns = 0
+        models: dict[str, int] = {}
+        details = []
+
+        for s in sessions:
+            ev_path = os.path.join(session_state, s["id"], "events.jsonl")
+            if not os.path.exists(ev_path):
+                continue
+            session_tokens = 0
+            session_msgs = 0
+            model = None
+            try:
+                with open(ev_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            ev = json.loads(line)
+                            if ev.get("type") == "session.start":
+                                model = (ev.get("data") or {}).get("selectedModel", "unknown")
+                                models[model] = models.get(model, 0) + 1
+                            if ev.get("type") == "assistant.message":
+                                out_tok = (ev.get("data") or {}).get("outputTokens", 0)
+                                if out_tok:
+                                    session_tokens += out_tok
+                                    session_msgs += 1
+                            if ev.get("type") == "user.message":
+                                total_turns += 1
+                        except (json.JSONDecodeError, KeyError):
+                            pass
+            except OSError:
+                pass
+            total_tokens += session_tokens
+            total_messages += session_msgs
+            details.append({
+                "id": s["id"],
+                "summary": s["summary"],
+                "model": model,
+                "outputTokens": session_tokens,
+                "messages": session_msgs,
+                "createdAt": s["created_at"],
+                "cwd": s["cwd"],
+            })
+
+        return {
+            "available": True,
+            "period": date,
+            "sessions": len(sessions),
+            "totalOutputTokens": total_tokens,
+            "totalMessages": total_messages,
+            "totalTurns": total_turns,
+            "models": models,
+            "details": details,
+        }
+    except Exception as e:
+        return {"available": False, "error": str(e)}
 
 
 # ── Recurring templates ───────────────────────────────────────────────────────

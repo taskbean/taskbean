@@ -214,15 +214,9 @@ def init_otel(service_name: str = "taskbean") -> None:
     trace.set_tracer_provider(tracer_provider)
 
     # ── Metrics ───────────────────────────────────────────────────────────
-    try:
-        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-        reader = PeriodicExportingMetricReader(
-            OTLPMetricExporter(endpoint=endpoint, insecure=True),
-            export_interval_millis=15_000,
-        )
-        metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=[reader]))
-    except Exception:
-        metrics.set_meter_provider(MeterProvider(resource=resource))
+    # NOTE: Jaeger's OTLP receiver only accepts traces, not metrics.
+    # Skip OTLP metric export to avoid "StatusCode.UNIMPLEMENTED" log spam.
+    metrics.set_meter_provider(MeterProvider(resource=resource))
 
     # ── Logs ──────────────────────────────────────────────────────────────
     ui_log_exporter = UILogExporter()
