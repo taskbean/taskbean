@@ -47,12 +47,11 @@ export function trackCommand(opts) {
   }
 }
 
-export async function untrackCommand(opts) {
-  const db = await getDb();
+export function untrackCommand(opts) {
   const targetPath = opts.path || process.cwd();
   const project = resolveProject(targetPath);
 
-  const existing = getRow(db, 'SELECT * FROM projects WHERE path = ?', [project.path]);
+  const existing = getRow('SELECT * FROM projects WHERE path = ?', [project.path]);
   if (!existing) {
     if (opts.json) {
       console.log(JSON.stringify({ error: 'not_found', message: `Project not tracked: ${project.path}` }));
@@ -63,8 +62,7 @@ export async function untrackCommand(opts) {
     return;
   }
 
-  db.run('UPDATE projects SET tracked = 0 WHERE id = ?', [existing.id]);
-  saveDb();
+  run('UPDATE projects SET tracked = 0 WHERE id = ?', [existing.id]);
 
   if (opts.json) {
     console.log(JSON.stringify({ status: 'untracked', project: project.name }));

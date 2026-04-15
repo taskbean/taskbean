@@ -102,9 +102,10 @@ def add_task(
     priority: Annotated[str | None, "Priority: high, medium, low, or none"] = None,
     notes: Annotated[str | None, "Optional notes in markdown format"] = None,
     tags: Annotated[list[str] | None, "Category tags like work, personal, errands"] = None,
+    project: Annotated[str | None, "Project name to associate this task with"] = None,
 ) -> str:
     """Add a plain task or todo item (no timed reminder). Use whenever the user wants to add, create, or save something to their list."""
-    todo = state_mod.add_todo(title, due_date, due_time, "command", emoji, priority, notes, tags)
+    todo = state_mod.add_todo(title, due_date, due_time, "command", emoji, priority, notes, tags, project)
     return json.dumps({"success": True, "todo": todo})
 
 
