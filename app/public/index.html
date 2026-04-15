@@ -1385,8 +1385,8 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       <div class="todo-list-container">
       <div id="todoList">
         <div class="empty-state">
-          <i data-lucide="sprout" class="icon-xl" style="color:var(--green)"></i>
-          <p>No tasks yet.<br>Paste text, drop a file, or speak a command!</p>
+          <i data-lucide="coffee" class="icon-xl" style="color:var(--accent)"></i>
+          <p>Ahh, time for a cup of coffee. ☕</p>
         </div>
       </div>
       </div>
@@ -2944,7 +2944,7 @@ function renderTodos() {
     const completed = localTodos.filter(t => t.completed).length;
     document.getElementById('todoCount').textContent = pending > 0 ? `${pending}` : `${localTodos.length}`;
     if (localTodos.length === 0) {
-        el.innerHTML = '<div class="empty-state"><i data-lucide="sprout" class="icon-xl" style="color:var(--green)"></i><p>No tasks yet.</p></div>';
+        el.innerHTML = '<div class="empty-state"><i data-lucide="coffee" class="icon-xl" style="color:var(--accent)"></i><p>Ahh, time for a cup of coffee. ☕</p></div>';
         lucide.createIcons(); if (container) container.classList.remove('has-more'); return;
     }
     const visible = _showCompletedTodos ? localTodos : localTodos.filter(t => !t.completed);
