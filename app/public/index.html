@@ -2022,6 +2022,7 @@ const ConnectionManager = (() => {
     let _reachable = true;
     let _lastSuccessAt = 0;
     let _pollTimer = null;
+    let _pollingStopped = false;
     let _backoff = 3000;        // current backoff (ms)
     const BACKOFF_MIN = 1000;
     const BACKOFF_MAX = 15000;
@@ -2063,8 +2064,10 @@ const ConnectionManager = (() => {
         /** Start background polling with exponential backoff */
         startPolling() {
             if (_pollTimer) return;
+            _pollingStopped = false;
             const tick = async () => {
                 await this.check();
+                if (_pollingStopped) return; // don't reschedule if stopped during check
                 _backoff = _reachable
                     ? 10_000 // stable: poll every 10s
                     : Math.min(_backoff * BACKOFF_FACTOR, BACKOFF_MAX);
@@ -2074,6 +2077,7 @@ const ConnectionManager = (() => {
         },
 
         stopPolling() {
+            _pollingStopped = true;
             if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
         }
     };
@@ -2158,14 +2162,21 @@ const OfflineQueue = (() => {
     };
 })();
 
-// Wire: replay offline queue when server comes back
+// Wire: replay offline queue when server comes back, then do a single authoritative refresh
+let _reconnectInProgress = false;
 document.addEventListener('reachability-change', async (e) => {
-    if (e.detail.reachable && OfflineQueue.count) {
-        const n = await OfflineQueue.replay();
+    if (!e.detail.reachable || _reconnectInProgress) return;
+    _reconnectInProgress = true;
+    try {
+        // Step 1: replay any queued offline mutations
+        const n = OfflineQueue.count ? await OfflineQueue.replay() : 0;
+        // Step 2: single authoritative refresh after replay completes
+        await Promise.all([refreshTodos(), loadTemplates()]);
         if (n > 0) {
-            await refreshTodos();
             addChat('info', 'cloud-upload', `Synced ${n} offline change${n > 1 ? 's' : ''} to server.`);
         }
+    } finally {
+        _reconnectInProgress = false;
     }
 });
 
@@ -2260,7 +2271,7 @@ async function retryFromBanner() {
     const ok = await ConnectionManager.check();
     if (ok) {
         setReachability(true);
-        await Promise.all([refreshTodos(), loadTemplates()]);
+        // reachability-change event handles refresh + replay
     } else {
         // Attempt protocol launch as fallback
         try { window.open('taskbean://start', '_self'); } catch {}
@@ -2350,7 +2361,7 @@ function startAutoRetry() {
         const ok = await ConnectionManager.check();
         if (ok) {
             setReachability(true);
-            await Promise.all([refreshTodos(), loadTemplates()]);
+            // reachability-change event handles refresh + replay
         }
     }, 3000);
 }
@@ -2366,7 +2377,7 @@ async function retryConnection() {
     const ok = await ConnectionManager.check();
     if (ok) {
         setReachability(true);
-        await Promise.all([refreshTodos(), loadTemplates()]);
+        // reachability-change event handles refresh + replay
         return;
     }
     btn.disabled = false;
@@ -2845,7 +2856,7 @@ function addConnectionLostCard() {
                 const res = await fetch('/api/health', { signal: AbortSignal.timeout(2000) });
                 if (res.ok) {
                     setReachability(true);
-                    await Promise.all([refreshTodos(), loadTemplates()]);
+                    // reachability-change event handles refresh + replay
                     card.innerHTML = `
                         <div class="action-card-header"><span class="emoji">✅</span> Reconnected</div>
                         <div class="action-card-body" style="font-size:11px;color:var(--green)">Server is back online.</div>`;
@@ -5976,20 +5987,12 @@ async function loadSettingsConfig() {
     if (tzSel && !tzSel.options.length) {
         populateTimezoneSelect(tzSel, Intl.DateTimeFormat().resolvedOptions().timeZone);
     }
+    let configFetched = false;
     try {
         const res = await fetch('/api/config', { signal: AbortSignal.timeout(3000) });
-        if (res.ok) {
-            settingsConfig = await res.json();
-            populateSettingsFromConfig(settingsConfig);
-            // Re-enable controls on successful fetch
-            document.querySelectorAll('.settings-select, .settings-toggle, .settings-time-input').forEach(el => {
-                el.disabled = false;
-                el.title = '';
-            });
-            showSettingsStatus(''); // clear any previous offline banner
-        } else {
-            throw new Error('not ok'); // treat non-OK (including SW 503) as offline
-        }
+        if (!res.ok) throw new Error('not ok');
+        settingsConfig = await res.json();
+        configFetched = true;
     } catch {
         // Disable server-backed controls when offline
         document.querySelectorAll('#settingsPermission, #settingsDevice, #settingsModel, #settingsTimezone, #settingsSpeechEngine, #settingsSpeechFallback, #settingsMicDevice').forEach(el => {
@@ -6001,6 +6004,14 @@ async function loadSettingsConfig() {
             el.title = 'Server offline';
         });
         showSettingsStatus('⚠ Server offline — some settings unavailable', true, { actionable: true });
+    }
+    if (configFetched) {
+        try { populateSettingsFromConfig(settingsConfig); } catch (e) { console.warn('Settings populate error:', e); }
+        document.querySelectorAll('.settings-select, .settings-toggle, .settings-time-input').forEach(el => {
+            el.disabled = false;
+            el.title = '';
+        });
+        showSettingsStatus(''); // clear any previous offline banner
     }
 
     // Populate model list
@@ -6232,6 +6243,14 @@ async function updateSettingsConfig(key, value) {
 function showSettingsStatus(msg, isError = false, { actionable = false } = {}) {
     const el = document.getElementById('settingsSaveStatus');
     if (!el) return;
+    if (!msg && !actionable) {
+        // Clear: reset element to hidden state
+        el.textContent = '';
+        el.style.opacity = '0';
+        el.style.padding = '0';
+        el.style.background = '';
+        return;
+    }
     if (actionable) {
         el.innerHTML = `<span style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap">
             <span>⚠ Server offline</span>
@@ -6378,10 +6397,8 @@ async function startServerFromSettings() {
             if (res.ok) {
                 clearInterval(poll);
                 setReachability(true);
-                await Promise.all([refreshTodos(), loadTemplates()]);
+                // reachability-change event handles refresh + replay + settings reload
                 addChat('info', 'check-circle', 'Server is running!');
-                // Re-load settings config to re-enable disabled controls
-                loadSettingsConfig();
             }
         } catch {}
     }, 2000);
@@ -6470,12 +6487,14 @@ function populateHardwareInfoCard(hw) {
     if (!el || !hw) return;
     const gpuText = hw.gpu ? `${hw.gpu.name} · ${hw.gpu.vramGb} GB VRAM` : 'Not detected';
     const npuText = hw.npu ? hw.npu.name : 'Not detected';
+    const cpuText = hw.cpu ? `${esc(hw.cpu.model)} · ${hw.cpu.cores} cores` : 'Detecting…';
+    const ramText = hw.ram ? `${hw.ram.totalGb} GB` : 'Detecting…';
     el.innerHTML = `
         <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:11px">
             <span style="color:var(--muted)"><i data-lucide="cpu" style="width:11px;height:11px;vertical-align:-2px"></i> CPU</span>
-            <span>${esc(hw.cpu.model)} · ${hw.cpu.cores} cores</span>
+            <span>${cpuText}</span>
             <span style="color:var(--muted)"><i data-lucide="memory-stick" style="width:11px;height:11px;vertical-align:-2px"></i> RAM</span>
-            <span>${hw.ram.totalGb} GB</span>
+            <span>${ramText}</span>
             <span style="color:var(--muted)"><i data-lucide="monitor" style="width:11px;height:11px;vertical-align:-2px"></i> GPU</span>
             <span${!hw.gpu ? ' style="color:var(--muted)"' : ''}>${esc(gpuText)}</span>
             <span style="color:var(--muted)"><i data-lucide="zap" style="width:11px;height:11px;vertical-align:-2px"></i> NPU</span>
@@ -6615,7 +6634,8 @@ async function initApp() {
 
     syncInstallButton();
     autoSelectIconEnabled = getAutoSelectIcon();
-    await Promise.all([refreshTodos(), loadTemplates()]);
+    OfflineQueue._updateBadge(); // show badge if queue persisted from previous session
+    await Promise.all([refreshTodos(), loadTemplates(), fetchProjectCount()]);
 
     // Cache schedule config for client-side DND checks
     try {
