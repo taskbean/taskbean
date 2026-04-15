@@ -105,14 +105,27 @@ taskbean/
 └── README.md               # ← you are here
 ```
 
+## Works With
+
+taskbean ships as an [Agent Skill](https://agentskills.io). Install the skill, and your coding agent auto-discovers it — calling `bean add` / `bean done` as it works.
+
+```bash
+bean install              # install for all agents in current project
+bean install --global     # install for all agents across all projects
+bean install --agent claude   # install for a specific agent only
+```
+
+| Agent | Skill Discovery | Status | Notes |
+|-------|----------------|--------|-------|
+| **GitHub Copilot CLI** | `.agents/skills/` | ✅ Verified | Full E2E: discovers skill, calls `bean add`/`bean done` |
+| **OpenCode** | `.agents/skills/` | ✅ Verified | Full E2E: discovers skill, calls `bean add`/`bean done` |
+| **OpenAI Codex** | `.agents/skills/` | ⚠️ Discovery works | Reads SKILL.md, calls `bean add` — but sandbox blocks DB writes. Add `~/.taskbean` to sandbox permissions |
+| **Claude Code** | `.claude/skills/` | ✅ Verified | Needs `.claude/skills/` (does not scan `.agents/skills/`). `bean install` handles this |
+| **Any Agent Skills-compatible agent** | `.agents/skills/` | ✅ Expected | Follows the [Agent Skills spec](https://agentskills.io) |
+
 ## How It Works
 
 The CLI ships as a [Copilot Agent Skill](https://agentskills.io). When installed, AI agents auto-discover taskbean and call `bean add` / `bean done` as they work — no prompting required.
-
-```bash
-bean install --global     # enable for all projects
-bean track                # track current project + install skill
-```
 
 The desktop app runs entirely on your device using [Microsoft Foundry Local](https://github.com/microsoft/foundry-local) for AI inference (NPU, GPU, or CPU). Features include:
 
