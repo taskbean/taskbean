@@ -648,9 +648,11 @@ header {
 .project-card-stat .pending-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--orange); }
 .project-card-tasks { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 .project-task-item { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 11px; }
+.project-task-item > span { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 .project-task-item .ptask-check { color: var(--green); }
 .project-task-item .ptask-pending { color: var(--muted); }
 .project-task-item.completed { color: var(--muted); text-decoration: line-through; }
+.project-task-item.completed .ptask-agent-badge { text-decoration: none; }
 .project-empty { text-align: center; color: var(--muted); padding: 30px 16px; }
 .project-empty p { font-size: 12px; margin-top: 8px; }
 .project-empty code { display: inline-block; margin-top: 8px; padding: 6px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; font-size: 10px; font-family: 'DM Mono', monospace; color: var(--accent); }
@@ -1398,6 +1400,8 @@ header {
 #chatFeed::-webkit-scrollbar,
 .nerd-tab-content::-webkit-scrollbar,
 .telem-raw::-webkit-scrollbar,
+.sidebar-tab-content::-webkit-scrollbar,
+#projectList::-webkit-scrollbar,
 .textarea-wrap textarea::-webkit-scrollbar { width: 5px; height: 5px; }
 
 #todoList::-webkit-scrollbar-track,
@@ -1405,6 +1409,8 @@ header {
 #chatFeed::-webkit-scrollbar-track,
 .nerd-tab-content::-webkit-scrollbar-track,
 .telem-raw::-webkit-scrollbar-track,
+.sidebar-tab-content::-webkit-scrollbar-track,
+#projectList::-webkit-scrollbar-track,
 .textarea-wrap textarea::-webkit-scrollbar-track { background: var(--surface2); border-radius: 4px; }
 
 #todoList::-webkit-scrollbar-thumb,
@@ -1412,15 +1418,19 @@ header {
 #chatFeed::-webkit-scrollbar-thumb,
 .nerd-tab-content::-webkit-scrollbar-thumb,
 .telem-raw::-webkit-scrollbar-thumb,
+.sidebar-tab-content::-webkit-scrollbar-thumb,
+#projectList::-webkit-scrollbar-thumb,
 .textarea-wrap textarea::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 4px; }
 
 #todoList::-webkit-scrollbar-thumb:hover,
 .recurring-active-list::-webkit-scrollbar-thumb:hover,
 #chatFeed::-webkit-scrollbar-thumb:hover,
-.nerd-tab-content::-webkit-scrollbar-thumb:hover { background: var(--text); }
+.nerd-tab-content::-webkit-scrollbar-thumb:hover,
+.sidebar-tab-content::-webkit-scrollbar-thumb:hover,
+#projectList::-webkit-scrollbar-thumb:hover { background: var(--text); }
 
 /* Firefox */
-#todoList, .recurring-active-list, #chatFeed, .nerd-tab-content { scrollbar-width: thin; scrollbar-color: var(--muted) var(--surface2); }
+#todoList, .recurring-active-list, #chatFeed, .nerd-tab-content, .sidebar-tab-content, #projectList { scrollbar-width: thin; scrollbar-color: var(--muted) var(--surface2); }
 
 /* ═══════════════════════════════════════════════════════════════════
    TODO LIST — scroll fade hint
@@ -4130,6 +4140,15 @@ async function renderProjects() {
     const el = document.getElementById('projectList');
     document.getElementById('projectCount').textContent = _projectsCache.length || '0';
 
+    // Signature of project structure — if unchanged, skip rebuilding the list
+    // so the user's scroll position and any in-flight interactions survive polling.
+    const signature = JSON.stringify({
+        p: _projectsCache.map(p => [p.name, p.total, p.done, p.pending]),
+        e: _expandedProject,
+        u: _usagePeriod,
+    });
+    const unchanged = el && el.dataset.sig === signature;
+
     let html = '';
 
     // Multi-agent Usage section (always shown)
@@ -4177,7 +4196,10 @@ async function renderProjects() {
         `).join('');
     }
 
-    el.innerHTML = html;
+    if (!unchanged) {
+        el.innerHTML = html;
+        el.dataset.sig = signature;
+    }
     lucide.createIcons();
     loadUsageStats();
     if (_expandedProject) loadProjectTasks(_expandedProject);
@@ -4373,6 +4395,9 @@ async function loadProjectTasks(name) {
     try {
         const res = await fetch('/api/projects/tasks?project=' + encodeURIComponent(name), { cache: 'no-store' });
         const tasks = await res.json();
+        const sig = JSON.stringify(tasks.map(t => [t.id, t.completed, t.title, t.agent]));
+        if (container.dataset.sig === sig) return; // no-op poll, keep scroll
+        container.dataset.sig = sig;
         if (tasks.length === 0) {
             container.innerHTML = '<div style="font-size:10px;color:var(--muted);padding:4px 0">No tasks</div>';
             return;
