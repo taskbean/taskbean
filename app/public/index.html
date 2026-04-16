@@ -298,38 +298,305 @@ header {
 .filter-count { font-size: 9px; color: var(--muted); padding: 0 6px; white-space: nowrap; align-self: center; }
 
 /* ═══════════════════════════════════════════════════════════════════
-   SETTINGS MODAL
+   SETTINGS MODAL — tabbed sidebar layout
    ═══════════════════════════════════════════════════════════════════ */
 /* Settings modal reuses model-modal-overlay */
-.settings-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 480px; max-width: calc(100vw - 32px); max-height: calc(100vh - 80px); display: flex; flex-direction: column; box-shadow: 0 24px 48px rgba(0,0,0,.4); }
-.settings-modal-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-.settings-modal-header h2 { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
-.settings-body { overflow-y: auto; flex: 1; padding: 12px 16px; }
-.settings-section { margin-bottom: 16px; }
-.settings-section-title { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; display: flex; align-items: center; gap: 4px; }
-.settings-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: var(--surface2); border-radius: 6px; margin-bottom: 4px; font-size: 11px; }
-.settings-row label { display: flex; align-items: center; gap: 6px; color: var(--text); }
-.settings-row .hint { font-size: 10px; color: var(--muted); margin-top: 2px; }
-/* Toggle switch */
+.settings-modal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  width: min(780px, calc(100vw - 48px)); height: min(640px, calc(100vh - 80px));
+  display: flex; flex-direction: column; box-shadow: 0 24px 48px rgba(0,0,0,.4);
+  overflow: hidden;
+}
+.settings-modal-header {
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.settings-modal-header h2 { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.settings-search {
+  flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  padding: 5px 10px 5px 28px; border-radius: 6px; font-size: 11px; font-family: inherit;
+  outline: none; transition: border-color .15s;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: 8px center;
+}
+.settings-search:focus { border-color: var(--accent); }
+.settings-search::placeholder { color: var(--muted); }
+
+/* Layout: sidebar + content */
+.settings-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+/* Sidebar navigation */
+.settings-sidebar {
+  width: 172px; flex-shrink: 0; display: flex; flex-direction: column; gap: 1px;
+  padding: 8px 6px; border-right: 1px solid var(--border); overflow-y: auto;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.settings-tab {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px;
+  border: none; background: none; color: var(--muted); cursor: pointer;
+  font-size: 12px; font-weight: 600; font-family: inherit; white-space: nowrap;
+  transition: background .15s, color .15s; position: relative; width: 100%; text-align: left;
+}
+.settings-tab:hover { background: var(--surface2); color: var(--text); }
+.settings-tab.active { color: var(--accent); background: var(--accent-soft); }
+.settings-tab.active::before {
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 16px; background: var(--accent); border-radius: 0 3px 3px 0;
+}
+.settings-tab i { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 18px; }
+.settings-tab .tab-label { overflow: hidden; text-overflow: ellipsis; }
+.settings-tab .tab-offline-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--orange);
+  margin-left: auto; flex-shrink: 0; display: none;
+}
+.settings-tab.has-offline .tab-offline-dot { display: block; }
+
+/* Content area — fixed height, panels scroll internally */
+.settings-content {
+  flex: 1; display: flex; flex-direction: column; padding: 0; min-width: 0;
+  overflow: hidden;
+}
+
+/* Panels */
+.settings-panel { display: none; }
+.settings-panel.active {
+  display: flex; flex-direction: column; flex: 1; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 16px 20px;
+  animation: stg-fade-in .15s ease-out;
+}
+@keyframes stg-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .settings-panel.active { animation: none; } }
+
+.settings-panel-title {
+  font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.settings-panel-title i { color: var(--accent); }
+
+/* Settings group card */
+.settings-group {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 2px 0; margin-bottom: 12px; overflow: hidden;
+}
+.settings-group-title {
+  font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px;
+  padding: 8px 12px 4px; display: flex; align-items: center; gap: 4px;
+}
+
+/* Settings row (inside groups) */
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 12px; font-size: 12px; min-height: 40px; position: relative;
+  transition: background .1s;
+}
+.settings-row:hover { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.settings-row + .settings-row { border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
+.settings-row label { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 12px; flex: 1; min-width: 0; }
+.settings-row label i { color: var(--muted); flex-shrink: 0; }
+
+/* Save status dot per row */
+.settings-row .save-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  opacity: 0; transition: opacity .3s, background .3s; margin-left: 4px;
+}
+.settings-row.saving .save-dot { opacity: 1; background: var(--orange); animation: stg-pulse .8s ease-in-out infinite; }
+.settings-row.saved .save-dot { opacity: 1; background: var(--green); }
+.settings-row.save-error .save-dot { opacity: 1; background: var(--red); }
+@keyframes stg-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+
+/* Standalone row (outside group) */
+.settings-row-standalone {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; font-size: 12px; min-height: 40px; margin-bottom: 8px;
+}
+.settings-row-standalone label { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 12px; }
+
+/* Unified toggle switch */
+.stg-toggle {
+  width: 36px; height: 20px; border-radius: 10px; border: none; cursor: pointer;
+  position: relative; transition: background .2s cubic-bezier(.4,0,.2,1); flex-shrink: 0;
+  background: var(--border); padding: 0;
+}
+.stg-toggle[aria-checked="true"] { background: var(--green); }
+.stg-toggle::after {
+  content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; top: 2px; left: 2px; transition: left .2s cubic-bezier(.4,0,.2,1);
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.stg-toggle[aria-checked="true"]::after { left: 18px; }
+.stg-toggle:disabled { opacity: .4; cursor: not-allowed; }
+.stg-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .stg-toggle, .stg-toggle::after { transition: none; } }
+
+/* Legacy toggle (used by clock popover, voice hold-to-record) */
 .settings-toggle { width: 32px; height: 18px; border-radius: 9px; border: none; cursor: pointer; position: relative; transition: background .2s; flex-shrink: 0; }
 .settings-toggle.off { background: var(--border); }
 .settings-toggle.on { background: var(--green); }
-.settings-toggle::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #fff; top: 2px; transition: left .2s; }
+.settings-toggle::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #fff; top: 2px; transition: left .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
 .settings-toggle.off::after { left: 2px; }
 .settings-toggle.on::after { left: 16px; }
+
 /* Select/input in settings */
-.settings-select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: 4px; font-size: 11px; }
-.settings-time-input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 4px 6px; border-radius: 4px; font-size: 11px; width: 90px; }
-.settings-day-chips { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 6px; }
-.settings-day-chip { font-size: 9px; padding: 2px 6px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); cursor: pointer; transition: all .15s; user-select: none; }
+.settings-select {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  padding: 5px 10px; border-radius: 6px; font-size: 12px; font-family: inherit;
+  min-width: 0; max-width: 220px; transition: border-color .15s;
+}
+.settings-select:focus { border-color: var(--accent); outline: none; }
+.settings-select:disabled { opacity: .4; cursor: not-allowed; }
+.settings-time-input {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  padding: 5px 8px; border-radius: 6px; font-size: 12px; width: 100px; font-family: inherit;
+  color-scheme: dark;
+}
+[data-theme="latte"] .settings-time-input { color-scheme: light; }
+.settings-time-input:focus { border-color: var(--accent); outline: none; }
+.settings-mono-input {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  padding: 5px 10px; border-radius: 6px; font-size: 12px; width: 100%;
+  font-family: 'Cascadia Code', 'Fira Code', monospace; transition: border-color .15s;
+}
+.settings-mono-input:focus { border-color: var(--accent); outline: none; }
+
+/* Day chips */
+.settings-day-chips { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 4px; }
+.settings-day-chip {
+  font-size: 10px; padding: 3px 8px; border-radius: 99px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted); cursor: pointer; transition: all .15s;
+  user-select: none; font-weight: 500;
+}
+.settings-day-chip:hover { border-color: var(--accent); color: var(--text); }
 .settings-day-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
-.settings-action-btn { width: 100%; padding: 7px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text); display: flex; align-items: center; gap: 6px; margin-bottom: 4px; transition: all .15s; }
+
+/* Action buttons */
+.settings-action-btn {
+  width: 100%; padding: 8px 12px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+  display: flex; align-items: center; gap: 8px; margin-bottom: 4px; transition: all .15s;
+  font-family: inherit; font-weight: 500;
+}
 .settings-action-btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
-.settings-save-error { color: var(--red) !important; }
-.settings-footer{ padding: 10px 18px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); flex-shrink: 0; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.coffee-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; border-radius: 99px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid var(--orange); background: var(--orange-soft); color: var(--orange); text-decoration: none; transition: all .2s; }
+.settings-action-btn:hover i { color: #000; }
+
+/* Info-tip tooltip — positioned via JS to avoid overflow clipping */
+.info-tip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%; border: none; background: none;
+  color: var(--muted); cursor: help; position: relative; flex-shrink: 0; padding: 0;
+}
+.info-tip:hover, .info-tip:focus-visible { color: var(--accent); }
+.info-tip .tip-text { display: none; }
+/* Floating tooltip rendered at body level */
+.tip-float {
+  position: fixed; z-index: 9999; pointer-events: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; font-size: 11px; color: var(--text); font-weight: 400;
+  line-height: 1.5; width: max-content; max-width: 280px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.3); white-space: normal; text-align: left;
+  animation: tip-in .12s ease-out;
+}
+@keyframes tip-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .tip-float { animation: none; } }
+.tip-float::before {
+  content: ''; position: absolute; bottom: 100%; left: 20px;
+  border: 5px solid transparent; border-bottom-color: var(--border);
+}
+
+/* Theme swatch picker */
+.theme-swatches { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.theme-swatch-option {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer;
+}
+.theme-swatch-btn {
+  width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border);
+  cursor: pointer; position: relative; transition: all .15s; padding: 0;
+}
+.theme-swatch-btn:hover { transform: scale(1.15); }
+.theme-swatch-btn.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.theme-swatch-btn.active::after {
+  content: '✓'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5);
+}
+.theme-swatch-name {
+  font-size: 9px; color: var(--muted); font-weight: 500; white-space: nowrap; transition: color .15s;
+}
+.theme-swatch-option:hover .theme-swatch-name { color: var(--text); }
+.theme-swatch-option.active .theme-swatch-name { color: var(--accent); font-weight: 600; }
+.theme-swatch-btn[data-theme="dark-roast"] { background: linear-gradient(135deg, #1A120E 50%, #E8863C 50%); }
+.theme-swatch-btn[data-theme="latte"] { background: linear-gradient(135deg, #FAF6F1 50%, #C8520A 50%); }
+.theme-swatch-btn[data-theme="espresso"] { background: linear-gradient(135deg, #1E0E0A 50%, #F07030 50%); }
+.theme-swatch-btn[data-theme="black-coffee"] { background: linear-gradient(135deg, #0A0604 50%, #FFB020 50%); }
+
+/* Hardware info card */
+.hw-info-grid {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+  font-size: 12px; padding: 10px 12px;
+}
+.hw-info-grid .hw-label { color: var(--muted); display: flex; align-items: center; gap: 4px; font-size: 11px; }
+.hw-info-grid .hw-value-text { color: var(--text); }
+.hw-info-grid .hw-na { color: var(--muted); font-style: italic; }
+
+/* Live clock preview in General tab */
+.settings-clock-preview {
+  font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; font-weight: 600;
+  color: var(--accent); padding: 8px 12px; background: var(--bg); border-radius: 6px;
+  text-align: center; font-variant-numeric: tabular-nums; letter-spacing: .3px;
+}
+
+/* Restart banner */
+.settings-restart-banner {
+  display: none; padding: 6px 12px; background: var(--orange-soft); color: var(--orange);
+  border-radius: 6px; font-size: 11px; font-weight: 600; margin-bottom: 10px;
+  align-items: center; gap: 6px;
+}
+.settings-restart-banner.show { display: flex; }
+
+/* Schedule block */
+.schedule-block { padding: 10px 12px; }
+.schedule-block + .schedule-block { border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
+.schedule-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.schedule-header label { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.schedule-times { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+.schedule-times span { color: var(--muted); font-size: 11px; }
+
+/* Footer */
+.settings-footer {
+  padding: 8px 16px; border-top: 1px solid var(--border); font-size: 10px;
+  color: var(--muted); flex-shrink: 0; display: flex; align-items: center;
+  justify-content: center; gap: 12px;
+}
+.settings-footer-left, .settings-footer-right {
+  position: absolute; display: flex; align-items: center;
+}
+.settings-footer-left { left: 16px; }
+.settings-footer-right { right: 16px; }
+.settings-footer { position: relative; }
+.coffee-btn {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 99px;
+  font-size: 10px; font-weight: 600; cursor: pointer; border: 1px solid var(--orange);
+  background: var(--orange-soft); color: var(--orange); text-decoration: none; transition: all .2s;
+}
 .coffee-btn:hover { background: var(--orange); color: var(--bg); border-color: var(--orange); }
-.coffee-btn .coffee-emoji { font-size: 14px; }
+.coffee-btn .coffee-emoji { font-size: 12px; }
+
+/* Responsive: collapsed sidebar on narrower screens */
+@media (max-width: 700px) {
+  .settings-modal { width: calc(100vw - 24px); }
+  .settings-sidebar { width: 44px; padding: 8px 4px; }
+  .settings-tab { padding: 8px; justify-content: center; }
+  .settings-tab .tab-label { display: none; }
+  .settings-tab .tab-offline-dot { position: absolute; top: 4px; right: 4px; }
+  .settings-content { padding: 0; }
+  .settings-panel.active { padding: 12px 14px; }
+  .settings-footer { flex-direction: column; text-align: center; }
+}
+
+/* Search-hidden (must be outside media query to work on all viewports) */
+.settings-row.search-hidden { display: none; }
+.settings-group.search-hidden { display: none; }
 
 /* ═══════════════════════════════════════════════════════════════════
    LAYOUT: sidebar + chat
@@ -1568,7 +1835,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 }
 
 /* Glassmorphism extension */
-.model-modal-header, .settings-modal-header, .status-bar {
+.model-modal-header, .settings-modal-header, .settings-sidebar, .status-bar {
   background: color-mix(in srgb, var(--surface) 85%, transparent);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
@@ -1908,246 +2175,390 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
   <div class="settings-modal" role="dialog" aria-modal="true" aria-label="Settings">
     <div class="settings-modal-header">
       <h2><i data-lucide="settings"></i> Settings</h2>
-      <button class="model-modal-close" onclick="closeSettings()" title="Close"><i data-lucide="x"></i></button>
+      <input class="settings-search" id="settingsSearch" type="search" placeholder="Search settings…" aria-label="Search settings" oninput="filterSettings(this.value)">
+      <button class="model-modal-close" onclick="closeSettings()" title="Close (Esc)" aria-label="Close" style="flex-shrink:0;position:relative;z-index:2;min-width:28px;min-height:28px;font-size:18px;line-height:1">✕</button>
     </div>
-    <div class="settings-body">
 
-      <!-- APPEARANCE -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i data-lucide="palette" class="icon-sm"></i> Appearance</div>
-        <div class="settings-row">
-          <label for="settingsTheme">Default Theme</label>
-          <select class="settings-select" id="settingsTheme" onchange="setTheme(this.value, true)">
-            <option value="dark-roast">🌙 Dark Roast</option>
-            <option value="latte">☀️ Latte</option>
-            <option value="espresso">☕ Espresso</option>
-            <option value="black-coffee">◑ Black Coffee</option>
-          </select>
-        </div>
-      </div>
+    <div class="settings-layout">
+      <!-- Sidebar Navigation -->
+      <nav class="settings-sidebar" role="tablist" aria-label="Settings categories">
+        <button class="settings-tab active" role="tab" aria-selected="true" aria-controls="stgPanel-general" id="stgTab-general" data-panel="general" onclick="switchSettingsTab('general')">
+          <i data-lucide="palette" class="icon-sm"></i>
+          <span class="tab-label">General</span>
+          <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
+        </button>
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-ai" id="stgTab-ai" data-panel="ai" onclick="switchSettingsTab('ai')">
+          <i data-lucide="cpu" class="icon-sm"></i>
+          <span class="tab-label">AI</span>
+          <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
+        </button>
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-inference" id="stgTab-inference" data-panel="inference" onclick="switchSettingsTab('inference')">
+          <i data-lucide="brain" class="icon-sm"></i>
+          <span class="tab-label">Inference &amp; Voice</span>
+          <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
+        </button>
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-schedule" id="stgTab-schedule" data-panel="schedule" onclick="switchSettingsTab('schedule')">
+          <i data-lucide="clock" class="icon-sm"></i>
+          <span class="tab-label">Schedule</span>
+          <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
+        </button>
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-notifications" id="stgTab-notifications" data-panel="notifications" onclick="switchSettingsTab('notifications')">
+          <i data-lucide="bell" class="icon-sm"></i>
+          <span class="tab-label">Notifications</span>
+          <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
+        </button>
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-system" id="stgTab-system" data-panel="system" onclick="switchSettingsTab('system')">
+          <i data-lucide="monitor" class="icon-sm"></i>
+          <span class="tab-label">System</span>
+          <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
+        </button>
+      </nav>
 
-      <!-- HARDWARE INFO -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i data-lucide="circuit-board" class="icon-sm"></i> Hardware</div>
-        <div id="settingsHardwareInfo" class="settings-row" style="flex-direction:column;align-items:stretch;gap:4px">
-          <div style="font-size:10px;color:var(--muted)">Detecting hardware…</div>
-        </div>
-      </div>
+      <!-- Content Panels -->
+      <div class="settings-content">
 
-      <!-- AI MODEL -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i data-lucide="cpu" class="icon-sm"></i> AI Model</div>
-        <div class="settings-row">
-          <label>Hide incompatible models</label>
-          <button class="settings-toggle off" id="settingsHideIncompat" onclick="toggleHideIncompatSetting()" role="switch" aria-checked="false" aria-label="Hide incompatible models"></button>
-        </div>
-        <div class="hint" style="font-size:10px;color:var(--muted);padding:2px 10px 6px">Auto-filter models too large for your hardware when opening the model picker.</div>
-        <div class="settings-row">
-          <label>Only show tool-calling models</label>
-          <button class="settings-toggle off" id="settingsToolCallOnly" onclick="toggleToolCallOnlySetting()" role="switch" aria-checked="false" aria-label="Only show tool-calling models"></button>
-        </div>
-        <div class="hint" style="font-size:10px;color:var(--muted);padding:2px 10px 6px">This app requires tool calling for AI commands. Models without it can only do basic chat.</div>
-        <div class="settings-row">
-          <label>Default Model</label>
-          <select class="settings-select" id="settingsModel" onchange="updateSettingsConfig('preferredModel', this.value)">
-            <option value="">Auto (best available)</option>
-          </select>
-        </div>
-        <div class="settings-row">
-          <label>Auto-download models</label>
-          <select class="settings-select" id="settingsPermission" onchange="updateSettingsConfig('modelPermission', this.value)">
-            <option value="ask">Ask first</option>
-            <option value="yolo">Auto-download</option>
-          </select>
-        </div>
-        <div class="settings-row">
-          <label>Preferred Device</label>
-          <select class="settings-select" id="settingsDevice" onchange="updateSettingsConfig('preferredDevice', this.value)">
-            <option value="auto">Auto</option>
-            <option value="npu">NPU</option>
-            <option value="gpu">GPU</option>
-            <option value="cpu">CPU</option>
-          </select>
-        </div>
-      </div>
+        <!-- ═══ GENERAL ═══ -->
+        <div class="settings-panel active" id="stgPanel-general" role="tabpanel" aria-labelledby="stgTab-general">
+          <div class="settings-panel-title"><i data-lucide="palette" class="icon-sm"></i> General</div>
 
-      <!-- INFERENCE -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i data-lucide="brain" class="icon-sm"></i> Inference</div>
-        <div class="settings-row">
-          <label>Inference client</label>
-          <select class="settings-select" id="settingsInferenceClient" onchange="updateSettingsConfig('inferenceClient', this.value)">
-            <option value="auto">Auto (ChatClient native FFI)</option>
-            <option value="chat">ChatClient (native)</option>
-            <option value="responses">ResponsesClient (HTTP)</option>
-          </select>
-        </div>
-        <div class="settings-row">
-          <label>Parallel tool calls</label>
-          <select class="settings-select" id="settingsParallelToolCalls" onchange="updateSettingsConfig('parallelToolCalls', this.value)">
-            <option value="auto">Auto (disable for NPU / on failure)</option>
-            <option value="on">Always on</option>
-            <option value="off">Always off</option>
-          </select>
-        </div>
-        <div class="settings-row">
-          <label>Show reasoning traces</label>
-          <div class="toggle-switch" id="settingsShowReasoning" role="switch" aria-checked="false"
-               onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked')==='true'?'false':'true'); updateSettingsConfig('showReasoningTraces', this.getAttribute('aria-checked')==='true')">
-            <div class="toggle-knob"></div>
+          <div class="settings-group" data-search-terms="theme appearance dark light color">
+            <div class="settings-group-title">Theme</div>
+            <div class="settings-row">
+              <label>Appearance</label>
+              <div class="theme-swatches" id="settingsThemeSwatches">
+                <div class="theme-swatch-option active" data-theme="dark-roast" onclick="setTheme('dark-roast', true)">
+                  <button class="theme-swatch-btn active" data-theme="dark-roast" title="Dark Roast" aria-label="Dark Roast theme"></button>
+                  <span class="theme-swatch-name">Dark Roast</span>
+                </div>
+                <div class="theme-swatch-option" data-theme="latte" onclick="setTheme('latte', true)">
+                  <button class="theme-swatch-btn" data-theme="latte" title="Latte" aria-label="Latte theme"></button>
+                  <span class="theme-swatch-name">Latte</span>
+                </div>
+                <div class="theme-swatch-option" data-theme="espresso" onclick="setTheme('espresso', true)">
+                  <button class="theme-swatch-btn" data-theme="espresso" title="Espresso" aria-label="Espresso theme"></button>
+                  <span class="theme-swatch-name">Espresso</span>
+                </div>
+                <div class="theme-swatch-option" data-theme="black-coffee" onclick="setTheme('black-coffee', true)">
+                  <button class="theme-swatch-btn" data-theme="black-coffee" title="Black Coffee" aria-label="Black Coffee theme"></button>
+                  <span class="theme-swatch-name">Black Coffee</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group" data-search-terms="timezone clock time date format custom">
+            <div class="settings-group-title">Clock &amp; Time</div>
+            <div id="settingsClockPreview" class="settings-clock-preview" style="margin:6px 12px 2px">—</div>
+            <div class="settings-row">
+              <label for="settingsTimezone">
+                Timezone
+                <button class="info-tip" tabindex="0" aria-label="Timezone info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Used for reminders, scheduling, and AI time references.</span></button>
+              </label>
+              <select class="settings-select" id="settingsTimezone" data-requires="server" onchange="setClockTimezone(this.value); updateSettingsConfig('timezone', this.value)"></select>
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+              <label>
+                Custom clock format
+                <button class="info-tip" tabindex="0" aria-label="Format tokens"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Tokens: YYYY, MM, DD, HH (24h), hh (12h), mm, ss, A (AM/PM), ddd (Mon), dddd (Monday), MMM (Apr), Z (UTC±). Leave blank for presets.</span></button>
+              </label>
+              <input type="text" class="settings-mono-input" id="settingsClockCustom" placeholder="e.g. YYYY-MM-DD HH:mm:ss A Z" value="" oninput="setClockCustomFormat(this.value)">
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- VOICE & SPEECH -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i data-lucide="mic" class="icon-sm"></i> Voice &amp; Speech</div>
-        <div class="settings-row">
-          <label>Speech engine</label>
-          <select class="settings-select" id="settingsSpeechEngine" onchange="updateSpeechSetting('engine', this.value)">
-            <option value="auto">Auto (best available)</option>
-            <option value="web">Edge Web Speech (cloud)</option>
-            <option value="whisper">Foundry Whisper (on-device)</option>
-          </select>
-        </div>
-        <div class="hint" style="font-size:10px;color:var(--muted);padding:2px 10px 6px">Primary speech recognition engine. "Auto" tries Web Speech first, then falls back.</div>
-        <div class="settings-row">
-          <label>Fallback engine</label>
-          <select class="settings-select" id="settingsSpeechFallback" onchange="updateSpeechSetting('fallback', this.value)">
-            <option value="whisper">Foundry Whisper (on-device)</option>
-            <option value="web">Edge Web Speech (cloud)</option>
-            <option value="none">No fallback</option>
-          </select>
-        </div>
-        <div class="hint" style="font-size:10px;color:var(--muted);padding:2px 10px 6px">Used when primary engine fails or is unavailable.</div>
-        <div class="settings-row">
-          <label for="settingsMicDevice">Microphone</label>
-          <select class="settings-select" id="settingsMicDevice" onchange="updateSpeechSetting('micDevice', this.value)">
-            <option value="">System default</option>
-          </select>
-        </div>
-        <div class="hint" style="font-size:10px;color:var(--muted);padding:2px 10px 6px">Select which microphone to use for voice input.</div>
-      </div>
+        <!-- ═══ AI ═══ -->
+        <div class="settings-panel" id="stgPanel-ai" role="tabpanel" aria-labelledby="stgTab-ai">
+          <div class="settings-panel-title"><i data-lucide="cpu" class="icon-sm"></i> AI &amp; Hardware</div>
 
-      <!-- SYSTEM -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i data-lucide="monitor" class="icon-sm"></i> System</div>
-        <div class="settings-row">
-          <label for="settingsPort">Port</label>
-          <div style="display:flex;align-items:center;gap:6px">
-            <input type="number" class="settings-select" id="settingsPort" min="1024" max="65535" style="width:80px" value="2326">
-            <button class="settings-action-btn" style="font-size:10px;padding:3px 8px" onclick="savePortSetting()">Save</button>
+          <div class="settings-group" data-search-terms="hardware cpu ram gpu npu device info">
+            <div class="settings-group-title">Hardware</div>
+            <div id="settingsHardwareInfo" class="hw-info-grid">
+              <span class="hw-label"><i data-lucide="cpu" style="width:11px;height:11px"></i> CPU</span>
+              <span class="hw-na">Detecting…</span>
+              <span class="hw-label"><i data-lucide="memory-stick" style="width:11px;height:11px"></i> RAM</span>
+              <span class="hw-na">Detecting…</span>
+              <span class="hw-label"><i data-lucide="monitor" style="width:11px;height:11px"></i> GPU</span>
+              <span class="hw-na">Detecting…</span>
+              <span class="hw-label"><i data-lucide="zap" style="width:11px;height:11px"></i> NPU</span>
+              <span class="hw-na">Detecting…</span>
+            </div>
+          </div>
+
+          <div class="settings-group" data-search-terms="model default download device filter incompatible tool calling">
+            <div class="settings-group-title">Model Preferences</div>
+            <div class="settings-row">
+              <label>Default Model</label>
+              <select class="settings-select" id="settingsModel" data-requires="server" onchange="updateSettingsConfig('preferredModel', this.value)">
+                <option value="">Auto (best available)</option>
+              </select>
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row">
+              <label>
+                Auto-download
+                <button class="info-tip" tabindex="0" aria-label="Auto-download info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">"Ask first" shows a confirmation before downloading new models. "Auto" downloads immediately.</span></button>
+              </label>
+              <select class="settings-select" id="settingsPermission" data-requires="server" onchange="updateSettingsConfig('modelPermission', this.value)">
+                <option value="ask">Ask first</option>
+                <option value="yolo">Auto-download</option>
+              </select>
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row">
+              <label>Preferred Device</label>
+              <select class="settings-select" id="settingsDevice" data-requires="server" onchange="updateSettingsConfig('preferredDevice', this.value)">
+                <option value="auto">Auto</option>
+                <option value="npu">NPU</option>
+                <option value="gpu">GPU</option>
+                <option value="cpu">CPU</option>
+              </select>
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row">
+              <label>
+                Hide incompatible models
+                <button class="info-tip" tabindex="0" aria-label="Compatibility info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Auto-filter models too large for your hardware when opening the model picker.</span></button>
+              </label>
+              <button class="stg-toggle" id="settingsHideIncompat" data-key="hideIncompatibleModels" data-store="server" role="switch" aria-checked="false" aria-label="Hide incompatible models"></button>
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row">
+              <label>
+                Only show tool-calling models
+                <button class="info-tip" tabindex="0" aria-label="Tool calling info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">This app requires tool calling for AI commands. Models without it can only do basic chat.</span></button>
+              </label>
+              <button class="stg-toggle" id="settingsToolCallOnly" data-key="toolCallOnly" data-store="server" role="switch" aria-checked="false" aria-label="Only show tool-calling models"></button>
+              <span class="save-dot"></span>
+            </div>
           </div>
         </div>
-        <div class="hint" style="font-size:10px;color:var(--muted);padding:2px 10px 6px">Default: 2326 (B-E-A-N). Requires restart. Override: <code>taskbean_PORT=9999</code></div>
-        <div class="settings-row">
-          <label>Run on Windows startup</label>
-          <button class="settings-toggle off" id="settingsStartup" onclick="toggleSettingsStartup()" role="switch" aria-checked="false" aria-label="Run on Windows startup"></button>
-        </div>
-        <div class="settings-row">
-          <label>Desktop notifications</label>
-          <button class="settings-toggle off" id="settingsNotif" onclick="toggleSettingsNotifications()" role="switch" aria-checked="false" aria-label="Desktop notifications"></button>
-        </div>
-        <button class="settings-action-btn" onclick="testNotification()"><i data-lucide="bell" class="icon-sm"></i> Test Notification</button>
-        <button class="settings-action-btn" id="settingsServerBtn" onclick="startServerFromSettings()"><i data-lucide="play" class="icon-sm"></i> <span id="settingsServerLabel">Start Server</span></button>
-      </div>
 
-      <!-- LOCATION & TIME -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i data-lucide="globe" class="icon-sm"></i> Location &amp; Time</div>
-        <div class="settings-row">
-          <label for="settingsTimezone">Timezone</label>
-          <select class="settings-select" id="settingsTimezone" onchange="updateSettingsConfig('timezone', this.value)"></select>
-        </div>
-        <div class="hint" style="font-size:10px;color:var(--muted);padding:2px 10px 6px">Used for reminders, scheduling, and AI time references.</div>
-        <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:4px">
-          <label>Custom clock format</label>
-          <input type="text" class="settings-select" id="settingsClockCustom" placeholder="e.g. YYYY-MM-DD HH:mm:ss A Z" value="" oninput="setClockCustomFormat(this.value)" style="font-family:'Cascadia Code','Fira Code',monospace;font-size:11px">
-        </div>
-        <div class="hint" style="font-size:10px;color:var(--muted);padding:2px 10px 6px;line-height:1.6">
-          Tokens: <code>YYYY</code> <code>YY</code> <code>MM</code> <code>DD</code> <code>HH</code> (24h) <code>hh</code> (12h) <code>mm</code> <code>ss</code> <code>A</code> (AM/PM) <code>ddd</code> (Mon) <code>dddd</code> (Monday) <code>MMM</code> (Apr) <code>MMMM</code> (April) <code>Z</code> (UTC±offset). Leave blank for presets.
-        </div>
-      </div>
+        <!-- ═══ INFERENCE & VOICE ═══ -->
+        <div class="settings-panel" id="stgPanel-inference" role="tabpanel" aria-labelledby="stgTab-inference">
+          <div class="settings-panel-title"><i data-lucide="brain" class="icon-sm"></i> Inference &amp; Voice</div>
 
-      <!-- SCHEDULE -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i data-lucide="clock" class="icon-sm"></i> Schedule</div>
-        <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <label for="settingsDndStart"><i data-lucide="moon" class="icon-sm"></i> Do Not Disturb</label>
-            <button class="settings-toggle off" id="settingsDnd" onclick="toggleScheduleBlock('dnd')" role="switch" aria-checked="false" aria-label="Do Not Disturb"></button>
+          <div class="settings-group" data-search-terms="inference client parallel tool calls reasoning traces">
+            <div class="settings-group-title">Runtime</div>
+            <div class="settings-row">
+              <label>
+                Inference client
+                <button class="info-tip" tabindex="0" aria-label="Inference client info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">How the AI model runs locally. ChatClient uses native FFI for maximum speed. ResponsesClient uses HTTP, useful for debugging network issues.</span></button>
+              </label>
+              <select class="settings-select" id="settingsInferenceClient" data-requires="server" onchange="updateSettingsConfig('inferenceClient', this.value)">
+                <option value="auto">Auto (ChatClient FFI)</option>
+                <option value="chat">ChatClient (native)</option>
+                <option value="responses">ResponsesClient (HTTP)</option>
+              </select>
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row">
+              <label>
+                Parallel tool calls
+                <button class="info-tip" tabindex="0" aria-label="Parallel tool calls info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Let the AI run multiple tools simultaneously. Auto disables this for NPU devices or after failures. Override if you know your hardware handles it.</span></button>
+              </label>
+              <select class="settings-select" id="settingsParallelToolCalls" data-requires="server" onchange="updateSettingsConfig('parallelToolCalls', this.value)">
+                <option value="auto">Auto</option>
+                <option value="on">Always on</option>
+                <option value="off">Always off</option>
+              </select>
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row">
+              <label>
+                Show reasoning traces
+                <button class="info-tip" tabindex="0" aria-label="Reasoning traces info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Display the AI's internal chain-of-thought reasoning in chat messages. Useful for understanding how the model arrives at answers.</span></button>
+              </label>
+              <button class="stg-toggle" id="settingsShowReasoning" data-key="showReasoningTraces" data-store="server" role="switch" aria-checked="false" aria-label="Show reasoning traces"></button>
+              <span class="save-dot"></span>
+            </div>
           </div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <input type="time" class="settings-time-input" id="settingsDndStart" value="23:00" onchange="updateScheduleTime('dnd')">
-            <span style="color:var(--muted);font-size:11px">to</span>
-            <input type="time" class="settings-time-input" id="settingsDndEnd" value="07:00" onchange="updateScheduleTime('dnd')">
-          </div>
-          <div class="settings-day-chips" id="settingsDndDays"></div>
-          <div class="hint" style="font-size:10px;color:var(--muted)">Silences all desktop notifications during these hours.</div>
-        </div>
-        <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px;margin-top:6px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <label for="settingsReminderStart"><i data-lucide="bell-ring" class="icon-sm"></i> Reminder Hours</label>
-            <button class="settings-toggle off" id="settingsReminder" onclick="toggleScheduleBlock('reminderHours')" role="switch" aria-checked="false" aria-label="Reminder Hours"></button>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <input type="time" class="settings-time-input" id="settingsReminderStart" value="08:00" onchange="updateScheduleTime('reminderHours')">
-            <span style="color:var(--muted);font-size:11px">to</span>
-            <input type="time" class="settings-time-input" id="settingsReminderEnd" value="22:00" onchange="updateScheduleTime('reminderHours')">
-          </div>
-          <div class="settings-day-chips" id="settingsReminderDays"></div>
-          <div class="hint" style="font-size:10px;color:var(--muted)">Recurring reminders (Touch grass, etc.) only fire within this window.</div>
-        </div>
-      </div>
 
-      <!-- REMINDERS -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i data-lucide="repeat" class="icon-sm"></i> Reminders</div>
-        <div class="settings-row">
-          <label><i data-lucide="search" class="icon-sm"></i> Auto-select icon</label>
-          <button class="settings-toggle on" id="settingsAutoIcon" onclick="toggleAutoIconSetting()" role="switch" aria-checked="true" aria-label="Auto-select icon"></button>
+          <div class="settings-group" data-search-terms="speech engine whisper microphone voice recognition fallback">
+            <div class="settings-group-title">Speech Recognition</div>
+            <div class="settings-row">
+              <label>
+                Speech engine
+                <button class="info-tip" tabindex="0" aria-label="Speech engine info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Primary voice-to-text engine. "Auto" tries Edge Web Speech (cloud) first for speed, then falls back to Foundry Whisper running locally on your device.</span></button>
+              </label>
+              <select class="settings-select" id="settingsSpeechEngine" data-requires="server" onchange="updateSpeechSetting('engine', this.value)">
+                <option value="auto">Auto (best available)</option>
+                <option value="web">Edge Web Speech (cloud)</option>
+                <option value="whisper">Foundry Whisper (on-device)</option>
+              </select>
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row">
+              <label>
+                Fallback engine
+                <button class="info-tip" tabindex="0" aria-label="Fallback info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Backup engine used when the primary fails or times out. "No fallback" means voice input stops working if the primary engine is unavailable.</span></button>
+              </label>
+              <select class="settings-select" id="settingsSpeechFallback" data-requires="server" onchange="updateSpeechSetting('fallback', this.value)">
+                <option value="whisper">Foundry Whisper (on-device)</option>
+                <option value="web">Edge Web Speech (cloud)</option>
+                <option value="none">No fallback</option>
+              </select>
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row">
+              <label for="settingsMicDevice">Microphone</label>
+              <select class="settings-select" id="settingsMicDevice" data-requires="server" onchange="updateSpeechSetting('micDevice', this.value)">
+                <option value="">System default</option>
+              </select>
+              <span class="save-dot"></span>
+            </div>
+          </div>
         </div>
-        <div class="hint" style="font-size:10px;color:var(--muted);padding:2px 10px 6px">Automatically pick a Lucide icon based on reminder name &amp; note.</div>
-      </div>
 
-      <!-- AI SUGGESTIONS -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i data-lucide="sparkles" class="icon-sm"></i> AI Suggestions</div>
-        <div class="settings-row">
-          <label><i data-lucide="message-circle" class="icon-sm"></i> Proactive suggestions</label>
-          <button class="settings-toggle on" id="settingsNudgeEnabled" onclick="toggleNudgeSetting('enabled')" role="switch" aria-checked="true" aria-label="Proactive suggestions"></button>
-        </div>
-        <div class="settings-row">
-          <label>Suggestion frequency</label>
-          <select class="settings-select" id="settingsNudgeFreq" onchange="updateNudgeFrequency(this.value)">
-            <option value="gentle">Gentle (5 min)</option>
-            <option value="normal" selected>Normal (3 min)</option>
-            <option value="eager">Eager (1 min)</option>
-          </select>
-        </div>
-        <div class="settings-row">
-          <label><i data-lucide="layers" class="icon-sm"></i> Thematic follow-ups</label>
-          <button class="settings-toggle on" id="settingsThematicEnabled" onclick="toggleNudgeSetting('thematic')" role="switch" aria-checked="true" aria-label="Thematic follow-ups"></button>
-        </div>
-        <div class="settings-row">
-          <label><i data-lucide="bell-ring" class="icon-sm"></i> Overdue reminder cards</label>
-          <button class="settings-toggle on" id="settingsOverdueEnabled" onclick="toggleNudgeSetting('overdue')" role="switch" aria-checked="true" aria-label="Overdue reminder cards"></button>
-        </div>
-      </div>
+        <!-- ═══ SCHEDULE ═══ -->
+        <div class="settings-panel" id="stgPanel-schedule" role="tabpanel" aria-labelledby="stgTab-schedule">
+          <div class="settings-panel-title"><i data-lucide="clock" class="icon-sm"></i> Schedule</div>
 
-      <!-- ACTIONS -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i data-lucide="wrench" class="icon-sm"></i> Actions</div>
-        <button class="settings-action-btn" onclick="clearCompleted(); closeSettings();"><i data-lucide="trash-2" class="icon-sm"></i> Clear Completed Todos</button>
-        <button class="settings-action-btn" onclick="forceRefreshCache()"><i data-lucide="refresh-cw" class="icon-sm"></i> Force Refresh Cache</button>
-        <button class="settings-action-btn" onclick="exportTodos()"><i data-lucide="download" class="icon-sm"></i> Export Todos (JSON)</button>
+          <div class="settings-group" data-search-terms="do not disturb dnd quiet hours reminder schedule days time">
+            <div class="schedule-block">
+              <div class="schedule-header">
+                <label><i data-lucide="moon" class="icon-sm"></i> Do Not Disturb</label>
+                <button class="stg-toggle" id="settingsDnd" role="switch" aria-checked="false" aria-label="Do Not Disturb" onclick="toggleScheduleBlock('dnd')"></button>
+              </div>
+              <div class="schedule-times">
+                <input type="time" class="settings-time-input" id="settingsDndStart" value="23:00" onchange="updateScheduleTime('dnd')">
+                <span>to</span>
+                <input type="time" class="settings-time-input" id="settingsDndEnd" value="07:00" onchange="updateScheduleTime('dnd')">
+                <button class="info-tip" tabindex="0" aria-label="DND info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Silences all desktop notifications during these hours.</span></button>
+              </div>
+              <div class="settings-day-chips" id="settingsDndDays"></div>
+            </div>
+            <div class="schedule-block">
+              <div class="schedule-header">
+                <label><i data-lucide="bell-ring" class="icon-sm"></i> Reminder Hours</label>
+                <button class="stg-toggle" id="settingsReminder" role="switch" aria-checked="false" aria-label="Reminder Hours" onclick="toggleScheduleBlock('reminderHours')"></button>
+              </div>
+              <div class="schedule-times">
+                <input type="time" class="settings-time-input" id="settingsReminderStart" value="08:00" onchange="updateScheduleTime('reminderHours')">
+                <span>to</span>
+                <input type="time" class="settings-time-input" id="settingsReminderEnd" value="22:00" onchange="updateScheduleTime('reminderHours')">
+                <button class="info-tip" tabindex="0" aria-label="Reminder hours info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Recurring reminders (Touch grass, etc.) only fire within this window.</span></button>
+              </div>
+              <div class="settings-day-chips" id="settingsReminderDays"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ NOTIFICATIONS ═══ -->
+        <div class="settings-panel" id="stgPanel-notifications" role="tabpanel" aria-labelledby="stgTab-notifications">
+          <div class="settings-panel-title"><i data-lucide="bell" class="icon-sm"></i> Notifications</div>
+
+          <div class="settings-group" data-search-terms="notification desktop alert test">
+            <div class="settings-group-title">Desktop</div>
+            <div class="settings-row">
+              <label>Desktop notifications</label>
+              <button class="stg-toggle" id="settingsNotif" role="switch" aria-checked="false" aria-label="Desktop notifications" onclick="toggleSettingsNotifications()"></button>
+            </div>
+            <div class="settings-row">
+              <label>&nbsp;</label>
+              <button class="settings-action-btn" style="width:auto;margin:0" onclick="testNotification()"><i data-lucide="bell" class="icon-sm"></i> Test</button>
+            </div>
+          </div>
+
+          <div class="settings-group" data-search-terms="suggestion nudge proactive thematic overdue frequency ai auto icon">
+            <div class="settings-group-title">AI Suggestions</div>
+            <div class="settings-row">
+              <label>
+                <i data-lucide="message-circle" class="icon-sm"></i> Proactive suggestions
+                <button class="info-tip" tabindex="0" aria-label="Proactive suggestions info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">The AI periodically suggests helpful actions based on your tasks — like breaking down large items, suggesting priorities, or recommending next steps.</span></button>
+              </label>
+              <button class="stg-toggle" id="settingsNudgeEnabled" role="switch" aria-checked="true" aria-label="Proactive suggestions" onclick="toggleNudgeSetting('enabled')"></button>
+            </div>
+            <div class="settings-row">
+              <label>
+                Suggestion frequency
+                <button class="info-tip" tabindex="0" aria-label="Frequency info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">How often the AI checks for opportunities to suggest actions. Gentle = every 5 min, Normal = every 3 min, Eager = every 1 min.</span></button>
+              </label>
+              <select class="settings-select" id="settingsNudgeFreq" onchange="updateNudgeFrequency(this.value)">
+                <option value="gentle">Gentle (5 min)</option>
+                <option value="normal" selected>Normal (3 min)</option>
+                <option value="eager">Eager (1 min)</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <label>
+                <i data-lucide="layers" class="icon-sm"></i> Thematic follow-ups
+                <button class="info-tip" tabindex="0" aria-label="Thematic follow-ups info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">After you complete a task, the AI suggests related follow-up tasks based on the same topic. E.g., finishing "write API docs" might suggest "add code examples" or "update changelog."</span></button>
+              </label>
+              <button class="stg-toggle" id="settingsThematicEnabled" role="switch" aria-checked="true" aria-label="Thematic follow-ups" onclick="toggleNudgeSetting('thematic')"></button>
+            </div>
+            <div class="settings-row">
+              <label>
+                <i data-lucide="bell-ring" class="icon-sm"></i> Overdue reminder cards
+                <button class="info-tip" tabindex="0" aria-label="Overdue reminders info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Show prominent cards in the chat feed when a recurring reminder is past due. Helps you catch things like "Touch grass" or "Stand up" that you might have missed.</span></button>
+              </label>
+              <button class="stg-toggle" id="settingsOverdueEnabled" role="switch" aria-checked="true" aria-label="Overdue reminder cards" onclick="toggleNudgeSetting('overdue')"></button>
+            </div>
+          </div>
+
+          <div class="settings-group" data-search-terms="auto select icon reminder lucide">
+            <div class="settings-group-title">Reminders</div>
+            <div class="settings-row">
+              <label>
+                <i data-lucide="search" class="icon-sm"></i> Auto-select icon
+                <button class="info-tip" tabindex="0" aria-label="Auto icon info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Automatically picks a Lucide icon based on reminder name &amp; note.</span></button>
+              </label>
+              <button class="stg-toggle" id="settingsAutoIcon" data-key="autoSelectIcon" data-store="server" role="switch" aria-checked="true" aria-label="Auto-select icon"></button>
+              <span class="save-dot"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ SYSTEM ═══ -->
+        <div class="settings-panel" id="stgPanel-system" role="tabpanel" aria-labelledby="stgTab-system">
+          <div class="settings-panel-title"><i data-lucide="monitor" class="icon-sm"></i> System</div>
+
+          <div class="settings-restart-banner" id="settingsRestartBanner">
+            <i data-lucide="alert-triangle" class="icon-sm"></i> Restart required to apply port change.
+          </div>
+
+          <div class="settings-group" data-search-terms="port server startup restart launch">
+            <div class="settings-group-title">Server</div>
+            <div class="settings-row">
+              <label for="settingsPort">
+                Port
+                <button class="info-tip" tabindex="0" aria-label="Port info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Default: 2326 (B-E-A-N). Override with env var: taskbean_PORT=9999</span></button>
+              </label>
+              <input type="number" class="settings-select" id="settingsPort" min="1024" max="65535" style="width:90px" value="2326" data-requires="server" onblur="savePortSetting()" onkeydown="if(event.key==='Enter'){savePortSetting();event.preventDefault()}">
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row">
+              <label>Run on Windows startup</label>
+              <button class="stg-toggle" id="settingsStartup" data-key="runOnStartup" data-store="server" role="switch" aria-checked="false" aria-label="Run on Windows startup"></button>
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row">
+              <label>&nbsp;</label>
+              <button class="settings-action-btn" style="width:auto;margin:0" id="settingsServerBtn" onclick="startServerFromSettings()"><i data-lucide="play" class="icon-sm"></i> <span id="settingsServerLabel">Start Server</span></button>
+            </div>
+          </div>
+
+          <div class="settings-group" data-search-terms="clear completed refresh cache export todos data">
+            <div class="settings-group-title">Data</div>
+            <div style="padding:6px 8px;display:flex;flex-direction:column;gap:4px">
+              <button class="settings-action-btn" onclick="clearCompleted(); closeSettings();"><i data-lucide="trash-2" class="icon-sm"></i> Clear Completed Todos</button>
+              <button class="settings-action-btn" onclick="forceRefreshCache()"><i data-lucide="refresh-cw" class="icon-sm"></i> Force Refresh Cache</button>
+              <button class="settings-action-btn" onclick="exportTodos()"><i data-lucide="download" class="icon-sm"></i> Export Todos (JSON)</button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
+
     <div class="settings-footer">
-      <div id="settingsSaveStatus" aria-live="polite" style="font-size:11px;min-height:0;transition:opacity .3s,transform .3s,padding .3s;text-align:center"></div>
+      <div class="settings-footer-left">
+        <span id="settingsSaveStatus" aria-live="polite" style="font-size:11px"></span>
+      </div>
       <a class="coffee-btn" href="https://buymeacoffee.com/nicholasdbrady" target="_blank" rel="noopener"><span class="coffee-emoji">☕</span> Buy Nick a Coffee</a>
-      <img src="/icons/taskbean-logo.png" alt="taskbean" style="height:40px;opacity:.7;margin:4px 0;">
-      <span>v1.0.0 · Foundry Local · All data stays on your device</span>
+      <div class="settings-footer-right">
+        <span style="font-size:10px;color:var(--muted)">taskbean v0.5</span>
+      </div>
     </div>
   </div>
 </div>
@@ -2213,7 +2624,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         <div class="clock-format-grid" id="clockFormatGrid"></div>
       </div>
       <div class="clock-popover-divider"></div>
-      <button class="clock-popover-custom-btn" onclick="closeClockPopover();openSettings();setTimeout(()=>document.getElementById('settingsClockCustom')?.focus(),300)">
+      <button class="clock-popover-custom-btn" onclick="closeClockPopover();openSettings();switchSettingsTab('general');setTimeout(()=>document.getElementById('settingsClockCustom')?.focus(),300)">
         <i data-lucide="pencil" class="icon-sm"></i> Custom format…
       </button>
     </div>
@@ -2531,8 +2942,8 @@ function setTheme(t, isManual = false) {
         if (isManual) localStorage.setItem(STORAGE_KEYS.theme, t);
         const sel = document.getElementById('themeSelect');
         if (sel) sel.value = t;
-        const settingsTheme = document.getElementById('settingsTheme');
-        if (settingsTheme) settingsTheme.value = t;
+        // Sync theme swatches in new settings modal
+        if (typeof syncThemeSwatches === 'function') syncThemeSwatches();
         const meta = THEME_META[t] || THEME_META['dark-roast'];
         document.documentElement.style.colorScheme = meta.colorScheme;
         const tc = document.querySelector('meta[name="theme-color"]');
@@ -6799,16 +7210,22 @@ function releaseFocus(modalEl) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Settings Modal
+// Settings Modal — tabbed sidebar navigation
 // ═══════════════════════════════════════════════════════════════════
 
 let settingsConfig = null; // cached /api/config response
+let _settingsActiveTab = 'general';
 
 function openSettings() {
     const overlay = document.getElementById('settingsModalOverlay');
     overlay.classList.add('open');
     lucide.createIcons();
+    // Restore last active tab
+    const saved = sessionStorage.getItem('settings-tab');
+    if (saved) switchSettingsTab(saved, false);
     loadSettingsConfig();
+    syncThemeSwatches();
+    startSettingsClockPreview();
     trapFocus(overlay.querySelector('.settings-modal'));
 }
 
@@ -6816,16 +7233,208 @@ function closeSettings() {
     const overlay = document.getElementById('settingsModalOverlay');
     releaseFocus(overlay.querySelector('.settings-modal'));
     overlay.classList.remove('open');
+    stopSettingsClockPreview();
+    // Clear search
+    const search = document.getElementById('settingsSearch');
+    if (search) { search.value = ''; filterSettings(''); }
 }
 
 function onSettingsOverlayClick(e) {
     if (e.target === e.currentTarget) closeSettings();
 }
 
+// ── Tab switching ────────────────────────────────────────────────
+
+function switchSettingsTab(tabId, animate = true) {
+    _settingsActiveTab = tabId;
+    sessionStorage.setItem('settings-tab', tabId);
+    // Update sidebar tabs
+    document.querySelectorAll('.settings-sidebar .settings-tab').forEach(tab => {
+        const isActive = tab.dataset.panel === tabId;
+        tab.classList.toggle('active', isActive);
+        tab.setAttribute('aria-selected', String(isActive));
+    });
+    // Update panels
+    document.querySelectorAll('.settings-panel').forEach(panel => {
+        const isActive = panel.id === `stgPanel-${tabId}`;
+        panel.classList.toggle('active', isActive);
+        if (isActive && !animate) panel.style.animation = 'none';
+    });
+    lucide.createIcons();
+}
+
+// Keyboard navigation for sidebar tabs
+document.addEventListener('keydown', (e) => {
+    const overlay = document.getElementById('settingsModalOverlay');
+    if (!overlay?.classList.contains('open')) return;
+    const tabs = [...document.querySelectorAll('.settings-sidebar .settings-tab')];
+    const focused = document.activeElement;
+    const idx = tabs.indexOf(focused);
+    if (idx === -1) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const next = e.key === 'ArrowDown' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+        tabs[next].focus();
+        tabs[next].click();
+    }
+});
+
+// ── Settings search ─────────────────────────────────────────────
+
+function filterSettings(query) {
+    const q = query.toLowerCase().trim();
+    const groups = document.querySelectorAll('.settings-group, .settings-row-standalone');
+    const panels = document.querySelectorAll('.settings-panel');
+    if (!q) {
+        groups.forEach(g => g.classList.remove('search-hidden'));
+        panels.forEach(p => p.querySelectorAll('.settings-row').forEach(r => r.classList.remove('search-hidden')));
+        return;
+    }
+    // Find which tabs have matches
+    const tabMatches = new Set();
+    groups.forEach(g => {
+        const terms = (g.dataset.searchTerms || '') + ' ' + g.textContent.toLowerCase();
+        const match = terms.includes(q);
+        g.classList.toggle('search-hidden', !match);
+        if (match) {
+            const panel = g.closest('.settings-panel');
+            if (panel) tabMatches.add(panel.id.replace('stgPanel-', ''));
+        }
+    });
+    // If current tab has no matches, switch to first tab that does
+    if (!tabMatches.has(_settingsActiveTab) && tabMatches.size > 0) {
+        switchSettingsTab([...tabMatches][0]);
+    }
+}
+
+// ── Info-tip floating tooltip (avoids overflow clipping) ────────
+
+(function initInfoTips() {
+    let floatEl = null;
+    function show(tipBtn) {
+        const text = tipBtn.querySelector('.tip-text')?.textContent;
+        if (!text) return;
+        if (!floatEl) {
+            floatEl = document.createElement('div');
+            floatEl.className = 'tip-float';
+            document.body.appendChild(floatEl);
+        }
+        floatEl.textContent = text;
+        floatEl.style.display = 'block';
+        // Position below the trigger, clamped to viewport
+        const rect = tipBtn.getBoundingClientRect();
+        let top = rect.bottom + 8;
+        let left = rect.left - 10;
+        // Clamp right edge
+        const fw = floatEl.offsetWidth;
+        if (left + fw > window.innerWidth - 12) left = window.innerWidth - fw - 12;
+        if (left < 8) left = 8;
+        // If it would go below viewport, show above instead
+        const fh = floatEl.offsetHeight;
+        if (top + fh > window.innerHeight - 8) {
+            top = rect.top - fh - 8;
+            // Flip arrow to bottom
+            floatEl.style.setProperty('--tip-arrow', 'bottom');
+        }
+        floatEl.style.top = top + 'px';
+        floatEl.style.left = left + 'px';
+    }
+    function hide() {
+        if (floatEl) floatEl.style.display = 'none';
+    }
+    document.addEventListener('pointerenter', (e) => {
+        const tip = e.target.closest('.info-tip');
+        if (tip) show(tip);
+    }, true);
+    document.addEventListener('pointerleave', (e) => {
+        if (e.target.closest('.info-tip')) hide();
+    }, true);
+    document.addEventListener('focusin', (e) => {
+        const tip = e.target.closest('.info-tip');
+        if (tip) show(tip);
+    });
+    document.addEventListener('focusout', (e) => {
+        if (e.target.closest('.info-tip')) hide();
+    });
+    // Hide on scroll within any settings panel
+    document.addEventListener('scroll', (e) => {
+        if (e.target.closest?.('.settings-panel')) hide();
+    }, true);
+})();
+
+// ── Theme swatch sync ───────────────────────────────────────────
+
+function syncThemeSwatches() {
+    const current = localStorage.getItem(STORAGE_KEYS.theme) || 'dark-roast';
+    document.querySelectorAll('.theme-swatch-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.theme === current);
+    });
+    document.querySelectorAll('.theme-swatch-option').forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.theme === current);
+    });
+}
+
+// ── Live clock preview in settings ──────────────────────────────
+
+let _settingsClockInterval = null;
+function startSettingsClockPreview() {
+    updateSettingsClockPreview();
+    _settingsClockInterval = setInterval(updateSettingsClockPreview, 1000);
+}
+function stopSettingsClockPreview() {
+    if (_settingsClockInterval) { clearInterval(_settingsClockInterval); _settingsClockInterval = null; }
+}
+function updateSettingsClockPreview() {
+    const el = document.getElementById('settingsClockPreview');
+    if (!el) return;
+    const now = new Date();
+    el.textContent = typeof _fmtClock === 'function' && typeof _getActiveFmt === 'function'
+        ? _fmtClock(_getActiveFmt(), now, _clockTimezone)
+        : now.toLocaleTimeString();
+}
+
+// ── Unified toggle handler ──────────────────────────────────────
+
+document.addEventListener('click', async (e) => {
+    const toggle = e.target.closest('.stg-toggle[data-key]');
+    if (!toggle) return;
+    const key = toggle.dataset.key;
+    const store = toggle.dataset.store || 'server';
+    const newVal = toggle.getAttribute('aria-checked') !== 'true';
+    const row = toggle.closest('.settings-row');
+
+    // Optimistic UI
+    toggle.setAttribute('aria-checked', String(newVal));
+    if (row) { row.classList.remove('saved', 'save-error'); row.classList.add('saving'); }
+
+    let ok = false;
+    if (store === 'server') {
+        ok = await updateSettingsConfig(key, newVal);
+    } else {
+        localStorage.setItem(`taskbean-${key}`, JSON.stringify(newVal));
+        ok = true;
+    }
+
+    if (row) {
+        row.classList.remove('saving');
+        row.classList.add(ok ? 'saved' : 'save-error');
+        if (ok) setTimeout(() => row.classList.remove('saved'), 2000);
+    }
+    if (!ok) {
+        toggle.setAttribute('aria-checked', String(!newVal));
+    }
+    // Special handlers
+    if (key === 'autoSelectIcon') {
+        autoSelectIconEnabled = newVal;
+        localStorage.setItem('taskbean-auto-select-icon', newVal);
+    }
+});
+
+// ── Load/populate settings from server ──────────────────────────
+
 async function loadSettingsConfig() {
-    // Sync theme dropdown
-    const themeSelect = document.getElementById('settingsTheme');
-    if (themeSelect) themeSelect.value = localStorage.getItem(STORAGE_KEYS.theme) || 'dark-roast';
+    // Sync theme swatches
+    syncThemeSwatches();
 
     // Sync custom clock format
     const clockCustom = document.getElementById('settingsClockCustom');
@@ -6835,7 +7444,6 @@ async function loadSettingsConfig() {
     const notifToggle = document.getElementById('settingsNotif');
     if (notifToggle) {
         const granted = 'Notification' in window && Notification.permission === 'granted';
-        notifToggle.className = 'settings-toggle ' + (granted ? 'on' : 'off');
         notifToggle.setAttribute('aria-checked', String(granted));
     }
 
@@ -6846,7 +7454,6 @@ async function loadSettingsConfig() {
     // Load nudge settings
     loadNudgeSettings();
 
-    // Load server config
     // Pre-populate timezone from browser default in case server is offline
     const tzSel = document.getElementById('settingsTimezone');
     if (tzSel && !tzSel.options.length) {
@@ -6860,23 +7467,31 @@ async function loadSettingsConfig() {
         configFetched = true;
     } catch {
         // Disable server-backed controls when offline
-        document.querySelectorAll('#settingsPermission, #settingsDevice, #settingsModel, #settingsTimezone, #settingsSpeechEngine, #settingsSpeechFallback, #settingsMicDevice').forEach(el => {
+        document.querySelectorAll('[data-requires="server"]').forEach(el => {
             el.disabled = true;
             el.title = 'Server offline';
         });
-        document.querySelectorAll('#settingsHideIncompat, #settingsToolCallOnly, #settingsStartup, #settingsDnd, #settingsReminder, #settingsAutoIcon').forEach(el => {
+        document.querySelectorAll('.stg-toggle[data-store="server"]').forEach(el => {
             el.disabled = true;
             el.title = 'Server offline';
         });
-        showSettingsStatus('⚠ Server offline — some settings unavailable', true, { actionable: true });
+        // Mark tabs with offline controls (check both selects and toggles)
+        document.querySelectorAll('.settings-sidebar .settings-tab').forEach(tab => {
+            const panel = document.getElementById(`stgPanel-${tab.dataset.panel}`);
+            if (panel?.querySelector('[data-requires="server"], .stg-toggle[data-store="server"]')) tab.classList.add('has-offline');
+        });
+        // Hydrate schedule UI from local cache when offline
+        const cachedSchedule = readCachedJson('taskbean-schedule', {});
+        if (cachedSchedule.dnd) populateScheduleBlock('dnd', cachedSchedule.dnd);
+        if (cachedSchedule.reminderHours) populateScheduleBlock('reminderHours', cachedSchedule.reminderHours);
+        showSettingsStatus('⚠ Server offline — some settings unavailable', true);
     }
     if (configFetched) {
         try { populateSettingsFromConfig(settingsConfig); } catch (e) { console.warn('Settings populate error:', e); }
-        document.querySelectorAll('.settings-select, .settings-toggle, .settings-time-input').forEach(el => {
-            el.disabled = false;
-            el.title = '';
-        });
-        showSettingsStatus(''); // clear any previous offline banner
+        document.querySelectorAll('[data-requires="server"]').forEach(el => { el.disabled = false; el.title = ''; });
+        document.querySelectorAll('.stg-toggle[data-store="server"]').forEach(el => { el.disabled = false; el.title = ''; });
+        document.querySelectorAll('.settings-sidebar .settings-tab').forEach(tab => tab.classList.remove('has-offline'));
+        showSettingsStatus('');
     }
 
     // Populate model list
@@ -6916,7 +7531,6 @@ const COMMON_TIMEZONES = [
 ];
 
 function populateTimezoneSelect(selectEl, currentTz) {
-    // If the user's current timezone isn't in our common list, add it
     const allTz = [...COMMON_TIMEZONES];
     if (!allTz.find(t => t.value === currentTz)) {
         allTz.unshift({ value: currentTz, label: `📍 ${currentTz.replace(/_/g, ' ')}` });
@@ -6933,20 +7547,23 @@ function populateSettingsFromConfig(cfg) {
     const devSel = document.getElementById('settingsDevice');
     if (devSel && cfg.preferredDevice) devSel.value = cfg.preferredDevice;
 
-    // Timezone
+    // Timezone — always sync to clock variable.
+    // If server has explicit tz, use it. Otherwise use browser's detected tz.
+    // This clears any stale localStorage timezone that may have been set previously.
     const tzSel = document.getElementById('settingsTimezone');
+    const effectiveTz = cfg.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (tzSel) {
-        populateTimezoneSelect(tzSel, cfg.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+        populateTimezoneSelect(tzSel, effectiveTz);
+    }
+    if (typeof setClockTimezone === 'function') {
+        setClockTimezone(effectiveTz);
     }
 
     // Run on startup
     const startupToggle = document.getElementById('settingsStartup');
-    if (startupToggle) {
-        startupToggle.className = 'settings-toggle ' + (cfg.runOnStartup ? 'on' : 'off');
-        startupToggle.setAttribute('aria-checked', String(!!cfg.runOnStartup));
-    }
+    if (startupToggle) startupToggle.setAttribute('aria-checked', String(!!cfg.runOnStartup));
 
-    // Schedule — populate UI and cache for client-side DND checks
+    // Schedule
     const schedule = cfg.schedule || {};
     writeCachedJson('taskbean-schedule', schedule);
     populateScheduleBlock('dnd', schedule.dnd || { start: '23:00', end: '07:00', days: ['mon','tue','wed','thu','fri','sat','sun'], enabled: false });
@@ -6957,22 +7574,13 @@ function populateSettingsFromConfig(cfg) {
     autoSelectIconEnabled = autoIcon;
     localStorage.setItem('taskbean-auto-select-icon', autoIcon);
     const autoIconToggle = document.getElementById('settingsAutoIcon');
-    if (autoIconToggle) {
-        autoIconToggle.className = 'settings-toggle ' + (autoIcon ? 'on' : 'off');
-        autoIconToggle.setAttribute('aria-checked', String(autoIcon));
-    }
+    if (autoIconToggle) autoIconToggle.setAttribute('aria-checked', String(autoIcon));
 
     // Hardware compat + tool-calling preferences
     const hideIncompat = document.getElementById('settingsHideIncompat');
-    if (hideIncompat) {
-        hideIncompat.className = 'settings-toggle ' + (cfg.hideIncompatibleModels ? 'on' : 'off');
-        hideIncompat.setAttribute('aria-checked', String(!!cfg.hideIncompatibleModels));
-    }
+    if (hideIncompat) hideIncompat.setAttribute('aria-checked', String(!!cfg.hideIncompatibleModels));
     const toolCallOnly = document.getElementById('settingsToolCallOnly');
-    if (toolCallOnly) {
-        toolCallOnly.className = 'settings-toggle ' + (cfg.toolCallOnly ? 'on' : 'off');
-        toolCallOnly.setAttribute('aria-checked', String(!!cfg.toolCallOnly));
-    }
+    if (toolCallOnly) toolCallOnly.setAttribute('aria-checked', String(!!cfg.toolCallOnly));
 
     // Inference settings
     const inferClient = document.getElementById('settingsInferenceClient');
@@ -6980,16 +7588,14 @@ function populateSettingsFromConfig(cfg) {
     const parallelTC = document.getElementById('settingsParallelToolCalls');
     if (parallelTC && cfg.parallelToolCalls) parallelTC.value = cfg.parallelToolCalls;
     const showReasoning = document.getElementById('settingsShowReasoning');
-    if (showReasoning) {
-        showReasoning.setAttribute('aria-checked', String(!!cfg.showReasoningTraces));
-    }
+    if (showReasoning) showReasoning.setAttribute('aria-checked', String(!!cfg.showReasoningTraces));
 
     // Port setting
     const portInput = document.getElementById('settingsPort');
     if (portInput) {
-        // Fetch actual port info from server
         fetch('/api/port-info').then(r => r.json()).then(info => {
             portInput.value = info.port;
+            portInput.dataset.savedValue = info.port;
         }).catch(() => {});
     }
 
@@ -7008,10 +7614,7 @@ function populateSettingsFromConfig(cfg) {
 function populateScheduleBlock(blockName, block) {
     const prefix = blockName === 'dnd' ? 'settingsDnd' : 'settingsReminder';
     const toggleEl = document.getElementById(prefix === 'settingsDnd' ? 'settingsDnd' : 'settingsReminder');
-    if (toggleEl) {
-        toggleEl.className = 'settings-toggle ' + (block.enabled ? 'on' : 'off');
-        toggleEl.setAttribute('aria-checked', String(!!block.enabled));
-    }
+    if (toggleEl) toggleEl.setAttribute('aria-checked', String(!!block.enabled));
     const startEl = document.getElementById(prefix + 'Start');
     if (startEl) startEl.value = block.start || '';
     const endEl = document.getElementById(prefix + 'End');
@@ -7040,7 +7643,6 @@ async function populateMicDevices() {
     try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const mics = devices.filter(d => d.kind === 'audioinput');
-        // Keep the "System default" option
         select.innerHTML = '<option value="">System default</option>';
         mics.forEach(mic => {
             const opt = document.createElement('option');
@@ -7048,7 +7650,6 @@ async function populateMicDevices() {
             opt.textContent = mic.label || `Microphone ${mic.deviceId.substring(0, 8)}`;
             select.appendChild(opt);
         });
-        // Set current value from config
         const current = settingsConfig?.speech?.micDevice || '';
         select.value = current;
     } catch (e) {
@@ -7059,10 +7660,13 @@ async function populateMicDevices() {
 async function savePortSetting() {
     const input = document.getElementById('settingsPort');
     const port = parseInt(input.value, 10);
+    if (input.dataset.savedValue && String(port) === input.dataset.savedValue) return;
     if (!port || port < 1024 || port > 65535) {
         addChat('error-msg', 'alert-circle', 'Port must be between 1024 and 65535.');
         return;
     }
+    const row = input.closest('.settings-row');
+    if (row) { row.classList.remove('saved', 'save-error'); row.classList.add('saving'); }
     try {
         const res = await fetch('/api/port', {
             method: 'POST',
@@ -7071,19 +7675,28 @@ async function savePortSetting() {
         });
         const data = await res.json();
         if (res.ok) {
-            addChat('info', 'check-circle', `Port set to <strong>${port}</strong>. Restart taskbean for it to take effect.`);
+            input.dataset.savedValue = String(port);
+            if (row) { row.classList.remove('saving'); row.classList.add('saved'); }
+            // Show restart banner
+            const banner = document.getElementById('settingsRestartBanner');
+            if (banner) banner.classList.add('show');
             showSettingsStatus('Port saved — restart to apply');
         } else {
+            if (row) { row.classList.remove('saving'); row.classList.add('save-error'); }
             addChat('error-msg', 'alert-circle', esc(data.error));
         }
     } catch (err) {
+        if (row) { row.classList.remove('saving'); row.classList.add('save-error'); }
         addChat('error-msg', 'alert-circle', `Failed: ${esc(err.message)}`);
     }
 }
 
 async function updateSettingsConfig(key, value) {
     if (!serverReachable) { addChat('error','wifi-off','Server offline — cannot save settings.'); return false; }
-    showSettingsStatus('Saving…');
+    // Find the triggering control's row for save-dot animation
+    const activeEl = document.activeElement;
+    const row = activeEl?.closest('.settings-row');
+    if (row) { row.classList.remove('saved', 'save-error'); row.classList.add('saving'); }
     try {
         const res = await fetch('/api/config', {
             method: 'POST',
@@ -7092,68 +7705,43 @@ async function updateSettingsConfig(key, value) {
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
+            if (row) { row.classList.remove('saving'); row.classList.add('save-error'); }
             showSettingsStatus(err.detail || 'Save failed', true);
             return false;
         }
         const updated = await res.json();
         settingsConfig = updated;
-        showSettingsStatus('Saved ✓');
+        if (row) {
+            row.classList.remove('saving');
+            row.classList.add('saved');
+            setTimeout(() => row.classList.remove('saved'), 2000);
+        }
         return true;
     } catch {
+        if (row) { row.classList.remove('saving'); row.classList.add('save-error'); }
         showSettingsStatus('Save failed — server unreachable', true);
         return false;
     }
 }
 
-function showSettingsStatus(msg, isError = false, { actionable = false } = {}) {
+function showSettingsStatus(msg, isError = false) {
     const el = document.getElementById('settingsSaveStatus');
     if (!el) return;
-    if (!msg && !actionable) {
-        // Clear: reset element to hidden state
-        el.textContent = '';
-        el.style.opacity = '0';
-        el.style.padding = '0';
-        el.style.background = '';
-        return;
-    }
-    if (actionable) {
-        el.innerHTML = `<span style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap">
-            <span>⚠ Server offline</span>
-            <button onclick="startServerFromSettings()" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:2px 10px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer">Start Server</button>
-            <button onclick="loadSettingsConfig()" style="background:none;border:none;color:rgba(255,255,255,.8);font-size:10px;cursor:pointer;text-decoration:underline">Retry</button>
-        </span>`;
-    } else {
-        el.textContent = msg;
-    }
-    el.style.color = '#fff';
-    el.style.background = isError ? 'var(--red)' : 'var(--green)';
-    el.style.padding = '6px 14px';
-    el.style.borderRadius = '8px';
-    el.style.fontSize = '11px';
+    if (!msg) { el.textContent = ''; el.style.color = ''; return; }
+    el.textContent = msg;
+    el.style.color = isError ? 'var(--red)' : 'var(--green)';
     el.style.fontWeight = '600';
-    el.style.opacity = '1';
-    el.style.transform = 'translateY(0)';
-    if (!isError && msg) {
-        setTimeout(() => {
-            if (el.textContent === msg) {
-                el.style.opacity = '0';
-                el.style.transform = 'translateY(4px)';
-                setTimeout(() => { el.textContent = ''; el.style.padding = '0'; }, 300);
-            }
-        }, 2000);
+    if (!isError) {
+        setTimeout(() => { if (el.textContent === msg) { el.textContent = ''; el.style.color = ''; } }, 3000);
     }
 }
 
 async function toggleSettingsStartup() {
     const el = document.getElementById('settingsStartup');
-    const newVal = el.classList.contains('off');
-    el.className = 'settings-toggle ' + (newVal ? 'on' : 'off');
+    const newVal = el.getAttribute('aria-checked') !== 'true';
     el.setAttribute('aria-checked', String(newVal));
     const ok = await updateSettingsConfig('runOnStartup', newVal);
-    if (!ok) {
-        el.className = 'settings-toggle ' + (newVal ? 'off' : 'on');
-        el.setAttribute('aria-checked', String(!newVal));
-    }
+    if (!ok) el.setAttribute('aria-checked', String(!newVal));
 }
 
 async function toggleSettingsNotifications() {
@@ -7164,19 +7752,16 @@ async function toggleSettingsNotifications() {
         return;
     }
     const perm = await Notification.requestPermission();
-    el.className = 'settings-toggle ' + (perm === 'granted' ? 'on' : 'off');
     el.setAttribute('aria-checked', String(perm === 'granted'));
     if (perm === 'granted') addChat('info','bell','Desktop notifications enabled!');
 }
 
 async function toggleAutoIconSetting() {
     const el = document.getElementById('settingsAutoIcon');
-    const newVal = el.classList.contains('off');
-    el.className = 'settings-toggle ' + (newVal ? 'on' : 'off');
+    const newVal = el.getAttribute('aria-checked') !== 'true';
     el.setAttribute('aria-checked', String(newVal));
     const ok = await setAutoSelectIcon(newVal);
     if (!ok) {
-        el.className = 'settings-toggle ' + (newVal ? 'off' : 'on');
         el.setAttribute('aria-checked', String(!newVal));
         autoSelectIconEnabled = !newVal;
         localStorage.setItem('taskbean-auto-select-icon', !newVal);
@@ -7186,8 +7771,7 @@ async function toggleAutoIconSetting() {
 async function toggleScheduleBlock(blockName) {
     const prefix = blockName === 'dnd' ? 'settingsDnd' : 'settingsReminder';
     const el = document.getElementById(prefix === 'settingsDnd' ? 'settingsDnd' : 'settingsReminder');
-    const newVal = el.classList.contains('off');
-    el.className = 'settings-toggle ' + (newVal ? 'on' : 'off');
+    const newVal = el.getAttribute('aria-checked') !== 'true';
     el.setAttribute('aria-checked', String(newVal));
     await saveScheduleBlock(blockName);
 }
@@ -7216,36 +7800,28 @@ async function saveScheduleBlock(blockName) {
     }
     
     const block = {
-        enabled: toggleEl?.classList.contains('on') || false,
+        enabled: toggleEl?.getAttribute('aria-checked') === 'true',
         start: startEl?.value || '',
         end: endEl?.value || '',
         days,
     };
 
-    // Cache locally so browser-side DND check works immediately
     const cached = readCachedJson('taskbean-schedule', {});
     cached[blockName] = block;
     writeCachedJson('taskbean-schedule', cached);
     
     if (!serverReachable) return;
-    showSettingsStatus('Saving…');
     try {
         const res = await fetch('/api/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ schedule: { [blockName]: block } }),
         });
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            showSettingsStatus(err.detail || 'Save failed', true);
-        } else {
+        if (res.ok) {
             const updated = await res.json();
             settingsConfig = updated;
-            showSettingsStatus('Saved ✓');
         }
-    } catch {
-        showSettingsStatus('Save failed — server unreachable', true);
-    }
+    } catch {}
 }
 
 async function startServerFromSettings() {
@@ -7262,7 +7838,6 @@ async function startServerFromSettings() {
             if (res.ok) {
                 clearInterval(poll);
                 setReachability(true);
-                // reachability-change event handles refresh + replay + settings reload
                 addChat('info', 'check-circle', 'Server is running!');
             }
         } catch {}
@@ -7350,46 +7925,42 @@ updateHardwareChips();
 function populateHardwareInfoCard(hw) {
     const el = document.getElementById('settingsHardwareInfo');
     if (!el || !hw) return;
-    const gpuText = hw.gpu ? `${hw.gpu.name} · ${hw.gpu.vramGb} GB VRAM` : 'Not detected';
+    // Handle both /api/hardware shape (has hw.ram) and /api/config.hardware shape (ram nested in cpu)
+    const gpuText = hw.gpu ? `${hw.gpu.name}${hw.gpu.vramGb ? ' · ' + hw.gpu.vramGb + ' GB VRAM' : ''}` : 'Not detected';
     const npuText = hw.npu ? hw.npu.name : 'Not detected';
-    const cpuText = hw.cpu ? `${esc(hw.cpu.model)} · ${hw.cpu.cores} cores` : 'Detecting…';
-    const ramText = hw.ram ? `${hw.ram.totalGb} GB` : 'Detecting…';
+    const cpuText = hw.cpu ? `${esc(hw.cpu.model || 'Unknown CPU')} · ${hw.cpu.cores} cores` : 'Detecting…';
+    const ramText = hw.ram ? `${hw.ram.totalGb} GB` : (hw.cpu?.ramGb ? `${hw.cpu.ramGb} GB` : 'Detecting…');
     el.innerHTML = `
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:11px">
-            <span style="color:var(--muted)"><i data-lucide="cpu" style="width:11px;height:11px;vertical-align:-2px"></i> CPU</span>
-            <span>${cpuText}</span>
-            <span style="color:var(--muted)"><i data-lucide="memory-stick" style="width:11px;height:11px;vertical-align:-2px"></i> RAM</span>
-            <span>${ramText}</span>
-            <span style="color:var(--muted)"><i data-lucide="monitor" style="width:11px;height:11px;vertical-align:-2px"></i> GPU</span>
-            <span${!hw.gpu ? ' style="color:var(--muted)"' : ''}>${esc(gpuText)}</span>
-            <span style="color:var(--muted)"><i data-lucide="zap" style="width:11px;height:11px;vertical-align:-2px"></i> NPU</span>
-            <span${!hw.npu ? ' style="color:var(--muted)"' : ''}>${esc(npuText)}</span>
-        </div>`;
+        <span class="hw-label"><i data-lucide="cpu" style="width:11px;height:11px"></i> CPU</span>
+        <span class="hw-value-text">${cpuText}</span>
+        <span class="hw-label"><i data-lucide="memory-stick" style="width:11px;height:11px"></i> RAM</span>
+        <span class="${ramText === 'Detecting…' ? 'hw-na' : 'hw-value-text'}">${ramText}</span>
+        <span class="hw-label"><i data-lucide="monitor" style="width:11px;height:11px"></i> GPU</span>
+        <span class="${hw.gpu ? 'hw-value-text' : 'hw-na'}">${esc(gpuText)}</span>
+        <span class="hw-label"><i data-lucide="zap" style="width:11px;height:11px"></i> NPU</span>
+        <span class="${hw.npu ? 'hw-value-text' : 'hw-na'}">${esc(npuText)}</span>`;
     lucide.createIcons({ nodes: [el] });
+    // Also try fetching richer data from /api/hardware for more detail
+    fetch('/api/hardware', { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? r.json() : null).then(fullHw => {
+        if (fullHw) populateHardwareInfoCard(fullHw);
+    }).catch(() => {});
 }
 
+// Legacy toggle function wrappers (referenced by old code paths)
 async function toggleHideIncompatSetting() {
     const el = document.getElementById('settingsHideIncompat');
-    const newVal = el.classList.contains('off');
-    el.className = 'settings-toggle ' + (newVal ? 'on' : 'off');
+    const newVal = el.getAttribute('aria-checked') !== 'true';
     el.setAttribute('aria-checked', String(newVal));
     const ok = await updateSettingsConfig('hideIncompatibleModels', newVal);
-    if (!ok) {
-        el.className = 'settings-toggle ' + (newVal ? 'off' : 'on');
-        el.setAttribute('aria-checked', String(!newVal));
-    }
+    if (!ok) el.setAttribute('aria-checked', String(!newVal));
 }
 
 async function toggleToolCallOnlySetting() {
     const el = document.getElementById('settingsToolCallOnly');
-    const newVal = el.classList.contains('off');
-    el.className = 'settings-toggle ' + (newVal ? 'on' : 'off');
+    const newVal = el.getAttribute('aria-checked') !== 'true';
     el.setAttribute('aria-checked', String(newVal));
     const ok = await updateSettingsConfig('toolCallOnly', newVal);
-    if (!ok) {
-        el.className = 'settings-toggle ' + (newVal ? 'off' : 'on');
-        el.setAttribute('aria-checked', String(!newVal));
-    }
+    if (!ok) el.setAttribute('aria-checked', String(!newVal));
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -7402,22 +7973,13 @@ function loadNudgeSettings() {
     try {
         const s = JSON.parse(saved);
         const enBtn = document.getElementById('settingsNudgeEnabled');
-        if (enBtn) {
-            enBtn.className = 'settings-toggle ' + (s.enabled !== false ? 'on' : 'off');
-            enBtn.setAttribute('aria-checked', String(s.enabled !== false));
-        }
+        if (enBtn) enBtn.setAttribute('aria-checked', String(s.enabled !== false));
         const freq = document.getElementById('settingsNudgeFreq');
         if (freq) freq.value = s.intervalMs === 300000 ? 'gentle' : s.intervalMs === 60000 ? 'eager' : 'normal';
         const thBtn = document.getElementById('settingsThematicEnabled');
-        if (thBtn) {
-            thBtn.className = 'settings-toggle ' + (s.thematic !== false ? 'on' : 'off');
-            thBtn.setAttribute('aria-checked', String(s.thematic !== false));
-        }
+        if (thBtn) thBtn.setAttribute('aria-checked', String(s.thematic !== false));
         const ovBtn = document.getElementById('settingsOverdueEnabled');
-        if (ovBtn) {
-            ovBtn.className = 'settings-toggle ' + (s.overdue !== false ? 'on' : 'off');
-            ovBtn.setAttribute('aria-checked', String(s.overdue !== false));
-        }
+        if (ovBtn) ovBtn.setAttribute('aria-checked', String(s.overdue !== false));
     } catch {}
 }
 
@@ -7425,13 +7987,9 @@ function toggleNudgeSetting(key) {
     const saved = JSON.parse(localStorage.getItem('nudge-settings') || '{}');
     const wasOn = saved[key] !== false;
     saved[key] = !wasOn;
-    // Toggle the button
     const btnMap = { enabled: 'settingsNudgeEnabled', thematic: 'settingsThematicEnabled', overdue: 'settingsOverdueEnabled' };
     const btn = document.getElementById(btnMap[key]);
-    if (btn) {
-        btn.className = 'settings-toggle ' + (!wasOn ? 'on' : 'off');
-        btn.setAttribute('aria-checked', String(!wasOn));
-    }
+    if (btn) btn.setAttribute('aria-checked', String(!wasOn));
     localStorage.setItem('nudge-settings', JSON.stringify(saved));
     NudgeEngine.updateSettings(saved);
 }
