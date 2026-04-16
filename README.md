@@ -137,19 +137,31 @@ bean install --agent all                     # .agents/skills/ + .github/skills/
 
 ## How It Works
 
-The CLI ships as a [Copilot Agent Skill](https://agentskills.io). When installed, AI agents auto-discover taskbean and call `bean add` / `bean done` as they work — no prompting required.
+### The CLI — an agent skill
 
-The desktop app runs entirely on your device using [Microsoft Foundry Local](https://github.com/microsoft/foundry-local) for AI inference (NPU, GPU, or CPU). Features include:
+taskbean ships as an [Agent Skill](https://agentskills.io) that Copilot CLI, Claude Code, Codex, and OpenCode auto-discover. While an agent works, it calls `bean add` to log tasks and `bean done` to close them — no prompting from you required. 17 commands cover the full lifecycle: `add`, `start`, `done`, `list`, `edit`, `remove`, `remind`, `block`, `track`, `projects`, `report`, `export`, `serve`, and more. Every write goes straight to `~/.taskbean/taskbean.db`.
 
-- 💬 Natural language task management
-- ⏰ Smart reminders with Windows notifications
-- 🔄 Recurring tasks
-- 🧠 Multi-model support (Phi-4, Qwen, etc.)
+### The desktop app — local AI on your device
+
+The app is a single-page PWA served by a Python FastAPI backend (`agent/main.py`). All AI inference runs locally via [Microsoft Foundry Local](https://github.com/microsoft/foundry-local), which picks the best execution provider on your machine — NPU (VitisAI), GPU (MIGraphX/CUDA), or CPU — and loads models like Phi-4, Qwen, or Llama entirely on-device.
+
+Chat uses the [AG-UI protocol](https://github.com/ag-ui-protocol/ag-ui) over Server-Sent Events. Your message streams into the agent, the agent calls tools (`add_task`, `set_reminder`, `complete_task`, etc.), and state deltas stream back to the UI — so you see tasks appear as the model decides to create them.
+
+Features:
+
+- 💬 Natural language task management with multi-turn tool calling
+- ⏰ Smart reminders with native Windows toast notifications
+- 🔄 Recurring task templates
+- 🧠 In-app model switching (Phi-4, Qwen, Llama — any Foundry Local catalog model)
 - 🎤 Voice input
-- 📎 File extraction (meeting notes → tasks)
-- 🎨 4 themes (Dark, Light, Java Cream, High Contrast)
-- 🤓 Nerd mode with live telemetry
-- 📊 Multi-agent usage tracking — detects Copilot CLI, Claude Code, Codex, and OpenCode sessions on disk and attributes each task to the agent that created it. Only metadata and aggregate token counts are stored; message bodies never leave the agent's own logs. Toggle per-agent from **Settings → Agents**.
+- 📎 File extraction — paste meeting notes or drop documents; MCP + MarkItDown converts and chunks them into tasks
+- 🎨 4 coffee-themed palettes — Dark Roast, Latte, Espresso, Black Coffee
+- 🤓 **Nerd panel** — live OpenTelemetry trace stream with 4 tabs (Events, Metrics, Traces, Logs), plus a bundled [Jaeger v2](http://localhost:16686) UI for waterfall inspection
+- 📊 **Multi-agent usage tracking** — scans Copilot CLI, Claude Code, Codex, and OpenCode session logs on disk and attributes each task to the agent/session that created it. Only metadata and aggregate token counts are stored; prompts, tool outputs, and code blocks never leave the agent's own logs. Toggle per-agent from **Settings → Agents**.
+
+### The shared database
+
+The CLI and the app both point at `~/.taskbean/taskbean.db`. The CLI owns task writes; the Python backend owns agent-usage writes (`agent_sessions`, `agent_turns`, `agent_sources`). A scanner in the backend tails each agent's local log files forward-only (crash-safe, rotation-aware) and backfills `todos.agent` / `todos.agent_session_id` so every task has a traceable source.
 
 ## Storage
 
