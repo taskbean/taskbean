@@ -18,7 +18,6 @@ apscheduler
 
 # ── Windows notifications ─────────────────────────────────────────────────────
 winotify
-win10toast
 
 # ── MCP (MarkItDown file conversion) ─────────────────────────────────────────
 mcp
