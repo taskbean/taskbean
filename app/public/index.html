@@ -472,25 +472,29 @@ header {
 .settings-action-btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
 .settings-action-btn:hover i { color: #000; }
 
-/* Info-tip tooltip */
+/* Info-tip tooltip — positioned via JS to avoid overflow clipping */
 .info-tip {
   display: inline-flex; align-items: center; justify-content: center;
   width: 16px; height: 16px; border-radius: 50%; border: none; background: none;
   color: var(--muted); cursor: help; position: relative; flex-shrink: 0; padding: 0;
 }
 .info-tip:hover, .info-tip:focus-visible { color: var(--accent); }
-.info-tip .tip-text {
-  display: none; position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+.info-tip .tip-text { display: none; }
+/* Floating tooltip rendered at body level */
+.tip-float {
+  position: fixed; z-index: 9999; pointer-events: none;
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
   padding: 8px 12px; font-size: 11px; color: var(--text); font-weight: 400;
-  line-height: 1.5; width: max-content; max-width: 260px; z-index: 100;
-  box-shadow: 0 8px 24px rgba(0,0,0,.25); pointer-events: none; white-space: normal; text-align: left;
+  line-height: 1.5; width: max-content; max-width: 280px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.3); white-space: normal; text-align: left;
+  animation: tip-in .12s ease-out;
 }
-.info-tip .tip-text::after {
-  content: ''; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+@keyframes tip-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .tip-float { animation: none; } }
+.tip-float::before {
+  content: ''; position: absolute; bottom: 100%; left: 20px;
   border: 5px solid transparent; border-bottom-color: var(--border);
 }
-.info-tip:hover .tip-text, .info-tip:focus-visible .tip-text { display: block; }
 
 /* Theme swatch picker */
 .theme-swatches { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
@@ -7288,6 +7292,59 @@ function filterSettings(query) {
         switchSettingsTab([...tabMatches][0]);
     }
 }
+
+// ── Info-tip floating tooltip (avoids overflow clipping) ────────
+
+(function initInfoTips() {
+    let floatEl = null;
+    function show(tipBtn) {
+        const text = tipBtn.querySelector('.tip-text')?.textContent;
+        if (!text) return;
+        if (!floatEl) {
+            floatEl = document.createElement('div');
+            floatEl.className = 'tip-float';
+            document.body.appendChild(floatEl);
+        }
+        floatEl.textContent = text;
+        floatEl.style.display = 'block';
+        // Position below the trigger, clamped to viewport
+        const rect = tipBtn.getBoundingClientRect();
+        let top = rect.bottom + 8;
+        let left = rect.left - 10;
+        // Clamp right edge
+        const fw = floatEl.offsetWidth;
+        if (left + fw > window.innerWidth - 12) left = window.innerWidth - fw - 12;
+        if (left < 8) left = 8;
+        // If it would go below viewport, show above instead
+        const fh = floatEl.offsetHeight;
+        if (top + fh > window.innerHeight - 8) {
+            top = rect.top - fh - 8;
+            // Flip arrow to bottom
+            floatEl.style.setProperty('--tip-arrow', 'bottom');
+        }
+        floatEl.style.top = top + 'px';
+        floatEl.style.left = left + 'px';
+    }
+    function hide() {
+        if (floatEl) floatEl.style.display = 'none';
+    }
+    document.addEventListener('pointerenter', (e) => {
+        const tip = e.target.closest('.info-tip');
+        if (tip) show(tip);
+    }, true);
+    document.addEventListener('pointerleave', (e) => {
+        if (e.target.closest('.info-tip')) hide();
+    }, true);
+    document.addEventListener('focusin', (e) => {
+        const tip = e.target.closest('.info-tip');
+        if (tip) show(tip);
+    });
+    document.addEventListener('focusout', (e) => {
+        if (e.target.closest('.info-tip')) hide();
+    });
+    // Hide on scroll
+    document.querySelector('.settings-content')?.addEventListener('scroll', hide);
+})();
 
 // ── Theme swatch sync ───────────────────────────────────────────
 
