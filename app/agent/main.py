@@ -1417,6 +1417,7 @@ async def process_speech(request: Request) -> dict:
 
 @app.post("/api/test-notification")
 async def test_notification() -> dict:
+    send_notification("It works! 🎉", "Desktop notifications are ready.", force=True)
     return {
         "success": True,
         "notification": {
