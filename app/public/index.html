@@ -2236,7 +2236,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
                 Timezone
                 <button class="info-tip" tabindex="0" aria-label="Timezone info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Used for reminders, scheduling, and AI time references.</span></button>
               </label>
-              <select class="settings-select" id="settingsTimezone" data-requires="server" onchange="updateSettingsConfig('timezone', this.value)"></select>
+              <select class="settings-select" id="settingsTimezone" data-requires="server" onchange="setClockTimezone(this.value); updateSettingsConfig('timezone', this.value)"></select>
               <span class="save-dot"></span>
             </div>
             <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
@@ -7474,10 +7474,15 @@ function populateSettingsFromConfig(cfg) {
     const devSel = document.getElementById('settingsDevice');
     if (devSel && cfg.preferredDevice) devSel.value = cfg.preferredDevice;
 
-    // Timezone
+    // Timezone — sync to clock variable so the preview and main clock agree
     const tzSel = document.getElementById('settingsTimezone');
+    const effectiveTz = cfg.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (tzSel) {
-        populateTimezoneSelect(tzSel, cfg.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+        populateTimezoneSelect(tzSel, effectiveTz);
+    }
+    // Sync the clock's timezone variable if server has an explicit timezone set
+    if (cfg.timezone && typeof setClockTimezone === 'function') {
+        setClockTimezone(cfg.timezone);
     }
 
     // Run on startup
