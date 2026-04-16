@@ -42,7 +42,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -942,6 +942,35 @@ async def delete_todo(todo_id: str) -> dict:
     return {"success": True}
 
 
+@app.get("/api/todos/{todo_id}")
+async def todo_action(todo_id: str, action: str | None = None):
+    """Handle toast notification actions (Done/Snooze) via GET URL."""
+    todo = next((t for t in state_mod.todos if t["id"] == todo_id), None)
+    if not todo:
+        return HTMLResponse("<h2>❌ Task not found</h2><p>It may have been deleted.</p>", status_code=404)
+
+    if action == "complete":
+        todo["completed"] = True
+        return HTMLResponse(
+            "<h2>✅ Done!</h2>"
+            f"<p>Marked <strong>{todo['title']}</strong> as complete.</p>"
+            "<p style='color:gray;font-size:12px'>You can close this tab.</p>"
+        )
+    elif action == "snooze":
+        from datetime import datetime as dt, timedelta, timezone as tz
+        snooze_until = (dt.now(tz.utc) + timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
+        todo["reminder"] = True
+        todo["remindAt"] = snooze_until
+        todo["reminderFired"] = False
+        return HTMLResponse(
+            "<h2>⏰ Snoozed</h2>"
+            f"<p><strong>{todo['title']}</strong> will remind you again in 10 minutes.</p>"
+            "<p style='color:gray;font-size:12px'>You can close this tab.</p>"
+        )
+    else:
+        return JSONResponse(todo)
+
+
 # ── Projects (reads from CLI's SQLite DB) ─────────────────────────────────────
 
 
@@ -1417,6 +1446,7 @@ async def process_speech(request: Request) -> dict:
 
 @app.post("/api/test-notification")
 async def test_notification() -> dict:
+    send_notification("It works! 🎉", "Desktop notifications are ready.", force=True)
     return {
         "success": True,
         "notification": {

@@ -17,7 +17,7 @@ tiktoken
 apscheduler
 
 # ── Windows notifications ─────────────────────────────────────────────────────
-win10toast
+winotify
 
 # ── MCP (MarkItDown file conversion) ─────────────────────────────────────────
 mcp
