@@ -557,11 +557,11 @@ header {
   .settings-tab .tab-offline-dot { position: absolute; top: 4px; right: 4px; }
   .settings-content { padding: 12px 14px; }
   .settings-footer { flex-direction: column; text-align: center; }
-
-  /* Settings search filtered results note */
-  .settings-row.search-hidden { display: none; }
-  .settings-group.search-hidden { display: none; }
 }
+
+/* Search-hidden (must be outside media query to work on all viewports) */
+.settings-row.search-hidden { display: none; }
+.settings-group.search-hidden { display: none; }
 
 /* ═══════════════════════════════════════════════════════════════════
    LAYOUT: sidebar + chat
@@ -2147,37 +2147,37 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
     <div class="settings-layout">
       <!-- Sidebar Navigation -->
       <nav class="settings-sidebar" role="tablist" aria-label="Settings categories">
-        <button class="settings-tab active" role="tab" aria-selected="true" aria-controls="stgPanel-general" data-panel="general" onclick="switchSettingsTab('general')">
+        <button class="settings-tab active" role="tab" aria-selected="true" aria-controls="stgPanel-general" id="stgTab-general" data-panel="general" onclick="switchSettingsTab('general')">
           <i data-lucide="palette" class="icon-sm"></i>
           <span class="tab-label">General</span>
           <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
         </button>
-        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-ai" data-panel="ai" onclick="switchSettingsTab('ai')">
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-ai" id="stgTab-ai" data-panel="ai" onclick="switchSettingsTab('ai')">
           <i data-lucide="cpu" class="icon-sm"></i>
           <span class="tab-label">AI</span>
           <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
         </button>
-        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-inference" data-panel="inference" onclick="switchSettingsTab('inference')">
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-inference" id="stgTab-inference" data-panel="inference" onclick="switchSettingsTab('inference')">
           <i data-lucide="brain" class="icon-sm"></i>
           <span class="tab-label">Inference</span>
           <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
         </button>
-        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-voice" data-panel="voice" onclick="switchSettingsTab('voice')">
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-voice" id="stgTab-voice" data-panel="voice" onclick="switchSettingsTab('voice')">
           <i data-lucide="mic" class="icon-sm"></i>
           <span class="tab-label">Voice</span>
           <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
         </button>
-        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-schedule" data-panel="schedule" onclick="switchSettingsTab('schedule')">
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-schedule" id="stgTab-schedule" data-panel="schedule" onclick="switchSettingsTab('schedule')">
           <i data-lucide="clock" class="icon-sm"></i>
           <span class="tab-label">Schedule</span>
           <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
         </button>
-        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-notifications" data-panel="notifications" onclick="switchSettingsTab('notifications')">
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-notifications" id="stgTab-notifications" data-panel="notifications" onclick="switchSettingsTab('notifications')">
           <i data-lucide="bell" class="icon-sm"></i>
           <span class="tab-label">Notifications</span>
           <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
         </button>
-        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-system" data-panel="system" onclick="switchSettingsTab('system')">
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-system" id="stgTab-system" data-panel="system" onclick="switchSettingsTab('system')">
           <i data-lucide="monitor" class="icon-sm"></i>
           <span class="tab-label">System</span>
           <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
@@ -2889,8 +2889,6 @@ function setTheme(t, isManual = false) {
         if (isManual) localStorage.setItem(STORAGE_KEYS.theme, t);
         const sel = document.getElementById('themeSelect');
         if (sel) sel.value = t;
-        const settingsTheme = document.getElementById('settingsTheme');
-        if (settingsTheme) settingsTheme.value = t;
         // Sync theme swatches in new settings modal
         if (typeof syncThemeSwatches === 'function') syncThemeSwatches();
         const meta = THEME_META[t] || THEME_META['dark-roast'];
@@ -7345,11 +7343,15 @@ async function loadSettingsConfig() {
             el.disabled = true;
             el.title = 'Server offline';
         });
-        // Mark tabs with offline controls
+        // Mark tabs with offline controls (check both selects and toggles)
         document.querySelectorAll('.settings-sidebar .settings-tab').forEach(tab => {
             const panel = document.getElementById(`stgPanel-${tab.dataset.panel}`);
-            if (panel?.querySelector('[data-requires="server"]')) tab.classList.add('has-offline');
+            if (panel?.querySelector('[data-requires="server"], .stg-toggle[data-store="server"]')) tab.classList.add('has-offline');
         });
+        // Hydrate schedule UI from local cache when offline
+        const cachedSchedule = readCachedJson('taskbean-schedule', {});
+        if (cachedSchedule.dnd) populateScheduleBlock('dnd', cachedSchedule.dnd);
+        if (cachedSchedule.reminderHours) populateScheduleBlock('reminderHours', cachedSchedule.reminderHours);
         showSettingsStatus('⚠ Server offline — some settings unavailable', true);
     }
     if (configFetched) {
