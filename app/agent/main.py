@@ -9,6 +9,9 @@ Endpoints mirror the original Node.js server:
   DELETE /api/todos/:id
   GET  /api/projects
   GET  /api/projects/tasks
+  POST /api/projects/track
+  GET  /api/fs/roots
+  GET  /api/fs/browse
   GET  /api/copilot-usage
   GET  /api/task-detail/:id
   GET  /api/task-detail/:id/export
@@ -1115,6 +1118,226 @@ async def get_project_tasks(project: str = "") -> list:
     mem_ids = {t["id"] for t in mem_todos}
     combined = mem_todos + [t for t in db_todos if t["id"] not in mem_ids]
     return combined
+
+
+# ── Filesystem browser (project picker) ──────────────────────────────────────
+# Three endpoints power the click-based "Add project" picker:
+#   GET  /api/fs/roots    quick-starts rail (home, drives, recent paths, …)
+#   GET  /api/fs/browse   list one directory's subfolders with project signals
+#   POST /api/projects/track   shells to `bean track` to register the folder
+#
+# These are localhost-only (see CORSMiddleware above). We still apply defensive
+# path hygiene: reject ".." segments and never follow symlinks when deciding
+# whether a child is a directory.
+
+_FS_BROWSE_TIMEOUT_S = 5.0
+
+
+def _safe_resolve_fs_path(raw: str) -> Path:
+    """Normalize a user-supplied path; reject relative-traversal segments."""
+    if not raw or not isinstance(raw, str):
+        raise HTTPException(status_code=400, detail="path is required")
+    p = Path(raw).expanduser()
+    if any(part == ".." for part in p.parts):
+        raise HTTPException(status_code=400, detail="path may not contain '..' segments")
+    if not p.is_absolute():
+        raise HTTPException(status_code=400, detail="path must be absolute")
+    return p.absolute()
+
+
+# Characters that are dangerous to pass to cmd.exe (Windows invokes .cmd/.bat
+# shims via cmd.exe regardless of shell=False). We reject these in any string
+# that will reach `bean track` as an argument — folder/project names with
+# these characters are extremely rare and can be renamed before tracking.
+_SHELL_METACHARS_RE = re.compile(r'[&|<>^"%\r\n\x00]')
+
+
+def _reject_shell_metachars(value: str, label: str) -> None:
+    if _SHELL_METACHARS_RE.search(value or ""):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label} contains disallowed characters (& | < > ^ \" % or newline)",
+        )
+
+
+def _scan_directory(p: Path, show_hidden: bool) -> list[dict]:
+    """Synchronous scandir wrapped by fs_browse under asyncio.to_thread + timeout.
+
+    Includes the preceding exists/is_dir checks inside the same thread so that
+    dead network shares / disconnected mapped drives are timed out cleanly by
+    the caller's `asyncio.wait_for(...)` wrapper.
+    """
+    if not p.exists():
+        raise FileNotFoundError(str(p))
+    if not p.is_dir():
+        raise NotADirectoryError(str(p))
+    entries: list[dict] = []
+    with os.scandir(p) as it:
+        for e in it:
+            if not show_hidden and e.name.startswith(".") and e.name != ".git":
+                continue
+            try:
+                if not e.is_dir(follow_symlinks=False):
+                    continue
+            except OSError:
+                continue
+            child = Path(e.path)
+            entries.append({
+                "name": e.name,
+                "path": str(child),
+                "isDir": True,
+                "isGitRepo": (child / ".git").exists(),
+                "hasTaskbeanJson": (child / ".taskbean.json").exists(),
+                "hasPackageJson": (child / "package.json").exists(),
+                "hasPyProject": (child / "pyproject.toml").exists(),
+            })
+    entries.sort(key=lambda e: e["name"].lower())
+    return entries
+
+
+@app.get("/api/fs/roots")
+async def fs_roots() -> dict:
+    """Quick-start locations for the project picker rail."""
+    home = Path.home()
+    result: dict[str, Any] = {"home": str(home), "drives": [], "suggested": [], "recents": []}
+
+    # Windows: enumerate logical drives via kernel32.GetLogicalDrives().
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            import string
+            bitmask = ctypes.windll.kernel32.GetLogicalDrives()  # type: ignore[attr-defined]
+            result["drives"] = [
+                f"{letter}:\\"
+                for i, letter in enumerate(string.ascii_uppercase)
+                if bitmask & (1 << i)
+            ]
+        except Exception:
+            result["drives"] = ["C:\\"]
+        # Add \\wsl$ if present so users can track WSL projects from Windows.
+        wsl = Path(r"\\wsl$")
+        if wsl.exists():
+            result["drives"].append(r"\\wsl$")
+
+    for name in ("personal", "code", "repos", "src", "projects", "work", "Documents"):
+        candidate = home / name
+        try:
+            if candidate.is_dir():
+                result["suggested"].append(str(candidate))
+        except OSError:
+            continue
+
+    # Recents: most recently tracked project paths from SQLite.
+    conn = _get_taskbean_db()
+    if conn:
+        try:
+            rows = conn.execute(
+                "SELECT name, path FROM projects WHERE tracked = 1 "
+                "ORDER BY created_at DESC LIMIT 5"
+            ).fetchall()
+            result["recents"] = [{"name": r["name"], "path": r["path"]} for r in rows]
+        finally:
+            conn.close()
+
+    return result
+
+
+@app.get("/api/fs/browse")
+async def fs_browse(path: str, show_hidden: bool = False) -> dict:
+    """List subdirectories of `path`. Files are omitted — projects are always folders.
+
+    exists/is_dir stat calls happen inside the worker thread so that dead
+    UNC shares or disconnected mapped drives are cut off by the timeout.
+    """
+    p = _safe_resolve_fs_path(path)
+    try:
+        entries = await asyncio.wait_for(
+            asyncio.to_thread(_scan_directory, p, show_hidden),
+            timeout=_FS_BROWSE_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="listing this folder took too long (network share?)")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"not found: {p}")
+    except NotADirectoryError:
+        raise HTTPException(status_code=400, detail=f"not a directory: {p}")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="permission denied")
+
+    parent_str: str | None = None
+    try:
+        parent = p.parent
+        if parent != p:
+            parent_str = str(parent)
+    except Exception:
+        parent_str = None
+
+    return {"path": str(p), "parent": parent_str, "entries": entries}
+
+
+class TrackProjectBody(BaseModel):
+    path: str
+    name: str | None = None
+
+
+@app.post("/api/projects/track")
+async def track_project(body: TrackProjectBody) -> dict:
+    """Register a folder as a taskbean project by shelling out to `bean track`.
+
+    We shell out (instead of duplicating the track logic in Python) so the CLI
+    remains the single source of truth for the five side effects:
+      1. write `.taskbean.json`
+      2. upsert `projects` row
+      3. mark `tracked=1`
+      4. install agent skill
+      5. set `skill_installed=1`
+    """
+    p = _safe_resolve_fs_path(body.path)
+    _reject_shell_metachars(str(p), "path")
+    if body.name:
+        _reject_shell_metachars(body.name, "name")
+    # Validate target is a directory (timeboxed so dead shares don't hang).
+    def _is_dir() -> bool:
+        return p.is_dir()
+    try:
+        is_dir = await asyncio.wait_for(asyncio.to_thread(_is_dir), timeout=_FS_BROWSE_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="checking folder took too long")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="permission denied")
+    if not is_dir:
+        raise HTTPException(status_code=400, detail="path is not a directory")
+
+    bean_cmd = "bean.cmd" if sys.platform == "win32" else "bean"
+    args: list[str] = [bean_cmd, "track", "--path", str(p), "--json"]
+    if body.name:
+        args.extend(["--name", body.name])
+
+    def _run() -> subprocess.CompletedProcess:
+        return subprocess.run(args, capture_output=True, text=True, timeout=60)
+
+    try:
+        result = await asyncio.to_thread(_run)
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail=f"'{bean_cmd}' not found on PATH — is taskbean installed globally?")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="bean track timed out")
+
+    if result.returncode != 0:
+        msg = (result.stderr or result.stdout or "bean track failed").strip().splitlines()
+        raise HTTPException(status_code=500, detail=msg[-1] if msg else "bean track failed")
+
+    # Parse the last non-empty stdout line as JSON (track emits one object on --json).
+    stdout_lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    if not stdout_lines:
+        raise HTTPException(status_code=500, detail="bean track returned no output")
+    try:
+        parsed = json.loads(stdout_lines[-1])
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="bean track returned non-JSON output")
+    if not isinstance(parsed, dict) or "path" not in parsed:
+        raise HTTPException(status_code=500, detail="bean track returned unexpected JSON shape")
+    return parsed
 
 
 # ── Multi-agent Usage Stats ──────────────────────────────────────────────────
@@ -2282,4 +2505,4 @@ async def _foundry_complete(system: str, user: str) -> str:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=2326, reload=False)
+    uvicorn.run("main:app", host="127.0.0.1", port=2326, reload=False)
