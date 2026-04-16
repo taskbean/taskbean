@@ -84,6 +84,36 @@ export function getDb() {
     )
   `);
 
+  // One-time de-dupe of phantom doubled-segment project rows (e.g. from an
+  // older bug where `bean add --project <name>` resolved <name> relative to
+  // cwd and wrote `<cwd>/<name>` as project_path). Any row whose path is
+  // exactly `<other_row.path>/<name>` with the same name is a phantom —
+  // migrate its todos to the canonical path and delete the phantom row.
+  try {
+    const dupes = _db.prepare(`
+      SELECT p.id AS phantom_id, p.path AS phantom_path, p.name AS name,
+             c.path AS canonical_path,
+             c.tracked AS canonical_tracked, p.tracked AS phantom_tracked,
+             c.skill_installed AS canonical_skill, p.skill_installed AS phantom_skill
+        FROM projects p
+        JOIN projects c ON c.name = p.name AND c.id != p.id
+       WHERE p.path = c.path || '/' || p.name OR p.path = c.path || '\\' || p.name
+    `).all();
+    for (const d of dupes) {
+      _db.prepare('UPDATE todos SET project_path = ? WHERE project_path = ?')
+        .run(d.canonical_path, d.phantom_path);
+      // Preserve tracked / skill_installed flags — union of both rows.
+      _db.prepare(
+        'UPDATE projects SET tracked = ?, skill_installed = ? WHERE id = ?'
+      ).run(
+        d.canonical_tracked || d.phantom_tracked ? 1 : 0,
+        d.canonical_skill || d.phantom_skill ? 1 : 0,
+        _db.prepare('SELECT id FROM projects WHERE path = ?').get(d.canonical_path).id
+      );
+      _db.prepare('DELETE FROM projects WHERE id = ?').run(d.phantom_id);
+    }
+  } catch { /* safe no-op on first run / schema mismatch */ }
+
   // ── Multi-agent usage tracking ──────────────────────────────────────────
   // One row per detected session across all coding agents (Copilot, Claude
   // Code, Codex, OpenCode). Written by the Python ingester and read by both

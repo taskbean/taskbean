@@ -1406,15 +1406,20 @@ header {
 /* ═══════════════════════════════════════════════════════════════════
    STATUS BAR
    ═══════════════════════════════════════════════════════════════════ */
-/* Status bar — activity left, info chips right */
+/* Status bar — activity left, info chips right.
+   Layout: flex (not grid) so edges can shrink independently. Container queries
+   drive progressive collapse without relying on viewport size (matters now that
+   the left panel is resizable). */
 .status-bar {
   padding: 3px 14px; font-size: 10px; color: var(--muted);
   background: var(--surface); border-top: 1px solid var(--border);
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; flex-shrink: 0; gap: 8px;
+  display: flex; align-items: center; flex-shrink: 0; gap: 8px;
+  container-type: inline-size; container-name: status-bar;
 }
-.status-left  { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; justify-self: start; }
-.status-center { display: flex; align-items: center; gap: 5px; justify-self: center; }
-.status-right-group { display: flex; align-items: center; gap: 5px; justify-self: end; }
+.status-left  { display: flex; align-items: center; gap: 5px; min-width: 0; flex: 1 1 0; }
+.status-center { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; justify-content: center; }
+.status-right-group { display: flex; align-items: center; gap: 5px; min-width: 0; flex: 1 1 0; justify-content: flex-end; }
+.status-bar.is-hidden { display: none; }
 .nerd-toggle-chip { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--muted); padding: 2px 8px; border-radius: 4px; transition: all .15s; cursor: pointer; }
 .nerd-toggle-chip:hover { color: var(--text); background: var(--surface2); }
 .nerd-toggle-chip.active { color: var(--accent); font-weight: 600; background: var(--accent-soft); }
@@ -1465,6 +1470,51 @@ header {
   to   { transform: rotate(360deg); }
 }
 .spin { animation: icon-spin 1s linear infinite; }
+
+/* Reduced-motion: kill the infinite pulses + spinners. */
+@media (prefers-reduced-motion: reduce) {
+  .status-act-dot.busy,
+  .status-svc-dot.warn { animation: none; }
+  .spin { animation: none; }
+}
+
+/* ───── Status-bar responsive collapse (container queries) ─────
+   Level 1 ≤850cqi: labels fade to icon-only.
+   Level 2 ≤640cqi: drop hardware chips + model chip.
+   Level 3 ≤480cqi: drop theme chip + nerd toggle, center the clock.
+   Level 4 ≤380cqi: tighten padding, bare minimum (Foundry dot + clock). */
+.sb-label { display: inline; }
+@container status-bar (max-width: 850px) {
+  .sb-label { display: none; }
+  /* Model chip still has a chevron — hide it so icon-only reads clean. */
+  #chipModel .icon-sm[data-lucide="chevron-down"] { display: none; }
+}
+@container status-bar (max-width: 640px) {
+  #chipCpu, #chipRam, #chipGpu, #chipNpu, #chipModel { display: none; }
+  /* collapse separators whose neighbors are gone */
+  .status-left .status-chip-sep { display: none; }
+}
+@container status-bar (max-width: 480px) {
+  #themeChip, #statusLeftArea,
+  .status-right-group .status-chip-sep { display: none; }
+  .status-left { flex: 0 0 auto; }
+  .status-right-group { flex: 0 0 auto; }
+  .status-center { flex: 1 1 auto; }
+}
+@container status-bar (max-width: 380px) {
+  .status-left, .status-right-group { gap: 3px; }
+  .status-center { gap: 3px; }
+}
+
+/* Status-bar quick-toggle popover — reuses .clock-popover grammar, but positioned
+   at the cursor via the native Popover API (not anchored to a specific element). */
+.sb-pop { position: fixed; bottom: auto; left: auto; transform: none; margin: 0; width: 220px; }
+.sb-pop .clock-popover-section { cursor: pointer; }
+.sb-pop .clock-popover-section:hover { background: var(--surface2); }
+.settings-sb-items { display: flex; flex-direction: column; gap: 2px; background: var(--surface2); border-radius: 6px; padding: 4px; }
+.settings-sb-items .sb-item-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+.settings-sb-items .sb-item-row:hover { background: var(--surface); }
+.settings-sb-items .sb-item-row > span { display: flex; align-items: center; gap: 6px; color: var(--text); }
 
 /* file input hidden */
 #fileInput { display: none; }
@@ -2534,6 +2584,20 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
               <input type="text" class="settings-mono-input" id="settingsClockCustom" placeholder="e.g. YYYY-MM-DD HH:mm:ss A Z" value="" oninput="setClockCustomFormat(this.value)">
             </div>
           </div>
+
+          <div class="settings-group" data-search-terms="status bar chips hardware clock theme nerd hide show">
+            <div class="settings-group-title">Status Bar</div>
+            <div class="settings-row">
+              <label for="settingsStatusBarVisible">Show status bar</label>
+              <button class="settings-toggle on" id="settingsStatusBarVisible" onclick="setStatusBarVisible(this.classList.contains('off'))" role="switch" aria-checked="true"></button>
+            </div>
+            <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:4px">
+              <label style="margin-bottom:4px">Items
+                <button class="info-tip" tabindex="0" aria-label="Status bar items info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Toggle which chips appear in the status bar. Right-click the bar for quick access.</span></button>
+              </label>
+              <div id="settingsStatusBarItems" class="settings-sb-items"><!-- populated by renderStatusBarSettings() --></div>
+            </div>
+          </div>
         </div>
 
         <!-- ═══ AI ═══ -->
@@ -2846,41 +2910,41 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
   </div>
 </div>
 
-<div class="status-bar">
+<div class="status-bar" role="status" aria-label="Application status bar" id="statusBar">
   <!-- LEFT: service, hardware, model -->
   <div class="status-left">
-    <span class="status-chip" id="chipFoundry">
-      <span class="status-svc-dot" id="foundryDot"></span>
-      <span id="foundryLabel">Foundry</span>
+    <span class="status-chip" id="chipFoundry" aria-label="Foundry service status">
+      <span class="status-svc-dot" id="foundryDot" aria-hidden="true"></span>
+      <span id="foundryLabel" class="sb-label">Foundry</span>
     </span>
-    <span class="status-chip-sep"></span>
-    <span class="status-chip hw-chip" id="chipCpu" title="CPU usage">
-      <i data-lucide="cpu" class="icon-sm"></i>
+    <span class="status-chip-sep" aria-hidden="true"></span>
+    <span class="status-chip hw-chip" id="chipCpu" title="CPU usage" aria-label="CPU usage">
+      <i data-lucide="cpu" class="icon-sm" aria-hidden="true"></i>
       <span id="cpuValue" class="hw-value">—</span>
     </span>
-    <span class="status-chip hw-chip" id="chipRam" title="Memory usage">
-      <i data-lucide="memory-stick" class="icon-sm"></i>
+    <span class="status-chip hw-chip" id="chipRam" title="Memory usage" aria-label="Memory usage">
+      <i data-lucide="memory-stick" class="icon-sm" aria-hidden="true"></i>
       <span id="ramValue" class="hw-value">—</span>
     </span>
-    <span class="status-chip hw-chip" id="chipGpu" title="GPU" style="display:none">
-      <i data-lucide="monitor" class="icon-sm"></i>
+    <span class="status-chip hw-chip" id="chipGpu" title="GPU" aria-label="GPU usage" style="display:none">
+      <i data-lucide="monitor" class="icon-sm" aria-hidden="true"></i>
       <span id="gpuValue" class="hw-value">—</span>
     </span>
-    <span class="status-chip hw-chip" id="chipNpu" title="NPU" style="display:none">
-      <i data-lucide="zap" class="icon-sm"></i>
+    <span class="status-chip hw-chip" id="chipNpu" title="NPU" aria-label="NPU usage" style="display:none">
+      <i data-lucide="zap" class="icon-sm" aria-hidden="true"></i>
       <span id="npuValue" class="hw-value">—</span>
     </span>
-    <span class="status-chip-sep"></span>
-    <span class="status-chip status-chip-interactive" id="chipModel" onclick="openModelPicker()" title="Switch model">
-      <i data-lucide="cpu" class="icon-sm" id="modelDeviceIcon"></i>
-      <span id="modelLabel"></span>
-      <i data-lucide="chevron-down" class="icon-sm" style="opacity:.4;width:10px;height:10px"></i>
+    <span class="status-chip-sep" aria-hidden="true"></span>
+    <span class="status-chip status-chip-interactive" id="chipModel" onclick="openModelPicker()" title="Switch model" role="button" tabindex="0" aria-label="Switch model" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openModelPicker();}">
+      <i data-lucide="cpu" class="icon-sm" id="modelDeviceIcon" aria-hidden="true"></i>
+      <span id="modelLabel" class="sb-label"></span>
+      <i data-lucide="chevron-down" class="icon-sm" style="opacity:.4;width:10px;height:10px" aria-hidden="true"></i>
     </span>
   </div>
   <!-- CENTER: clock -->
   <div class="status-center" style="position:relative">
-    <span class="status-chip status-chip-interactive" id="chipClock" onclick="toggleClockPopover()">
-      <i data-lucide="clock-3" class="icon-sm"></i>
+    <span class="status-chip status-chip-interactive" id="chipClock" onclick="toggleClockPopover()" role="button" tabindex="0" aria-label="Clock settings" aria-expanded="false" aria-haspopup="dialog" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleClockPopover();}">
+      <i data-lucide="clock-3" class="icon-sm" aria-hidden="true"></i>
       <span id="clockValue">—</span>
     </span>
     <!-- Clock popover (native Popover API) -->
@@ -2914,19 +2978,32 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
   </div>
   <!-- RIGHT: theme + stats for nerds -->
   <div class="status-right-group">
-    <span id="themeChip" class="status-chip status-chip-interactive" title="Change theme" style="position:relative">
-      <i id="themeIconEl" data-lucide="moon" class="icon-sm"></i>
-      <span id="themeLabel">Dark Roast</span>
-      <select class="status-chip-select" onchange="setTheme(this.value, true)" id="themeSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;font-size:10px;border:none;background:transparent">
+    <span id="themeChip" class="status-chip status-chip-interactive" title="Change theme" aria-label="Change theme" style="position:relative">
+      <i id="themeIconEl" data-lucide="moon" class="icon-sm" aria-hidden="true"></i>
+      <span id="themeLabel" class="sb-label">Dark Roast</span>
+      <select class="status-chip-select" onchange="setTheme(this.value, true)" id="themeSelect" aria-label="Theme" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;font-size:10px;border:none;background:transparent">
         <option value="dark-roast">🌙 Dark Roast</option>
         <option value="latte">☀️ Latte</option>
         <option value="espresso">☕ Espresso</option>
         <option value="black-coffee">◑ Black Coffee</option>
       </select>
     </span>
-    <span class="status-chip-sep"></span>
-    <span class="nerd-toggle-chip" id="statusLeftArea" onclick="toggleNerdMode()" title="Toggle telemetry (Ctrl+Shift+T)"><i data-lucide="activity" class="icon-sm"></i> Stats for nerds</span>
+    <span class="status-chip-sep" aria-hidden="true"></span>
+    <span class="nerd-toggle-chip" id="statusLeftArea" onclick="toggleNerdMode()" title="Toggle telemetry (Ctrl+Shift+T)" role="button" tabindex="0" aria-label="Toggle telemetry panel" aria-pressed="false" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleNerdMode();}"><i data-lucide="activity" class="icon-sm" aria-hidden="true"></i> <span class="sb-label">Stats for nerds</span></span>
   </div>
+</div>
+
+<!-- Status-bar quick-toggle popover (right-click on the status bar) -->
+<div class="clock-popover sb-pop" id="statusBarPopover" popover role="menu" aria-label="Status bar items">
+  <div class="clock-popover-section" style="border-bottom:1px solid var(--border);padding-bottom:6px">
+    <label class="clock-popover-label"><i data-lucide="layout-panel-top" class="icon-sm" style="opacity:.5" aria-hidden="true"></i> Show status bar</label>
+    <button class="settings-toggle on" id="statusBarVisibleToggle" onclick="setStatusBarVisible(this.classList.contains('off'))" role="switch" aria-checked="true" style="transform:scale(.8)"></button>
+  </div>
+  <div id="statusBarItemsList"><!-- populated by renderStatusBarPopover() --></div>
+  <div class="clock-popover-divider"></div>
+  <button class="clock-popover-custom-btn" onclick="resetStatusBarPrefs()">
+    <i data-lucide="rotate-ccw" class="icon-sm" aria-hidden="true"></i> Reset to defaults
+  </button>
 </div>
 
 <script>
@@ -6822,6 +6899,8 @@ function toggleClockPopover() {
 
 function openClockPopover() {
     _clockPopoverOpen = true;
+    const clockChip = document.getElementById('chipClock');
+    if (clockChip) clockChip.setAttribute('aria-expanded', 'true');
     requestAnimationFrame(() => {
         const pop = document.getElementById('clockPopover');
         if (pop.showPopover) pop.showPopover(); else pop.classList.add('open');
@@ -6864,6 +6943,8 @@ function openClockPopover() {
 
 function closeClockPopover() {
     _clockPopoverOpen = false;
+    const clockChip = document.getElementById('chipClock');
+    if (clockChip) clockChip.setAttribute('aria-expanded', 'false');
     const pop = document.getElementById('clockPopover');
     if (pop.hidePopover) try { pop.hidePopover(); } catch {} else pop.classList.remove('open');
 }
@@ -6947,7 +7028,7 @@ function updateStatusBarHealth(ev) {
         const modelEl = document.getElementById('modelLabel');
         const chipEl  = document.getElementById('chipModel');
         if (modelEl) modelEl.textContent = ev.modelAlias || ev.model;
-        if (chipEl)  { chipEl.style.display = 'flex'; }
+        if (chipEl)  { chipEl.style.removeProperty('display'); }
         _updateModelDeviceIcon(ev.model || '');
     }
 }
@@ -7076,13 +7157,149 @@ function toggleNerdMode(forceOpen) {
     panel.classList.toggle('open', nerdModeOpen);
     // Visual feedback on status bar area
     const statusArea = document.getElementById('statusLeftArea');
-    if (statusArea) statusArea.classList.toggle('active', nerdModeOpen);
+    if (statusArea) {
+        statusArea.classList.toggle('active', nerdModeOpen);
+        statusArea.setAttribute('aria-pressed', String(nerdModeOpen));
+    }
     if (nerdModeOpen) {
         connectTelemetryStream();
     } else {
         disconnectTelemetryStream();
     }
     lucide.createIcons();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Status Bar preferences
+// ═══════════════════════════════════════════════════════════════════
+const SB_DEFAULT_ITEMS = ['foundry','cpu','ram','model','clock','theme','nerd'];
+const SB_ITEM_META = {
+  foundry: { sel: '#chipFoundry', label: 'Foundry service', icon: 'activity' },
+  cpu:     { sel: '#chipCpu',     label: 'CPU',             icon: 'cpu' },
+  ram:     { sel: '#chipRam',     label: 'Memory',          icon: 'memory-stick' },
+  model:   { sel: '#chipModel',   label: 'Model',           icon: 'layers' },
+  clock:   { sel: '#chipClock',   label: 'Clock',           icon: 'clock-3' },
+  theme:   { sel: '#themeChip',   label: 'Theme',           icon: 'palette' },
+  nerd:    { sel: '#statusLeftArea', label: 'Stats for nerds', icon: 'gauge' },
+};
+function sbReadItems() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('taskbean-statusbar-items') || 'null');
+    if (Array.isArray(raw) && raw.every(k => SB_ITEM_META[k])) return raw;
+  } catch {}
+  return SB_DEFAULT_ITEMS.slice();
+}
+function sbReadVisible() {
+  return localStorage.getItem('taskbean-statusbar-visible') !== 'false';
+}
+function applyStatusBarPrefs() {
+  const bar = document.getElementById('statusBar');
+  if (!bar) return;
+  const visible = sbReadVisible();
+  bar.classList.toggle('is-hidden', !visible);
+
+  const enabled = new Set(sbReadItems());
+  for (const [key, meta] of Object.entries(SB_ITEM_META)) {
+    const el = document.querySelector(meta.sel);
+    if (!el) continue;
+    // Honor hardware-detection hides (GPU/NPU) by only unhiding what was enabled.
+    if (!enabled.has(key)) el.style.display = 'none';
+    else if (el.style.display === 'none' && !['chipGpu','chipNpu'].includes(el.id)) {
+      el.style.removeProperty('display');
+    }
+  }
+  // Collapse separators whose neighbors are both hidden/missing.
+  bar.querySelectorAll('.status-chip-sep').forEach(sep => {
+    let prev = sep.previousElementSibling, next = sep.nextElementSibling;
+    const hiddenOrGone = n => !n || n.style.display === 'none';
+    sep.style.display = (hiddenOrGone(prev) || hiddenOrGone(next)) ? 'none' : '';
+  });
+  // Sync both UI toggles.
+  const vTog1 = document.getElementById('statusBarVisibleToggle');
+  const vTog2 = document.getElementById('settingsStatusBarVisible');
+  [vTog1, vTog2].forEach(t => {
+    if (!t) return;
+    t.classList.toggle('on', visible);
+    t.classList.toggle('off', !visible);
+    t.setAttribute('aria-checked', String(visible));
+  });
+  renderStatusBarPopover();
+  renderStatusBarSettings();
+}
+function setStatusBarVisible(visible) {
+  localStorage.setItem('taskbean-statusbar-visible', String(!!visible));
+  applyStatusBarPrefs();
+}
+function toggleStatusBarItem(key) {
+  const items = sbReadItems();
+  const i = items.indexOf(key);
+  if (i >= 0) items.splice(i, 1);
+  else items.push(key);
+  localStorage.setItem('taskbean-statusbar-items', JSON.stringify(items));
+  applyStatusBarPrefs();
+}
+function resetStatusBarPrefs() {
+  localStorage.removeItem('taskbean-statusbar-items');
+  localStorage.removeItem('taskbean-statusbar-visible');
+  applyStatusBarPrefs();
+}
+function _sbItemCheckboxHTML(key, enabled, variant) {
+  const meta = SB_ITEM_META[key];
+  if (variant === 'popover') {
+    return `<div class="clock-popover-section" role="menuitemcheckbox" aria-checked="${enabled}" tabindex="0" onclick="toggleStatusBarItem('${key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleStatusBarItem('${key}');}">
+      <label class="clock-popover-label" style="pointer-events:none"><i data-lucide="${meta.icon}" class="icon-sm" style="opacity:.5" aria-hidden="true"></i> ${meta.label}</label>
+      <i data-lucide="${enabled ? 'check' : ''}" class="icon-sm" aria-hidden="true" style="opacity:${enabled ? '.9' : '0'}"></i>
+    </div>`;
+  }
+  // settings variant
+  return `<div class="sb-item-row">
+    <span><i data-lucide="${meta.icon}" class="icon-sm" aria-hidden="true" style="opacity:.6"></i> ${meta.label}</span>
+    <button class="settings-toggle ${enabled ? 'on' : 'off'}" role="switch" aria-checked="${enabled}" aria-label="${meta.label}" onclick="toggleStatusBarItem('${key}')" style="transform:scale(.8)"></button>
+  </div>`;
+}
+function renderStatusBarPopover() {
+  const host = document.getElementById('statusBarItemsList');
+  if (!host) return;
+  const enabled = new Set(sbReadItems());
+  host.innerHTML = SB_DEFAULT_ITEMS.map(k => _sbItemCheckboxHTML(k, enabled.has(k), 'popover')).join('');
+  if (window.lucide) lucide.createIcons();
+}
+function renderStatusBarSettings() {
+  const host = document.getElementById('settingsStatusBarItems');
+  if (!host) return;
+  const enabled = new Set(sbReadItems());
+  host.innerHTML = SB_DEFAULT_ITEMS.map(k => _sbItemCheckboxHTML(k, enabled.has(k), 'settings')).join('');
+  if (window.lucide) lucide.createIcons();
+}
+function openStatusBarPopover(x, y) {
+  const pop = document.getElementById('statusBarPopover');
+  if (!pop) return;
+  renderStatusBarPopover();
+  // Show first so we can measure, then position at cursor bounded to viewport.
+  try { pop.showPopover(); } catch { pop.classList.add('open'); pop.style.display = 'block'; }
+  requestAnimationFrame(() => {
+    const r = pop.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const left = Math.min(Math.max(8, x), vw - r.width - 8);
+    const top  = Math.min(Math.max(8, y - r.height), vh - r.height - 8);
+    pop.style.left = left + 'px';
+    pop.style.top  = top + 'px';
+  });
+}
+function initStatusBarPrefs() {
+  const bar = document.getElementById('statusBar');
+  if (!bar) return;
+  bar.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    openStatusBarPopover(e.clientX, e.clientY);
+  });
+  applyStatusBarPrefs();
+}
+// Defer init until DOM is definitely ready.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initStatusBarPrefs);
+} else {
+  initStatusBarPrefs();
 }
 
 function switchNerdTab(tab) {

@@ -1,17 +1,35 @@
 import { execSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
-import { resolve, basename, dirname } from 'path';
+import { resolve, basename, dirname, isAbsolute, sep } from 'path';
 
 /**
  * Resolve the project identity for the current working directory.
  * Priority: --project flag > .taskbean.json > git root > cwd
+ *
+ * --project accepts either a path (absolute or relative) OR a bare name.
+ * A bare name (no path separator) is NOT joined with cwd — that would
+ * create phantom nested paths like C:\dev\taskbean\taskbean. Instead we
+ * fall through to the normal git-root/.taskbean.json detection and just
+ * override the resulting name.
  */
 export function resolveProject(projectOverride) {
   if (projectOverride) {
-    const absPath = resolve(projectOverride);
-    return { path: absPath, name: basename(absPath) };
+    const looksLikePath = isAbsolute(projectOverride)
+      || projectOverride.includes('/')
+      || projectOverride.includes('\\')
+      || projectOverride.startsWith('.');
+    if (looksLikePath) {
+      const absPath = resolve(projectOverride);
+      return { path: absPath, name: basename(absPath) };
+    }
+    // Bare name: keep the current directory as the canonical path, rename it.
+    const detected = _detectProjectIdentity();
+    return { path: detected.path, name: projectOverride };
   }
+  return _detectProjectIdentity();
+}
 
+function _detectProjectIdentity() {
   // Walk up looking for .taskbean.json
   let dir = process.cwd();
   while (true) {

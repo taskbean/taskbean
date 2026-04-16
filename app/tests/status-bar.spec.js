@@ -95,4 +95,121 @@ test.describe('taskbean — Status Bar', () => {
     });
   });
 
+  test.describe('Status Bar — Responsive collapse (container queries)', () => {
+    test('labels are visible at wide width and hidden at narrow width', async ({ page }) => {
+      await page.setViewportSize({ width: 1400, height: 800 });
+      await page.goto('/');
+      await page.waitForTimeout(1500);
+      // Wide: Foundry label visible.
+      await expect(page.locator('#foundryLabel')).toBeVisible();
+
+      // Narrow: Foundry label hidden (via container query, still in DOM).
+      await page.setViewportSize({ width: 700, height: 800 });
+      await page.waitForTimeout(300);
+      const foundryDisplay = await page.locator('#foundryLabel').evaluate(el => getComputedStyle(el).display);
+      expect(foundryDisplay).toBe('none');
+    });
+
+    test('hardware + model chips drop below 640px container width', async ({ page }) => {
+      await page.setViewportSize({ width: 600, height: 800 });
+      await page.goto('/');
+      await page.waitForTimeout(1500);
+      for (const id of ['#chipCpu', '#chipRam', '#chipModel']) {
+        const d = await page.locator(id).evaluate(el => getComputedStyle(el).display);
+        expect(d, `${id} should be hidden at 600px`).toBe('none');
+      }
+    });
+
+    test('theme + nerd drop below 480px; clock survives', async ({ page }) => {
+      await page.setViewportSize({ width: 440, height: 800 });
+      await page.goto('/');
+      await page.waitForTimeout(1500);
+      const themeDisp = await page.locator('#themeChip').evaluate(el => getComputedStyle(el).display);
+      const nerdDisp  = await page.locator('#statusLeftArea').evaluate(el => getComputedStyle(el).display);
+      expect(themeDisp).toBe('none');
+      expect(nerdDisp).toBe('none');
+      await expect(page.locator('#chipClock')).toBeVisible();
+    });
+  });
+
+  test.describe('Status Bar — Accessibility contract', () => {
+    test('status bar has role=status and aria-label', async ({ page }) => {
+      await page.goto('/');
+      await expect(page.locator('#statusBar')).toHaveAttribute('role', 'status');
+      await expect(page.locator('#statusBar')).toHaveAttribute('aria-label', /status bar/i);
+    });
+
+    test('clock chip aria-expanded toggles with popover', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForTimeout(1000);
+      const clock = page.locator('#chipClock');
+      await expect(clock).toHaveAttribute('aria-expanded', 'false');
+      await clock.click();
+      await page.waitForTimeout(200);
+      await expect(clock).toHaveAttribute('aria-expanded', 'true');
+      // Close it via direct fn to avoid outside-click timing flake.
+      await page.evaluate(() => window.closeClockPopover?.());
+      await page.waitForTimeout(150);
+      await expect(clock).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    test('nerd toggle aria-pressed toggles with nerd mode', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForTimeout(1000);
+      const nerd = page.locator('#statusLeftArea');
+      const before = await nerd.getAttribute('aria-pressed');
+      await page.evaluate(() => window.toggleNerdMode?.());
+      await page.waitForTimeout(150);
+      const after = await nerd.getAttribute('aria-pressed');
+      expect(before).not.toBe(after);
+      // Restore.
+      await page.evaluate(() => window.toggleNerdMode?.());
+    });
+  });
+
+  test.describe('Status Bar — Preferences', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.addInitScript(() => {
+        localStorage.removeItem('taskbean-statusbar-visible');
+        localStorage.removeItem('taskbean-statusbar-items');
+      });
+    });
+
+    test('toggling CPU off persists across reload', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForTimeout(1000);
+      await page.evaluate(() => window.toggleStatusBarItem?.('cpu'));
+      await page.waitForTimeout(150);
+      let cpuDisp = await page.locator('#chipCpu').evaluate(el => getComputedStyle(el).display);
+      expect(cpuDisp).toBe('none');
+      await page.reload();
+      await page.waitForTimeout(1500);
+      cpuDisp = await page.locator('#chipCpu').evaluate(el => getComputedStyle(el).display);
+      expect(cpuDisp).toBe('none');
+    });
+
+    test('master hide removes the bar and persists', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForTimeout(1000);
+      await page.evaluate(() => window.setStatusBarVisible?.(false));
+      await expect(page.locator('#statusBar')).toBeHidden();
+      await page.reload();
+      await page.waitForTimeout(1500);
+      await expect(page.locator('#statusBar')).toBeHidden();
+      // Restore for subsequent tests.
+      await page.evaluate(() => window.resetStatusBarPrefs?.());
+    });
+
+    test('right-click opens quick-toggle popover', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForTimeout(1000);
+      await page.locator('#statusBar').click({ button: 'right' });
+      await page.waitForTimeout(200);
+      await expect(page.locator('#statusBarPopover')).toBeVisible();
+      // Contains a row per default item.
+      const rowCount = await page.locator('#statusBarItemsList [role="menuitemcheckbox"]').count();
+      expect(rowCount).toBe(7);
+    });
+  });
+
 });

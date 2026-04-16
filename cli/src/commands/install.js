@@ -3,6 +3,136 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 
+// Absolute path (forward-slash form) to ~/.taskbean. TOML accepts forward
+// slashes on Windows so we avoid backslash escaping.
+function taskbeanDirForToml(home = homedir()) {
+  return home.replace(/\\/g, '/') + '/.taskbean';
+}
+
+// Idempotently ensure ~/.codex/config.toml allows Codex's workspace-write
+// sandbox to write to ~/.taskbean (so `bean add`/`bean done` can update the DB
+// without --dangerously-bypass-approvals-and-sandbox).
+//
+// Codex reads [sandbox_workspace_write] writable_roots = [ ... ]. We preserve
+// the rest of the file and only edit that one section.
+//
+// Implementation notes (per rubber-duck review):
+//  - All edits are scoped to the span of the [sandbox_workspace_write] table.
+//    We compute the section's start/end byte offsets first, then only look at
+//    / rewrite that slice. Another section's writable_roots is untouched.
+//  - Idempotency is decided by parsing the writable_roots array inside the
+//    section (after stripping comments) — not by a global string search —
+//    so comments containing the path don't false-positive.
+//  - Line endings: detected from the existing file and preserved.
+export function ensureCodexSandboxConfig(home = homedir()) {
+  const configDir = join(home, '.codex');
+  const configPath = join(configDir, 'config.toml');
+  const wantPath = taskbeanDirForToml(home);
+  const wantEntry = `"${wantPath}"`;
+
+  let content = '';
+  if (existsSync(configPath)) {
+    content = readFileSync(configPath, 'utf-8');
+  } else {
+    mkdirSync(configDir, { recursive: true });
+  }
+
+  // Preserve dominant newline style (CRLF vs LF).
+  const nl = /\r\n/.test(content) && !/(^|[^\r])\n/.test(content) ? '\r\n' : '\n';
+
+  // Build a comment-stripped copy that is character-for-character aligned
+  // with the original (so regex .index values from the analysis string can be
+  // used to splice into the original). We walk the string once, replacing
+  // only `#...` comment spans with spaces. Newlines and every other char are
+  // preserved verbatim — CRLF included.
+  const stripComments = (s) => {
+    const out = s.split('');
+    let inStr = false;
+    let quote = '';
+    let inComment = false;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (c === '\n' || c === '\r') {
+        inComment = false; inStr = false; continue;
+      }
+      if (inComment) { out[i] = ' '; continue; }
+      if (inStr) {
+        if (c === '\\' && i + 1 < s.length) { i++; continue; }
+        if (c === quote) inStr = false;
+      } else if (c === '"' || c === "'") {
+        inStr = true; quote = c;
+      } else if (c === '#') {
+        inComment = true; out[i] = ' ';
+      }
+    }
+    return out.join('');
+  };
+
+  const analysis = stripComments(content);
+
+  // Find [sandbox_workspace_write] header. Only top-level table (start of line,
+  // no leading whitespace that would indicate a subtable under another context).
+  const headerRe = /^[ \t]*\[sandbox_workspace_write\][ \t]*$/m;
+  const headerMatch = analysis.match(headerRe);
+
+  let updated;
+  if (headerMatch) {
+    // Compute section span in the ORIGINAL content. The comment-stripped and
+    // original strings stay aligned character-for-character because we only
+    // blanked characters within lines, never inserted/removed newlines.
+    const sectionStart = headerMatch.index + headerMatch[0].length;
+    const rest = analysis.slice(sectionStart);
+    // Section ends at next top-level table header or EOF.
+    const nextHeaderRe = /\r?\n[ \t]*\[[^\]]+\][ \t]*(?=\r?\n|$)/;
+    const nextHeader = rest.match(nextHeaderRe);
+    const sectionEnd = nextHeader ? sectionStart + nextHeader.index : content.length;
+
+    const sectionBody = content.slice(sectionStart, sectionEnd);
+    const sectionAnalysis = analysis.slice(sectionStart, sectionEnd);
+
+    // Look for writable_roots within the section (single-line array only;
+    // multi-line arrays fall through to replace-whole-array logic via regex
+    // across the section span).
+    const rootsRe = /^([ \t]*writable_roots[ \t]*=[ \t]*)\[([\s\S]*?)\]/m;
+    const rootsInSection = sectionAnalysis.match(rootsRe);
+
+    if (rootsInSection) {
+      // Extract current entries from the analysis copy (no comments).
+      const innerAnalysis = rootsInSection[2];
+      const existingEntries = innerAnalysis
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      // Idempotency check: is our quoted path already one of the entries?
+      if (existingEntries.includes(wantEntry)) {
+        return { status: 'already_configured', path: configPath };
+      }
+
+      // Rewrite just this array inside the section.
+      const newSectionBody = sectionBody.replace(rootsRe, (_m, prefix, inner) => {
+        const trimmed = inner.trim();
+        const sep = trimmed.length === 0 ? '' : (trimmed.endsWith(',') ? ' ' : ', ');
+        return `${prefix}[${trimmed}${sep}${wantEntry}]`;
+      });
+      updated = content.slice(0, sectionStart) + newSectionBody + content.slice(sectionEnd);
+    } else {
+      // Section exists without writable_roots — insert the key right after
+      // the header line.
+      const insert = `${nl}writable_roots = [${wantEntry}]`;
+      updated = content.slice(0, sectionStart) + insert + content.slice(sectionStart);
+    }
+  } else {
+    // No section — append a fresh one with blank-line separation.
+    const sep = content.length === 0 || content.endsWith('\n') || content.endsWith('\r\n') ? '' : nl;
+    const pad = content.length === 0 ? '' : nl;
+    updated = `${content}${sep}${pad}[sandbox_workspace_write]${nl}writable_roots = [${wantEntry}]${nl}`;
+  }
+
+  writeFileSync(configPath, updated);
+  return { status: 'configured', path: configPath };
+}
+
 // SKILL.md content — the canonical source of truth.
 // Uses concatenation to avoid template literal backtick escaping issues.
 const SKILL_MD = [
@@ -78,11 +208,27 @@ export function installCommand(opts) {
   const base = isGlobal ? homedir() : process.cwd();
 
   // Determine which skill directories to install into.
-  // Default (no --agent flag): .agents/skills/ only (cross-client interop per Agent Skills spec).
-  // --agent all: installs to all known agent-specific paths.
-  // --agent <name>: installs to that agent's specific path.
+  //
+  // Default (no --agent flag): .agents/skills/ only — the cross-client interop
+  // location from the open Agent Skills spec. Copilot CLI, OpenCode, and
+  // OpenAI Codex all scan this path.
+  //
+  // --agent claude: adds .claude/skills/ (Claude Code is the only agent that
+  // does NOT read .agents/skills/).
+  //
+  // --agent copilot: adds .github/skills/ (legacy Copilot discovery path) in
+  // addition to .agents/skills/.
+  //
+  // --agent codex / --agent opencode: same as default — .agents/skills/. Per
+  // Codex docs (developers.openai.com/codex/skills), Codex reads only from
+  // .agents/skills (REPO/USER), /etc/codex/skills (ADMIN), and SYSTEM bundled.
+  // It does NOT scan ~/.codex/skills for user skills (that path is reserved
+  // for OpenAI-bundled .system skills).
+  //
+  // --agent all: union of everything above.
   const targets = [];
-  if (!agent || agent === 'copilot') {
+  // Everyone except --agent claude benefits from .agents/skills/.
+  if (!agent || agent === 'copilot' || agent === 'codex' || agent === 'opencode' || agent === 'all') {
     targets.push(join(base, '.agents', 'skills', 'taskbean'));
   }
   if (agent === 'copilot' || agent === 'all') {
@@ -90,15 +236,6 @@ export function installCommand(opts) {
   }
   if (agent === 'claude' || agent === 'all') {
     targets.push(join(base, '.claude', 'skills', 'taskbean'));
-  }
-  if (agent === 'codex' || agent === 'all') {
-    targets.push(join(base, '.codex', 'skills', 'taskbean'));
-  }
-  if (agent === 'opencode') {
-    targets.push(join(base, '.agents', 'skills', 'taskbean'));
-  }
-  if (agent === 'all') {
-    targets.push(join(base, '.agents', 'skills', 'taskbean'));
   }
   const uniqueTargets = [...new Set(targets)];
 
@@ -114,11 +251,34 @@ export function installCommand(opts) {
     results.push({ status: force && existsSync(targetFile) ? 'updated' : 'installed', path: targetFile });
   }
 
+  // Optional: configure Codex sandbox to allow ~/.taskbean writes. Only
+  // meaningful alongside --agent codex or --agent all. If --codex-sandbox was
+  // passed with the wrong (or missing) --agent, surface that loudly instead of
+  // silently no-op'ing.
+  if (opts.codexSandbox) {
+    if (agent === 'codex' || agent === 'all') {
+      results.push(ensureCodexSandboxConfig());
+    } else {
+      const msg = `--codex-sandbox requires --agent codex or --agent all (got ${agent ? `--agent ${agent}` : 'no --agent flag'})`;
+      if (opts.json) {
+        console.error(JSON.stringify({ error: msg }));
+      } else {
+        console.error(`❌ ${msg}`);
+      }
+      process.exitCode = 2;
+      // Fall through and still print any skill-install results below.
+    }
+  }
+
   if (opts.json) {
     console.log(JSON.stringify(results.length === 1 ? results[0] : results));
   } else {
     for (const r of results) {
-      const icon = r.status === 'already_installed' ? '✅' : r.status === 'updated' ? '🔄' : '📋';
+      const icon =
+        r.status === 'already_installed' || r.status === 'already_configured' ? '✅'
+        : r.status === 'updated' ? '🔄'
+        : r.status === 'configured' ? '🔧'
+        : '📋';
       console.log(`${icon} ${r.status}: ${r.path}`);
     }
   }

@@ -120,16 +120,18 @@ taskbean/
 taskbean ships as an [Agent Skill](https://agentskills.io). Install the skill, and your coding agent auto-discovers it — calling `bean add` / `bean done` as it works.
 
 ```bash
-bean install              # install for all agents in current project
-bean install --global     # install for all agents across all projects
-bean install --agent claude   # install for a specific agent only
+bean install              # install to .agents/skills/ (discovered by Copilot CLI, OpenCode, Codex)
+bean install --global     # same, but into ~/ so every project sees it
+bean install --agent claude                  # also install to .claude/skills/ (Claude Code)
+bean install --agent codex --codex-sandbox   # Codex + whitelist ~/.taskbean in ~/.codex/config.toml
+bean install --agent all                     # .agents/skills/ + .github/skills/ + .claude/skills/
 ```
 
 | Agent | Skill Discovery | Status | Notes |
 |-------|----------------|--------|-------|
 | **GitHub Copilot CLI** | `.agents/skills/` | ✅ Verified | Full E2E: discovers skill, calls `bean add`/`bean done` |
 | **OpenCode** | `.agents/skills/` | ✅ Verified | Full E2E: discovers skill, calls `bean add`/`bean done` |
-| **OpenAI Codex** | `.agents/skills/` | ⚠️ Discovery works | Reads SKILL.md, calls `bean add` — but sandbox blocks DB writes. Add `~/.taskbean` to sandbox permissions |
+| **OpenAI Codex** | `.agents/skills/` | ✅ Verified | Full E2E: discovers skill, calls `bean add`/`bean done`. Codex's sandbox may block direct edits to project source; use `bean install --agent codex --codex-sandbox` to also whitelist `~/.taskbean` in `~/.codex/config.toml` |
 | **Claude Code** | `.claude/skills/` | ✅ Verified | Needs `.claude/skills/` (does not scan `.agents/skills/`). `bean install` handles this |
 | **Any Agent Skills-compatible agent** | `.agents/skills/` | ✅ Expected | Follows the [Agent Skills spec](https://agentskills.io) |
 
