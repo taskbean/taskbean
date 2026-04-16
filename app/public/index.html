@@ -603,8 +603,94 @@ header {
    ═══════════════════════════════════════════════════════════════════ */
 .app-shell { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .main { flex: 1; display: flex; overflow: hidden; min-height: 0; }
-.left-panel { width: 280px; min-width: 240px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--surface); flex-shrink: 0; min-height: 0; }
+
+/* Left panel sizing tokens — user > tab-context > base.
+   - base default 280px for Tasks/Recurring
+   - Projects gets a wider default via clamp() since it carries richer content
+   - min/max form the drag clamp range for .panel-resizer */
+:root {
+  --left-panel-w: 280px;
+  --left-panel-w-projects: clamp(320px, 34vw, 480px);
+  --left-panel-w-min: 240px;
+  --left-panel-w-max: 560px;
+}
+
+.left-panel {
+  width: var(--left-panel-w);
+  min-width: var(--left-panel-w-min);
+  max-width: var(--left-panel-w-max);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  flex-shrink: 0; min-height: 0;
+  transition: width .26s cubic-bezier(.4,0,.2,1);
+}
+/* When Projects is the active tab, widen the panel to fit its richer content. */
+.app-shell:has(#tabContentProjects.active) .left-panel {
+  width: var(--left-panel-w-projects);
+}
 .right-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+/* ── Panel resizer (between left-panel and right-panel) ──
+   4px resting column, accent stripe on hover/focus with a three-dot
+   grip so it reads as grabbable without drawing attention when idle. */
+.panel-resizer {
+  width: 4px; flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  transition: background .15s;
+  align-self: stretch;
+}
+.panel-resizer::before {
+  content: '';
+  position: absolute; inset: 50% 50% auto auto;
+  transform: translate(50%, -50%);
+  width: 2px; height: 24px;
+  border-radius: 2px;
+  background-image: radial-gradient(circle at 1px 4px, currentColor 0 1px, transparent 1.5px),
+                    radial-gradient(circle at 1px 12px, currentColor 0 1px, transparent 1.5px),
+                    radial-gradient(circle at 1px 20px, currentColor 0 1px, transparent 1.5px);
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity .15s;
+  pointer-events: none;
+}
+.panel-resizer:hover, .panel-resizer:focus-visible, .panel-resizer.dragging { background: var(--accent-soft); }
+.panel-resizer:hover::before, .panel-resizer:focus-visible::before, .panel-resizer.dragging::before { opacity: 1; color: var(--accent); }
+.panel-resizer:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (pointer: coarse) { .panel-resizer { width: 8px; } }
+
+/* Live width indicator during drag (DM Mono to match existing developer-tool voice). */
+.panel-resizer-indicator {
+  position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+  padding: 3px 7px; border-radius: 4px;
+  background: var(--surface2); color: var(--accent);
+  font: 600 10px 'DM Mono', monospace; letter-spacing: .5px;
+  border: 1px solid var(--border);
+  pointer-events: none;
+  opacity: 0; transition: opacity .2s;
+  white-space: nowrap; z-index: 50;
+}
+.panel-resizer-indicator.visible { opacity: 1; }
+
+/* Collapsed-rail width donation: on wide viewports, the ~232px saved by
+   collapsing the nav rail goes to the left panel instead of the chat. */
+@media (min-width: 1100px) {
+  .nav-rail:not(.expanded) ~ .app-shell .left-panel {
+    width: calc(var(--left-panel-w) + 232px);
+    max-width: var(--left-panel-w-max);
+  }
+  .nav-rail:not(.expanded) ~ .app-shell:has(#tabContentProjects.active) .left-panel {
+    width: calc(var(--left-panel-w-projects) + 232px);
+    max-width: var(--left-panel-w-max);
+  }
+}
+
+/* Motion reduction: disable width transitions when requested. */
+@media (prefers-reduced-motion: reduce) {
+  .nav-rail, .left-panel, .panel-resizer, .panel-resizer::before, .panel-resizer-indicator { transition: none; }
+}
 
 .panel-header { padding: 10px 14px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; height: 44px; }
 .panel-header .count { color: var(--muted); font-weight: 400; font-size: 11px; }
@@ -2037,7 +2123,12 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
     <img src="/icons/taskbean-wordmark.png" alt="taskbean" class="nav-rail-wordmark wordmark-dark" style="height:22px">
   </div>
   <div class="nav-rail-items">
-    <button class="nav-item active" id="tabTodos" onclick="switchSidebarTab('todos')">
+    <button class="nav-item active" id="tabProjects" onclick="switchSidebarTab('projects')">
+      <i data-lucide="folder-kanban"></i>
+      <span class="nav-label">Projects</span>
+      <span class="nav-badge" id="projectCount">0</span>
+    </button>
+    <button class="nav-item" id="tabTodos" onclick="switchSidebarTab('todos')">
       <i data-lucide="check-square"></i>
       <span class="nav-label">Tasks</span>
       <span class="nav-badge" id="todoCount">0</span>
@@ -2046,11 +2137,6 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       <i data-lucide="timer"></i>
       <span class="nav-label">Recurring</span>
       <span class="nav-badge" id="recurringCount">0</span>
-    </button>
-    <button class="nav-item" id="tabProjects" onclick="switchSidebarTab('projects')">
-      <i data-lucide="folder-kanban"></i>
-      <span class="nav-label">Projects</span>
-      <span class="nav-badge" id="projectCount">0</span>
     </button>
   </div>
   <div class="nav-rail-bottom">
@@ -2104,7 +2190,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
   <!-- Left: Tabbed sidebar (My Todos / Recurring) -->
   <div class="left-panel">
     <div class="panel-header" id="leftPanelHeader">
-      <span class="panel-header-title" id="leftPanelTitle">Tasks</span>
+      <span class="panel-header-title" id="leftPanelTitle">Projects</span>
       <span class="panel-header-actions">
         <button class="panel-header-btn" onclick="handleSidebarEye()" id="panelEyeBtn" title="Toggle completed">
           <i data-lucide="eye" id="panelEyeIcon"></i>
@@ -2115,7 +2201,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       </span>
     </div>
     <!-- Tab: My Todos -->
-    <div class="sidebar-tab-content active" id="tabContentTodos">
+    <div class="sidebar-tab-content" id="tabContentTodos">
       <div class="todo-list-container">
       <div id="todoList">
         <div class="empty-state">
@@ -2135,7 +2221,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       </div>
     </div>
     <!-- Tab: Projects (agent-tracked projects) -->
-    <div class="sidebar-tab-content" id="tabContentProjects">
+    <div class="sidebar-tab-content active" id="tabContentProjects">
       <!-- Persistent "Track a project" help card. Auto-opens when the list is empty. -->
       <section class="track-tip" id="trackTip" data-open="false" aria-labelledby="trackTipTitle">
         <button type="button" class="track-tip-header" id="trackTipToggle" aria-expanded="false" aria-controls="trackTipBody" onclick="toggleTrackTip()">
@@ -2177,6 +2263,11 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       <div id="trackTipStatus" class="sr-only" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"></div>
       <div id="projectList" class="project-list-container"></div>
     </div>
+  </div>
+
+  <!-- Resize handle between left panel and chat. Keyboard-operable. -->
+  <div class="panel-resizer" id="panelResizer" role="separator" aria-label="Resize projects panel" aria-orientation="vertical" aria-valuemin="240" aria-valuemax="560" tabindex="0">
+    <div class="panel-resizer-indicator" id="panelResizerIndicator"></div>
   </div>
 
   <!-- Right: Chat feed + unified input -->
@@ -5240,7 +5331,7 @@ function renderRecurringActiveList(builtIn, active, activeSet) {
 }
 
 // ── Sidebar tab switching ──
-let _activeSidebarTab = 'todos';
+let _activeSidebarTab = 'projects';
 let _showDisabledReminders = false;
 let _showCompletedTodos = true; // default: show completed
 let _expandedTodoId = null; // currently expanded todo ID (persists across re-renders)
@@ -5285,6 +5376,100 @@ function toggleNavRail() {
         }
     }
 })();
+
+// ── Left-panel resizer ──
+// Persists user's chosen width across reloads. Inline width wins over the
+// tab-context default: user > context > base.
+(function initPanelResizer() {
+    const handle = document.getElementById('panelResizer');
+    const indicator = document.getElementById('panelResizerIndicator');
+    const panel = document.querySelector('.left-panel');
+    if (!handle || !panel) return;
+
+    const MIN = 240, MAX = 560, STEP = 16, KEY = 'taskbean.leftPanelW';
+
+    const clamp = (n) => Math.max(MIN, Math.min(MAX, Math.round(n)));
+    const applyWidth = (w) => {
+        const c = clamp(w);
+        panel.style.width = c + 'px';
+        handle.setAttribute('aria-valuenow', String(c));
+        if (indicator) indicator.textContent = c + ' px';
+        return c;
+    };
+
+    const saved = parseInt(localStorage.getItem(KEY) || '', 10);
+    if (!isNaN(saved)) applyWidth(saved);
+
+    let dragging = false;
+    let indicatorTimer = null;
+    const showIndicator = () => {
+        if (!indicator) return;
+        indicator.classList.add('visible');
+        clearTimeout(indicatorTimer);
+    };
+    const hideIndicatorSoon = () => {
+        if (!indicator) return;
+        clearTimeout(indicatorTimer);
+        indicatorTimer = setTimeout(() => indicator.classList.remove('visible'), 400);
+    };
+
+    handle.addEventListener('pointerdown', (e) => {
+        dragging = true;
+        handle.classList.add('dragging');
+        handle.setPointerCapture(e.pointerId);
+        // Disable width transitions during drag for 1:1 pointer feel.
+        panel.style.transition = 'none';
+        showIndicator();
+        e.preventDefault();
+    });
+    handle.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const rect = panel.getBoundingClientRect();
+        applyWidth(e.clientX - rect.left);
+    });
+    const endDrag = (e) => {
+        if (!dragging) return;
+        dragging = false;
+        handle.classList.remove('dragging');
+        try { handle.releasePointerCapture(e.pointerId); } catch {}
+        panel.style.transition = '';
+        const w = parseInt(panel.style.width, 10);
+        if (!isNaN(w)) localStorage.setItem(KEY, String(w));
+        hideIndicatorSoon();
+    };
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+
+    handle.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        // Use the current committed width (inline style or bounding rect) — not the
+        // animating width — so successive presses compound deterministically.
+        const inline = parseInt(panel.style.width || '', 10);
+        const current = !isNaN(inline) ? inline : panel.getBoundingClientRect().width;
+        const delta = e.key === 'ArrowRight' ? STEP : -STEP;
+        const w = applyWidth(current + delta);
+        localStorage.setItem(KEY, String(w));
+        showIndicator();
+        hideIndicatorSoon();
+        e.preventDefault();
+    });
+    handle.addEventListener('focus', showIndicator);
+    handle.addEventListener('blur', hideIndicatorSoon);
+
+    // Seed aria-valuenow + indicator from live width without pinning an inline
+    // width (would override :has() tab-context default).
+    const seedW = clamp(panel.getBoundingClientRect().width || 280);
+    handle.setAttribute('aria-valuenow', String(seedW));
+    if (indicator) indicator.textContent = seedW + ' px';
+})();
+
+// Sync header title/buttons with the default-active tab (Projects) on first load.
+(function syncInitialSidebarHeader() {
+    if (typeof updateSidebarActionButtons === 'function') {
+        try { updateSidebarActionButtons(); } catch {}
+    }
+})();
+
 function updateSidebarActionButtons() {
     const eyeBtn = document.getElementById('panelEyeBtn');
     const eyeIcon = document.getElementById('panelEyeIcon');
