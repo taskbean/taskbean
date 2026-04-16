@@ -77,6 +77,7 @@ program
   .option('--global', 'Install globally (~/)')
   .option('--agent <agent>', 'Target agent: copilot, claude, codex, opencode, all')
   .option('--force', 'Overwrite existing SKILL.md (upgrade)')
+  .option('--codex-sandbox', 'Also configure ~/.codex/config.toml to allow Codex to write to ~/.taskbean (use with --agent codex or --agent all)')
   .option('--json', 'Output as JSON')
   .action(installCommand);
 
