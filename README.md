@@ -1,15 +1,5 @@
 <div align="center">
 
-<a href="https://github.com/taskbean/taskbean">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://socialify.git.ci/taskbean/taskbean/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Plus&pulls=1&stargazers=1&theme=Dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://socialify.git.ci/taskbean/taskbean/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Plus&pulls=1&stargazers=1&theme=Light" />
-    <img alt="taskbean" src="https://socialify.git.ci/taskbean/taskbean/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Plus&pulls=1&stargazers=1&theme=Auto" width="720" />
-  </picture>
-</a>
-
-<br />
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="app/public/icons/taskbean-wordmark-light.png" />
   <source media="(prefers-color-scheme: light)" srcset="app/public/icons/taskbean-wordmark.png" />
@@ -161,16 +151,6 @@ All data stays local in a single SQLite database:
 ```
 
 Both the CLI and the desktop app read and write to this file. No cloud sync, no accounts, no telemetry.
-
-## Star History
-
-<a href="https://www.star-history.com/#taskbean/taskbean&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=taskbean/taskbean&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=taskbean/taskbean&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=taskbean/taskbean&type=Date" width="600" />
- </picture>
-</a>
 
 ## License
 
