@@ -172,41 +172,49 @@ header {
 }
 
 /* Offline startup overlay — shown when PWA launches without a reachable server */
-.offline-overlay { display: none; position: fixed; inset: 0; z-index: 2000; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; gap: 0; text-align: center; padding: 24px; transition: opacity .3s; }
+.offline-overlay { display: none; position: fixed; inset: 0; z-index: 2000; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; gap: 0; text-align: center; padding: 24px; transition: opacity .3s; overscroll-behavior: contain; }
 .offline-overlay.show { display: flex; }
 .offline-overlay.fade-out { opacity: 0; }
-.offline-overlay .overlay-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px 28px 24px; max-width: 440px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px; box-shadow: 0 8px 32px rgba(0,0,0,.12); }
+.offline-overlay .overlay-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px 28px 24px; max-width: 420px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px; box-shadow: 0 8px 32px rgba(0,0,0,.12); }
 .offline-overlay .overlay-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 .offline-overlay .overlay-icon.disconnected { background: var(--orange-soft); color: var(--orange); }
-.offline-overlay .overlay-icon.connecting { background: transparent; animation: none; }
+.offline-overlay .overlay-icon.connecting { background: transparent; }
 .offline-overlay .overlay-icon.connecting img.bean-spin { width: 40px; height: 40px; animation: spin 1.5s linear infinite; }
 .offline-overlay .overlay-icon.connected { background: var(--green-soft); color: var(--green); }
-.offline-overlay h2 { font-size: 17px; font-weight: 700; margin: 0; }
+.offline-overlay h2 { font-size: 17px; font-weight: 700; margin: 0; text-wrap: balance; }
 .offline-overlay .overlay-subtitle { font-size: 13px; color: var(--muted); max-width: 360px; line-height: 1.5; margin: 0; }
 .offline-overlay .overlay-actions { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; margin-top: 4px; }
 .offline-overlay .btn-row { display: flex; gap: 8px; align-items: center; justify-content: center; }
-.offline-overlay .start-btn { background: var(--green); color: #000; border: none; padding: 10px 24px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: filter .15s; }
+.offline-overlay .start-btn { background: var(--accent); color: #fff; border: none; padding: 10px 24px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: filter .15s, opacity .15s; }
 .offline-overlay .start-btn:hover { filter: brightness(1.1); }
-.offline-overlay .retry-btn { background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all .15s; }
-.offline-overlay .retry-btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+.offline-overlay .start-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.offline-overlay .retry-btn { background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background .15s, color .15s, border-color .15s; }
+.offline-overlay .retry-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.offline-overlay .retry-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .offline-overlay .retry-btn:disabled { opacity: .6; cursor: wait; }
-.offline-overlay .retry-spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,.2); border-top-color: #000; border-radius: 50%; animation: spin .6s linear infinite; }
-.offline-overlay .cmd-row { display: flex; align-items: center; gap: 8px; }
-.offline-overlay code { background: var(--surface2); padding: 8px 14px; border-radius: 8px; font-size: 12px; border: 1px solid var(--border); display: inline-block; user-select: all; font-family: 'Cascadia Code','Fira Code',monospace; }
-.offline-overlay .copy-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); padding: 6px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all .15s; }
-.offline-overlay .copy-btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+.offline-overlay .retry-spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,.2); border-top-color: currentColor; border-radius: 50%; animation: spin .6s linear infinite; }
+.offline-overlay .cmd-hint { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.offline-overlay .cmd-hint code { background: var(--surface2); padding: 4px 10px; border-radius: 6px; font-size: 11px; border: 1px solid var(--border); font-family: 'DM Mono','Cascadia Code',monospace; user-select: all; }
+.offline-overlay .cmd-hint button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px; display: flex; transition: color .15s; }
+.offline-overlay .cmd-hint button:hover { color: var(--accent); }
+.offline-overlay .cmd-hint button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.offline-overlay .cmd-hint button i { width: 12px; height: 12px; }
 .offline-overlay .overlay-divider { width: 100%; height: 1px; background: var(--border); margin: 4px 0; }
 .offline-overlay .auto-retry-status { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .offline-overlay .auto-retry-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--orange); animation: pulse 1.5s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 @keyframes spin { to { transform: rotate(360deg); } }
-.offline-overlay .skip-link { font-size: 11px; color: var(--muted); cursor: pointer; text-decoration: underline; }
-.offline-overlay .skip-link:hover { color: var(--text); }
-.offline-overlay .tip { font-size: 10px; color: var(--muted); max-width: 360px; line-height: 1.4; }
+.offline-overlay .skip-btn { font-size: 11px; color: var(--muted); cursor: pointer; text-decoration: underline; background: none; border: none; font-family: inherit; padding: 4px 8px; border-radius: 4px; transition: color .15s; }
+.offline-overlay .skip-btn:hover { color: var(--text); }
+.offline-overlay .skip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .offline-overlay .overlay-footer { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 8px; }
-.offline-overlay .first-run-steps { text-align: left; width: 100%; padding: 0; margin: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.offline-overlay .first-run-steps li { font-size: 12px; color: var(--text); display: flex; align-items: flex-start; gap: 8px; line-height: 1.4; }
-.offline-overlay .step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #000; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.offline-overlay .tip { font-size: 10px; color: var(--muted); max-width: 360px; line-height: 1.4; display: flex; align-items: flex-start; gap: 5px; }
+.offline-overlay .tip i { width: 12px; height: 12px; flex-shrink: 0; margin-top: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  .offline-overlay .bean-spin { animation: none !important; }
+  .offline-overlay .auto-retry-dot { animation: none !important; }
+  .offline-overlay .retry-spinner { animation: none !important; }
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    MODEL PICKER
@@ -1277,7 +1285,9 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 
 <div id="offlineBanner" class="connection-banner" role="status">
   <i data-lucide="wifi-off" class="icon-sm"></i>
-  Offline mode — showing last synced data. Commands, uploads, and live AI actions need the local server.
+  Offline mode — showing last synced data.
+  <span id="offlineQueueBadge" style="display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px"></span>
+  <button onclick="retryFromBanner()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:inherit;padding:1px 8px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;margin-left:auto;flex-shrink:0">Reconnect</button>
 </div>
 
 <div class="app-row">
@@ -1327,43 +1337,32 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 
 <div id="offlineOverlay" class="offline-overlay">
   <div class="overlay-card">
-    <img src="/icons/taskbean-logo.png" alt="taskbean" style="height:48px;margin-bottom:8px;">
-    <div class="overlay-icon disconnected" id="overlayIcon">
-      <i data-lucide="wifi-off" style="width:24px;height:24px"></i>
+    <img src="/icons/taskbean-logo.png" alt="taskbean" width="180" height="48" style="margin-bottom:8px;">
+    <div class="overlay-icon connecting" id="overlayIcon">
+      <img src="/icons/taskbean-only.png" alt="" width="40" height="40" class="bean-spin">
     </div>
-    <h2 id="overlayTitle">Server not running</h2>
-    <p class="overlay-subtitle" id="overlaySubtitle">taskbean needs the local server to power AI features.</p>
+    <h2 id="overlayTitle">Connecting…</h2>
+    <p class="overlay-subtitle" id="overlaySubtitle" aria-live="polite">Looking for the local server</p>
 
-    <!-- Returning user: protocol registered → show Start Server as primary -->
-    <div class="overlay-actions" id="overlayReturning" style="display:none">
+    <!-- Single recovery panel — hidden initially, shown after timeout -->
+    <div class="overlay-actions" id="overlayRecovery" style="display:none">
       <div class="btn-row">
         <button class="start-btn" onclick="startServerFromOverlay()"><i data-lucide="play" class="icon-sm"></i> Start Server</button>
         <button id="retryBtn" class="retry-btn" onclick="retryConnection()"><i data-lucide="refresh-cw" class="icon-sm"></i> Retry</button>
       </div>
-      <div class="auto-retry-status" id="autoRetryStatus"><span class="auto-retry-dot"></span> Auto-retrying every 5 seconds…</div>
-    </div>
-
-    <!-- First-run user: protocol unknown → show setup steps -->
-    <div class="overlay-actions" id="overlayFirstRun" style="display:none">
-      <ol class="first-run-steps">
-        <li><span class="step-num">1</span> Open the <b>taskbean</b> folder you downloaded</li>
-        <li><span class="step-num">2</span> Double-click <b>launch.cmd</b></li>
-        <li><span class="step-num">3</span> Come back here — the app will reconnect automatically</li>
-      </ol>
-      <div class="cmd-row">
-        <code>launch.cmd</code>
-        <button class="copy-btn" onclick="navigator.clipboard.writeText('launch.cmd');this.innerHTML='<i data-lucide=&quot;check&quot; class=&quot;icon-sm&quot;></i> Copied!';lucide.createIcons();setTimeout(()=>{this.innerHTML='<i data-lucide=&quot;clipboard&quot; class=&quot;icon-sm&quot;></i> Copy';lucide.createIcons()},1500)"><i data-lucide="clipboard" class="icon-sm"></i> Copy</button>
+      <div class="cmd-hint">
+        or run <code>launch.cmd</code>
+        <button aria-label="Copy command" onclick="copyOverlayCmd(this)"><i data-lucide="clipboard"></i></button>
       </div>
-      <div class="auto-retry-status" id="autoRetryStatusFirstRun"><span class="auto-retry-dot"></span> Waiting for server… auto-retrying every 5s</div>
+      <div class="auto-retry-status" id="autoRetryStatus"><span class="auto-retry-dot"></span> Auto-retrying every 3&nbsp;s</div>
     </div>
 
     <div class="overlay-divider"></div>
     <div class="overlay-footer">
-      <span class="skip-link" onclick="dismissOfflineOverlay()">Continue in offline mode →</span>
-      <p class="tip">💡 Enable "Run on Windows startup" in <b>Settings ⚙</b> so the server starts automatically next time.</p>
+      <button class="skip-btn" onclick="dismissOfflineOverlay()">Continue in offline mode →</button>
+      <p class="tip"><i data-lucide="lightbulb"></i> Enable "Run on Windows startup" in <b>Settings</b> so the server starts automatically.</p>
     </div>
   </div>
-  <a class="coffee-btn" href="https://buymeacoffee.com/nicholasdbrady" target="_blank" rel="noopener" style="margin-top:16px"><span class="coffee-emoji">☕</span> Buy Nick a Coffee</a>
 </div>
 
 <div class="main">
@@ -1724,10 +1723,8 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
           <label>Desktop notifications</label>
           <button class="settings-toggle off" id="settingsNotif" onclick="toggleSettingsNotifications()" role="switch" aria-checked="false" aria-label="Desktop notifications"></button>
         </div>
-        <div class="settings-row" style="justify-content:flex-start;gap:8px">
-          <button class="settings-action-btn" style="width:auto;flex:1" onclick="testNotification()"><i data-lucide="bell" class="icon-sm"></i> Test Notification</button>
-          <button class="settings-action-btn" style="width:auto;flex:1" id="settingsServerBtn" onclick="startServerFromSettings()"><i data-lucide="play" class="icon-sm"></i> <span id="settingsServerLabel">Start Server</span></button>
-        </div>
+        <button class="settings-action-btn" onclick="testNotification()"><i data-lucide="bell" class="icon-sm"></i> Test Notification</button>
+        <button class="settings-action-btn" id="settingsServerBtn" onclick="startServerFromSettings()"><i data-lucide="play" class="icon-sm"></i> <span id="settingsServerLabel">Start Server</span></button>
       </div>
 
       <!-- LOCATION & TIME -->
@@ -2019,8 +2016,169 @@ let activeTemplates = [];
 let deferredInstallPrompt = null;
 let swRegistration = null;
 let isProcessing = false;
-let serverReachable = true;
-let lastSuccessfulSyncAt = 0;
+
+// ── ConnectionManager: centralized server health & reconnection ─────────────
+const ConnectionManager = (() => {
+    let _reachable = true;
+    let _lastSuccessAt = 0;
+    let _pollTimer = null;
+    let _pollingStopped = false;
+    let _backoff = 3000;        // current backoff (ms)
+    const BACKOFF_MIN = 1000;
+    const BACKOFF_MAX = 15000;
+    const BACKOFF_FACTOR = 1.5;
+    const GRACE_PERIOD = 30_000; // don't flip to offline within 30s of last success
+
+    function _dispatch(ok) {
+        document.dispatchEvent(new CustomEvent('reachability-change', { detail: { reachable: ok } }));
+    }
+
+    return {
+        get reachable() { return _reachable; },
+        get lastSuccessAt() { return _lastSuccessAt; },
+
+        setReachable(ok) {
+            if (ok) {
+                const wasOffline = !_reachable;
+                _reachable = true;
+                _lastSuccessAt = Date.now();
+                _backoff = BACKOFF_MIN; // reset backoff on success
+                if (wasOffline) _dispatch(true);
+            } else if (Date.now() - _lastSuccessAt > GRACE_PERIOD) {
+                const wasOnline = _reachable;
+                _reachable = false;
+                if (wasOnline) _dispatch(false);
+            }
+        },
+
+        /** Single health check — returns true/false */
+        async check() {
+            try {
+                const res = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
+                if (res.ok) { this.setReachable(true); return true; }
+            } catch {}
+            this.setReachable(false);
+            return false;
+        },
+
+        /** Start background polling with exponential backoff */
+        startPolling() {
+            if (_pollTimer) return;
+            _pollingStopped = false;
+            const tick = async () => {
+                await this.check();
+                if (_pollingStopped) return; // don't reschedule if stopped during check
+                _backoff = _reachable
+                    ? 10_000 // stable: poll every 10s
+                    : Math.min(_backoff * BACKOFF_FACTOR, BACKOFF_MAX);
+                _pollTimer = setTimeout(tick, _backoff);
+            };
+            _pollTimer = setTimeout(tick, _backoff);
+        },
+
+        stopPolling() {
+            _pollingStopped = true;
+            if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
+        }
+    };
+})();
+
+// Backward-compatible globals — read from ConnectionManager
+Object.defineProperty(window, 'serverReachable', {
+    get() { return ConnectionManager.reachable; },
+    set(v) { ConnectionManager.setReachable(v); },
+    configurable: true
+});
+Object.defineProperty(window, 'lastSuccessfulSyncAt', {
+    get() { return ConnectionManager.lastSuccessAt; },
+    set() { /* no-op, managed by ConnectionManager */ },
+    configurable: true
+});
+
+// ── OfflineQueue: queue todo mutations when server is unreachable ────────────
+const OfflineQueue = (() => {
+    const STORAGE_KEY = 'taskbean-offline-queue';
+
+    function _load() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+        catch { return []; }
+    }
+    function _save(q) {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(q)); } catch {}
+    }
+
+    return {
+        get pending() { return _load(); },
+        get count() { return _load().length; },
+
+        /** Enqueue a mutation: { method, url, body? } */
+        push(mutation) {
+            const q = _load();
+            q.push({ ...mutation, ts: Date.now() });
+            _save(q);
+            this._updateBadge();
+        },
+
+        /** Replay all queued mutations, then clear. Returns count replayed. */
+        async replay() {
+            const q = _load();
+            if (!q.length) return 0;
+            let replayed = 0;
+            for (const m of q) {
+                try {
+                    const opts = { method: m.method };
+                    if (m.body) {
+                        opts.headers = { 'Content-Type': 'application/json' };
+                        opts.body = JSON.stringify(m.body);
+                    }
+                    const res = await fetch(m.url, opts);
+                    if (res.ok || res.status === 404) {
+                        // 404 = resource already deleted, treat as success
+                        replayed++;
+                    } else if (res.status >= 500) {
+                        break; // server error — stop, retry later
+                    } else {
+                        replayed++; // 4xx client error — discard, can't retry
+                    }
+                } catch { /* network error — server may be down again, stop */ break; }
+            }
+            // Clear replayed items (keep any that weren't reached)
+            const remaining = q.slice(replayed);
+            _save(remaining);
+            this._updateBadge();
+            return replayed;
+        },
+
+        clear() { _save([]); this._updateBadge(); },
+
+        _updateBadge() {
+            const count = this.count;
+            const badge = document.getElementById('offlineQueueBadge');
+            if (badge) {
+                badge.textContent = count ? `${count} pending` : '';
+                badge.style.display = count ? '' : 'none';
+            }
+        }
+    };
+})();
+
+// Wire: replay offline queue when server comes back, then do a single authoritative refresh
+let _reconnectInProgress = false;
+document.addEventListener('reachability-change', async (e) => {
+    if (!e.detail.reachable || _reconnectInProgress) return;
+    _reconnectInProgress = true;
+    try {
+        // Step 1: replay any queued offline mutations
+        const n = OfflineQueue.count ? await OfflineQueue.replay() : 0;
+        // Step 2: single authoritative refresh after replay completes
+        await Promise.all([refreshTodos(), loadTemplates()]);
+        if (n > 0) {
+            addChat('info', 'cloud-upload', `Synced ${n} offline change${n > 1 ? 's' : ''} to server.`);
+        }
+    } finally {
+        _reconnectInProgress = false;
+    }
+});
 
 // AG-UI conversation state
 // threadId persists for the lifetime of the page; messages accumulate per turn.
@@ -2101,15 +2259,24 @@ function writeCachedJson(key, value) {
 }
 
 function setReachability(ok) {
+    ConnectionManager.setReachable(ok);
     if (ok) {
-        serverReachable = true;
-        lastSuccessfulSyncAt = Date.now();
         hideOfflineOverlay();
         offlineOverlayDismissed = true;
-    } else if (Date.now() - lastSuccessfulSyncAt > 30_000) {
-        serverReachable = false;
     }
     updateReachabilityUI();
+}
+
+async function retryFromBanner() {
+    const ok = await ConnectionManager.check();
+    if (ok) {
+        setReachability(true);
+        // reachability-change event handles refresh + replay
+    } else {
+        // Attempt protocol launch as fallback
+        try { window.open('taskbean://start', '_self'); } catch {}
+        addChat('info', 'play', 'Attempting to start server…');
+    }
 }
 
 function updateReachabilityUI() {
@@ -2143,29 +2310,34 @@ function showOfflineOverlay() {
     if (offlineOverlayDismissed) return;
     const el = document.getElementById('offlineOverlay');
     el.classList.add('show');
+    lucide.createIcons();
 
-    // Determine which panel to show based on cached protocol status
-    const cached = (() => { try { const c = JSON.parse(localStorage.getItem('taskbean-protocol')); return typeof c === 'boolean' ? c : null; } catch { return null; } })();
-    const known = protocolRegistered ?? cached;
-    const returningEl = document.getElementById('overlayReturning');
-    const firstRunEl = document.getElementById('overlayFirstRun');
-    if (known === true) {
-        // Returning user — protocol is registered, Start Server should work
-        returningEl.style.display = '';
-        firstRunEl.style.display = 'none';
-    } else {
-        // First-run or unknown — show setup instructions
-        returningEl.style.display = 'none';
-        firstRunEl.style.display = '';
+    // Phase 1: "Connecting…" with spinning bean — auto-try protocol if available
+    const known = protocolRegistered ?? (() => { try { const c = JSON.parse(localStorage.getItem('taskbean-protocol')); return typeof c === 'boolean' ? c : null; } catch { return null; } })();
+    if (known === true || known === null) {
+        // Silently attempt protocol launch (no UI change yet)
+        try { window.open('taskbean://start', '_self'); } catch {}
     }
 
-    lucide.createIcons();
     startAutoRetry();
+
+    // Phase 2: After 8s without connection → show recovery panel
+    setTimeout(() => {
+        if (serverReachable || offlineOverlayDismissed) return;
+        const icon = document.getElementById('overlayIcon');
+        const title = document.getElementById('overlayTitle');
+        const subtitle = document.getElementById('overlaySubtitle');
+        const recovery = document.getElementById('overlayRecovery');
+        if (icon) { icon.className = 'overlay-icon disconnected'; icon.innerHTML = '<i data-lucide="wifi-off" style="width:24px;height:24px"></i>'; }
+        if (title) title.textContent = 'Server not running';
+        if (subtitle) subtitle.textContent = 'Start the local server to power AI features.';
+        if (recovery) recovery.style.display = '';
+        lucide.createIcons();
+    }, 8000);
 }
 
 function hideOfflineOverlay() {
     const el = document.getElementById('offlineOverlay');
-    // Animate to connected state briefly before hiding
     const icon = document.getElementById('overlayIcon');
     const title = document.getElementById('overlayTitle');
     if (icon) { icon.className = 'overlay-icon connected'; icon.innerHTML = '<i data-lucide="check-circle" style="width:24px;height:24px"></i>'; }
@@ -2186,18 +2358,12 @@ function dismissOfflineOverlay() {
 function startAutoRetry() {
     if (autoRetryInterval) return;
     autoRetryInterval = setInterval(async () => {
-        try {
-            const res = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
-            if (res.ok) {
-                serverReachable = true;
-                lastSuccessfulSyncAt = Date.now();
-                offlineOverlayDismissed = true;
-                hideOfflineOverlay();
-                updateReachabilityUI();
-                await Promise.all([refreshTodos(), loadTemplates()]);
-            }
-        } catch {}
-    }, 5000);
+        const ok = await ConnectionManager.check();
+        if (ok) {
+            setReachability(true);
+            // reachability-change event handles refresh + replay
+        }
+    }, 3000);
 }
 
 function stopAutoRetry() {
@@ -2208,24 +2374,25 @@ async function retryConnection() {
     const btn = document.getElementById('retryBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="retry-spinner"></span> Checking…';
-    try {
-        const res = await fetch('/api/health', { signal: AbortSignal.timeout(5000) });
-        if (res.ok) {
-            serverReachable = true;
-            lastSuccessfulSyncAt = Date.now();
-            offlineOverlayDismissed = true;
-            hideOfflineOverlay();
-            updateReachabilityUI();
-            await Promise.all([refreshTodos(), loadTemplates()]);
-            return;
-        }
-    } catch {}
+    const ok = await ConnectionManager.check();
+    if (ok) {
+        setReachability(true);
+        // reachability-change event handles refresh + replay
+        return;
+    }
     btn.disabled = false;
     btn.innerHTML = '<i data-lucide="refresh-cw" class="icon-sm"></i> Retry';
     lucide.createIcons();
 }
 
-let protocolRegistered = null; // null = unknown, true/false = checked
+function copyOverlayCmd(btn) {
+    navigator.clipboard.writeText('launch.cmd');
+    btn.innerHTML = '<i data-lucide="check"></i>';
+    lucide.createIcons();
+    setTimeout(() => { btn.innerHTML = '<i data-lucide="clipboard"></i>'; lucide.createIcons(); }, 1500);
+}
+
+let protocolRegistered = null;
 
 async function checkProtocolRegistered() {
     if (protocolRegistered !== null) return protocolRegistered;
@@ -2237,16 +2404,14 @@ async function checkProtocolRegistered() {
             return protocolRegistered;
         }
     } catch {}
-    // Server unreachable — fall back to cached value
     try { const cached = JSON.parse(localStorage.getItem('taskbean-protocol')); if (typeof cached === 'boolean') { protocolRegistered = cached; return cached; } } catch {}
     return false;
 }
 
 async function ensureProtocolRegistered() {
     if (await checkProtocolRegistered()) return true;
-    // Server must be reachable to register
     if (!serverReachable) {
-        addChat('info', 'terminal', 'Protocol handler not set up yet. Double-click launch.cmd in the app folder to set up, then retry.');
+        addChat('info', 'terminal', 'Protocol handler not set up. Run <code>launch.cmd</code> from the app folder, then retry.');
         return false;
     }
     try {
@@ -2266,44 +2431,14 @@ function launchServerViaProtocol() {
 }
 
 function startServerFromOverlay() {
-    // Use cached protocol status when server is unreachable
-    const known = protocolRegistered ?? (() => { try { const c = JSON.parse(localStorage.getItem('taskbean-protocol')); return typeof c === 'boolean' ? c : null; } catch { return null; } })();
-    if (known === false) {
-        // Show first-run panel instead
-        const returningEl = document.getElementById('overlayReturning');
-        const firstRunEl = document.getElementById('overlayFirstRun');
-        if (returningEl) returningEl.style.display = 'none';
-        if (firstRunEl) firstRunEl.style.display = '';
-        return;
-    }
     launchServerViaProtocol();
-
-    // Update icon to "connecting" state
+    // Transition to connecting state
     const icon = document.getElementById('overlayIcon');
-    if (icon) { icon.className = 'overlay-icon connecting'; icon.innerHTML = '<img src="/icons/taskbean-only.png" alt="" class="bean-spin">'; }
     const title = document.getElementById('overlayTitle');
-    if (title) title.textContent = 'Starting server…';
-    lucide.createIcons();
-
     const status = document.getElementById('autoRetryStatus');
-    if (status) status.innerHTML = '<span class="auto-retry-dot" style="background:var(--green)"></span> Server launching… auto-retrying every 5s';
-
-    // If protocol was unknown (first-run), show fallback hint after 10s if server still not up
-    if (known === null) {
-        setTimeout(() => {
-            if (!serverReachable) {
-                if (status) status.innerHTML = '<span class="auto-retry-dot"></span> Server didn\'t start — double-click <b>launch.cmd</b> in the app folder to set up.';
-                // Switch to first-run view
-                const returningEl = document.getElementById('overlayReturning');
-                const firstRunEl = document.getElementById('overlayFirstRun');
-                if (returningEl) returningEl.style.display = 'none';
-                if (firstRunEl) firstRunEl.style.display = '';
-                if (icon) { icon.className = 'overlay-icon disconnected'; icon.innerHTML = '<i data-lucide="wifi-off" style="width:24px;height:24px"></i>'; }
-                if (title) title.textContent = 'Server not running';
-                lucide.createIcons();
-            }
-        }, 10_000);
-    }
+    if (icon) { icon.className = 'overlay-icon connecting'; icon.innerHTML = '<img src="/icons/taskbean-only.png" alt="" width="40" height="40" class="bean-spin">'; }
+    if (title) title.textContent = 'Starting server\u2026';
+    if (status) status.innerHTML = '<span class="auto-retry-dot" style="background:var(--green)"></span> Server launching\u2026 auto-retrying every 3\u00a0s';
 }
 
 function isStandalone() {
@@ -2721,7 +2856,7 @@ function addConnectionLostCard() {
                 const res = await fetch('/api/health', { signal: AbortSignal.timeout(2000) });
                 if (res.ok) {
                     setReachability(true);
-                    await Promise.all([refreshTodos(), loadTemplates()]);
+                    // reachability-change event handles refresh + replay
                     card.innerHTML = `
                         <div class="action-card-header"><span class="emoji">✅</span> Reconnected</div>
                         <div class="action-card-body" style="font-size:11px;color:var(--green)">Server is back online.</div>`;
@@ -2923,12 +3058,15 @@ async function refreshTodos() {
     try {
         const res = await fetch('/api/todos');
         if (!res.ok) throw new Error(`Todo sync failed (${res.status})`);
-        localTodos = await res.json();
-        writeCachedJson(STORAGE_KEYS.todos, localTodos);
-        setReachability(true);
+        // Don't overwrite optimistic offline edits with stale SW-cached data
+        if (!serverReachable) {
+            localTodos = readCachedJson(STORAGE_KEYS.todos, []);
+        } else {
+            localTodos = await res.json();
+            writeCachedJson(STORAGE_KEYS.todos, localTodos);
+        }
     } catch {
         localTodos = readCachedJson(STORAGE_KEYS.todos, []);
-        setReachability(false);
     }
     renderTodos();
     // Update project count badge from local data
@@ -3144,15 +3282,27 @@ function fmtRelativeDate(dateStr) {
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 async function toggleTodo(id, c) {
-    if (!serverReachable) { addChat('error','wifi-off','Reconnect to the local server to update tasks.'); return; }
     // Trigger bounce animation on the checkbox
     const checkEl = document.querySelector(`.todo-item[data-id="${id}"] .todo-check`);
     if (checkEl && c) { checkEl.classList.add('just-checked'); checkEl.addEventListener('animationend', () => checkEl.classList.remove('just-checked'), { once: true }); }
+    if (!serverReachable) {
+        // Optimistic update + queue
+        const todo = localTodos.find(t => t.id === id);
+        if (todo) { todo.completed = c ? 1 : 0; writeCachedJson(STORAGE_KEYS.todos, localTodos); renderTodos(); }
+        OfflineQueue.push({ method: 'PATCH', url: `/api/todos/${id}`, body: { completed: c } });
+        return;
+    }
     await fetch(`/api/todos/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({completed:c})});
     await refreshTodos();
 }
 async function deleteTodo(id) {
-    if (!serverReachable) { addChat('error','wifi-off','Reconnect to the local server to delete tasks.'); return; }
+    if (!serverReachable) {
+        localTodos = localTodos.filter(t => t.id !== id);
+        writeCachedJson(STORAGE_KEYS.todos, localTodos);
+        renderTodos();
+        OfflineQueue.push({ method: 'DELETE', url: `/api/todos/${id}` });
+        return;
+    }
     await fetch(`/api/todos/${id}`,{method:'DELETE'});
     await refreshTodos();
 }
@@ -3191,10 +3341,25 @@ async function finishTitleEdit(id, newTitle) {
     const trimmed = newTitle.trim();
     const todo = localTodos.find(t => t.id === id);
     if (!trimmed || !todo || trimmed === todo.title) { renderTodos(); return; }
+    if (!serverReachable) {
+        todo.title = trimmed;
+        writeCachedJson(STORAGE_KEYS.todos, localTodos);
+        renderTodos();
+        OfflineQueue.push({ method: 'PATCH', url: `/api/todos/${id}`, body: { title: trimmed } });
+        return;
+    }
     await fetch(`/api/todos/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: trimmed }) });
     await refreshTodos();
 }
 async function setTodoPriority(id, priority) {
+    if (!serverReachable) {
+        const todo = localTodos.find(t => t.id === id);
+        if (todo) { todo.priority = priority; writeCachedJson(STORAGE_KEYS.todos, localTodos); }
+        renderTodos();
+        setTimeout(() => toggleTodoExpand(id), 10);
+        OfflineQueue.push({ method: 'PATCH', url: `/api/todos/${id}`, body: { priority } });
+        return;
+    }
     await fetch(`/api/todos/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ priority }) });
     const todo = localTodos.find(t => t.id === id);
     if (todo) todo.priority = priority;
@@ -3223,13 +3388,29 @@ async function finishNotesEdit(id, newNotes) {
     if (!todo) { renderTodos(); return; }
     const val = newNotes.trim() || null;
     if (val === (todo.notes || null)) { renderTodos(); setTimeout(() => toggleTodoExpand(id), 10); return; }
+    if (!serverReachable) {
+        todo.notes = val;
+        writeCachedJson(STORAGE_KEYS.todos, localTodos);
+        renderTodos();
+        setTimeout(() => toggleTodoExpand(id), 10);
+        OfflineQueue.push({ method: 'PATCH', url: `/api/todos/${id}`, body: { notes: val } });
+        return;
+    }
     await fetch(`/api/todos/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: val }) });
     await refreshTodos();
     setTimeout(() => toggleTodoExpand(id), 10);
 }
 async function clearCompleted() {
-    if (!serverReachable) { addChat('error','wifi-off','Reconnect to the local server to clear completed tasks.'); return; }
-    const done=localTodos.filter(t=>t.completed);
+    const done = localTodos.filter(t => t.completed);
+    if (!done.length) return;
+    if (!serverReachable) {
+        for (const t of done) OfflineQueue.push({ method: 'DELETE', url: `/api/todos/${t.id}` });
+        localTodos = localTodos.filter(t => !t.completed);
+        writeCachedJson(STORAGE_KEYS.todos, localTodos);
+        renderTodos();
+        addChat('info', 'trash-2', `Cleared ${done.length} done (will sync when online)`);
+        return;
+    }
     for(const t of done) await fetch(`/api/todos/${t.id}`,{method:'DELETE'});
     await refreshTodos();
     addChat('info','trash-2',`Cleared ${done.length} done`);
@@ -3246,7 +3427,6 @@ async function loadTemplates() {
         const data = await res.json();
         activeTemplates = data.active || [];
         writeCachedJson(STORAGE_KEYS.templates, data);
-        setReachability(true);
         const active = new Set(activeTemplates.filter(a => a.active).map(a => a.title));
         renderTemplates(data.builtIn || [], activeTemplates, active);
     } catch {
@@ -3254,7 +3434,6 @@ async function loadTemplates() {
         activeTemplates = cached.active || [];
         const active = new Set(activeTemplates.filter(a => a.active).map(a => a.title));
         renderTemplates(cached.builtIn || [], activeTemplates, active);
-        setReachability(false);
     }
     await processReminderNotifications();
 }
@@ -5803,17 +5982,12 @@ async function loadSettingsConfig() {
     if (tzSel && !tzSel.options.length) {
         populateTimezoneSelect(tzSel, Intl.DateTimeFormat().resolvedOptions().timeZone);
     }
+    let configFetched = false;
     try {
         const res = await fetch('/api/config', { signal: AbortSignal.timeout(3000) });
-        if (res.ok) {
-            settingsConfig = await res.json();
-            populateSettingsFromConfig(settingsConfig);
-            // Re-enable controls on successful fetch
-            document.querySelectorAll('.settings-select, .settings-toggle, .settings-time-input').forEach(el => {
-                el.disabled = false;
-                el.title = '';
-            });
-        }
+        if (!res.ok) throw new Error('not ok');
+        settingsConfig = await res.json();
+        configFetched = true;
     } catch {
         // Disable server-backed controls when offline
         document.querySelectorAll('#settingsPermission, #settingsDevice, #settingsModel, #settingsTimezone, #settingsSpeechEngine, #settingsSpeechFallback, #settingsMicDevice').forEach(el => {
@@ -5824,7 +5998,15 @@ async function loadSettingsConfig() {
             el.disabled = true;
             el.title = 'Server offline';
         });
-        showSettingsStatus('⚠ Server offline — some settings unavailable', true);
+        showSettingsStatus('⚠ Server offline — some settings unavailable', true, { actionable: true });
+    }
+    if (configFetched) {
+        try { populateSettingsFromConfig(settingsConfig); } catch (e) { console.warn('Settings populate error:', e); }
+        document.querySelectorAll('.settings-select, .settings-toggle, .settings-time-input').forEach(el => {
+            el.disabled = false;
+            el.title = '';
+        });
+        showSettingsStatus(''); // clear any previous offline banner
     }
 
     // Populate model list
@@ -6053,11 +6235,27 @@ async function updateSettingsConfig(key, value) {
     }
 }
 
-function showSettingsStatus(msg, isError = false) {
+function showSettingsStatus(msg, isError = false, { actionable = false } = {}) {
     const el = document.getElementById('settingsSaveStatus');
     if (!el) return;
-    el.textContent = msg;
-    el.style.color = isError ? '#fff' : '#fff';
+    if (!msg && !actionable) {
+        // Clear: reset element to hidden state
+        el.textContent = '';
+        el.style.opacity = '0';
+        el.style.padding = '0';
+        el.style.background = '';
+        return;
+    }
+    if (actionable) {
+        el.innerHTML = `<span style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap">
+            <span>⚠ Server offline</span>
+            <button onclick="startServerFromSettings()" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:2px 10px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer">Start Server</button>
+            <button onclick="loadSettingsConfig()" style="background:none;border:none;color:rgba(255,255,255,.8);font-size:10px;cursor:pointer;text-decoration:underline">Retry</button>
+        </span>`;
+    } else {
+        el.textContent = msg;
+    }
+    el.style.color = '#fff';
     el.style.background = isError ? 'var(--red)' : 'var(--green)';
     el.style.padding = '6px 14px';
     el.style.borderRadius = '8px';
@@ -6194,10 +6392,8 @@ async function startServerFromSettings() {
             if (res.ok) {
                 clearInterval(poll);
                 setReachability(true);
-                await Promise.all([refreshTodos(), loadTemplates()]);
+                // reachability-change event handles refresh + replay + settings reload
                 addChat('info', 'check-circle', 'Server is running!');
-                const serverBtn = document.getElementById('settingsServerLabel');
-                if (serverBtn) serverBtn.textContent = 'Restart Server';
             }
         } catch {}
     }, 2000);
@@ -6286,12 +6482,14 @@ function populateHardwareInfoCard(hw) {
     if (!el || !hw) return;
     const gpuText = hw.gpu ? `${hw.gpu.name} · ${hw.gpu.vramGb} GB VRAM` : 'Not detected';
     const npuText = hw.npu ? hw.npu.name : 'Not detected';
+    const cpuText = hw.cpu ? `${esc(hw.cpu.model)} · ${hw.cpu.cores} cores` : 'Detecting…';
+    const ramText = hw.ram ? `${hw.ram.totalGb} GB` : 'Detecting…';
     el.innerHTML = `
         <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:11px">
             <span style="color:var(--muted)"><i data-lucide="cpu" style="width:11px;height:11px;vertical-align:-2px"></i> CPU</span>
-            <span>${esc(hw.cpu.model)} · ${hw.cpu.cores} cores</span>
+            <span>${cpuText}</span>
             <span style="color:var(--muted)"><i data-lucide="memory-stick" style="width:11px;height:11px;vertical-align:-2px"></i> RAM</span>
-            <span>${hw.ram.totalGb} GB</span>
+            <span>${ramText}</span>
             <span style="color:var(--muted)"><i data-lucide="monitor" style="width:11px;height:11px;vertical-align:-2px"></i> GPU</span>
             <span${!hw.gpu ? ' style="color:var(--muted)"' : ''}>${esc(gpuText)}</span>
             <span style="color:var(--muted)"><i data-lucide="zap" style="width:11px;height:11px;vertical-align:-2px"></i> NPU</span>
@@ -6431,7 +6629,8 @@ async function initApp() {
 
     syncInstallButton();
     autoSelectIconEnabled = getAutoSelectIcon();
-    await Promise.all([refreshTodos(), loadTemplates()]);
+    OfflineQueue._updateBadge(); // show badge if queue persisted from previous session
+    await Promise.all([refreshTodos(), loadTemplates(), fetchProjectCount()]);
 
     // Cache schedule config for client-side DND checks
     try {
@@ -6511,8 +6710,12 @@ async function initApp() {
     updateClock();
     setInterval(updateClock, 1000);
 
-    // Lightweight status bar health poll (independent of nerd mode)
+    // Centralized health polling via ConnectionManager (replaces manual setInterval)
+    ConnectionManager.startPolling();
+
+    // Status bar health details (piggybacks on ConnectionManager, adds model/hardware info)
     async function pollStatusHealth() {
+        if (!serverReachable) return;
         try {
             const res = await fetch('/api/health', { signal: AbortSignal.timeout(5000) });
             if (res.ok) updateStatusBarHealth(await res.json());
@@ -6520,6 +6723,16 @@ async function initApp() {
     }
     pollStatusHealth();
     setInterval(pollStatusHealth, 10_000);
+
+    // Listen for reachability changes — auto-refresh settings panel if open
+    document.addEventListener('reachability-change', (e) => {
+        updateReachabilityUI();
+        if (e.detail.reachable) {
+            // If settings modal is open, refresh it to re-enable controls
+            const settingsOverlay = document.getElementById('settingsModalOverlay');
+            if (settingsOverlay?.classList.contains('open')) loadSettingsConfig();
+        }
+    });
 }
 
 initApp();
