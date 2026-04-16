@@ -351,12 +351,20 @@ header {
 }
 .settings-tab.has-offline .tab-offline-dot { display: block; }
 
-/* Content area */
-.settings-content { flex: 1; overflow-y: auto; padding: 16px 20px; min-width: 0; overscroll-behavior: contain; }
+/* Content area — fixed height, panels scroll internally */
+.settings-content {
+  flex: 1; display: flex; flex-direction: column; padding: 0; min-width: 0;
+  overflow: hidden;
+}
 
 /* Panels */
 .settings-panel { display: none; }
-.settings-panel.active { display: block; animation: stg-fade-in .15s ease-out; }
+.settings-panel.active {
+  display: flex; flex-direction: column; flex: 1; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 16px 20px;
+  animation: stg-fade-in .15s ease-out;
+}
 @keyframes stg-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .settings-panel.active { animation: none; } }
 
@@ -576,7 +584,8 @@ header {
   .settings-tab { padding: 8px; justify-content: center; }
   .settings-tab .tab-label { display: none; }
   .settings-tab .tab-offline-dot { position: absolute; top: 4px; right: 4px; }
-  .settings-content { padding: 12px 14px; }
+  .settings-content { padding: 0; }
+  .settings-panel.active { padding: 12px 14px; }
   .settings-footer { flex-direction: column; text-align: center; }
 }
 
@@ -7342,8 +7351,10 @@ function filterSettings(query) {
     document.addEventListener('focusout', (e) => {
         if (e.target.closest('.info-tip')) hide();
     });
-    // Hide on scroll
-    document.querySelector('.settings-content')?.addEventListener('scroll', hide);
+    // Hide on scroll within any settings panel
+    document.addEventListener('scroll', (e) => {
+        if (e.target.closest?.('.settings-panel')) hide();
+    }, true);
 })();
 
 // ── Theme swatch sync ───────────────────────────────────────────
