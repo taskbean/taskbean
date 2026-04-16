@@ -3,7 +3,9 @@
 from __future__ import annotations
 import asyncio
 import logging
-from datetime import datetime
+import os
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 _toaster_available = False
@@ -18,6 +20,16 @@ import state as state_mod
 import telemetry as telem
 
 logger = logging.getLogger(__name__)
+
+# Resolve icon path once at import time
+_ICON_PATH = str(Path(__file__).parent.parent / "public" / "icons" / "taskbean-only.png")
+if not os.path.isfile(_ICON_PATH):
+    _ICON_PATH = ""
+
+# Snapshot for detecting external state changes (Todo 2)
+_last_seen_todos: dict[str, bool] = {}  # {id: completed}
+
+
 def _get_tz() -> ZoneInfo:
     """Get configured timezone, falling back to America/Los_Angeles."""
     tz_name = app_config.get("timezone")
@@ -84,10 +96,27 @@ def _is_in_reminder_hours() -> bool:
 
 # ── Notifications ─────────────────────────────────────────────────────────────
 
-def send_notification(title: str, message: str, force: bool = False) -> None:
-    """Fire a Windows toast notification, if available.
+def _base_url() -> str:
+    port = app_config.get("port") or 2326
+    return f"http://localhost:{port}"
 
-    Respects DND schedule unless force=True (used for user-initiated test).
+
+def send_notification(
+    title: str,
+    message: str,
+    *,
+    todo_id: str | None = None,
+    tag: str | None = None,
+    group: str = "taskbean",
+    force: bool = False,
+) -> None:
+    """Fire a Windows toast notification with optional action buttons.
+
+    Args:
+        todo_id: If provided, adds Done/Snooze/Open action buttons.
+        tag: Toast tag for replacement (prevents stacking).
+        group: Toast group (default: "taskbean").
+        force: Bypass DND schedule (for user-initiated tests).
     """
     if not force and _is_in_dnd():
         logger.info("Notification suppressed (DND): %s — %s", title, message)
@@ -97,8 +126,23 @@ def send_notification(title: str, message: str, force: bool = False) -> None:
 
     if _toaster_available:
         try:
-            toast = WiNotification(app_id="taskbean", title=title, msg=message, duration="short")
+            base = _base_url()
+            toast = WiNotification(
+                app_id="taskbean",
+                title=title,
+                msg=message,
+                duration="short",
+                icon=_ICON_PATH,
+                launch=base,
+            )
             toast.set_audio(winotify_audio.Default, loop=False)
+            if tag:
+                toast.tag = tag
+                toast.group = group
+            if todo_id:
+                toast.add_actions(label="✅ Done", launch=f"{base}/api/todos/{todo_id}?action=complete")
+                toast.add_actions(label="⏰ Snooze", launch=f"{base}/api/todos/{todo_id}?action=snooze")
+                toast.add_actions(label="📋 Open", launch=base)
             toast.show()
         except Exception as e:
             logger.warning("winotify notification failed: %s", e)
@@ -107,12 +151,16 @@ def send_notification(title: str, message: str, force: bool = False) -> None:
 
 
 async def reminder_scheduler() -> None:
-    """Background task: check todos with pending reminders every 30 seconds."""
+    """Background task: check reminders, recurring templates, and state changes every 30 seconds."""
+    global _last_seen_todos
+    # Initialize snapshot so first tick doesn't fire for pre-existing todos
+    _last_seen_todos = {t["id"]: t.get("completed", False) for t in state_mod.todos}
     while True:
         await asyncio.sleep(30)
         try:
             _check_reminders()
             _check_recurring_templates()
+            _check_state_changes()
         except Exception as e:
             logger.warning("Scheduler error: %s", e)
 
@@ -134,13 +182,16 @@ def _check_reminders() -> None:
             send_notification(
                 f"⏰ {todo.get('emoji', '')} Reminder".strip(),
                 todo["title"],
+                todo_id=todo["id"],
+                tag=f"reminder-{todo['id']}",
+                group="taskbean-reminders",
             )
 
 
 def _check_recurring_templates() -> None:
     now_ts = datetime.now(tz=_get_tz()).timestamp() * 1000
     if not _is_in_reminder_hours():
-        return  # outside active reminder window — skip all recurring
+        return
     for rec in state_mod.recurring_templates:
         if not rec.get("active"):
             continue
@@ -151,4 +202,37 @@ def _check_recurring_templates() -> None:
             send_notification(
                 f"⏰ {rec['title']}",
                 rec.get("description", ""),
+                tag=f"recurring-{rec.get('id', rec['title'])}",
+                group="taskbean-recurring",
             )
+
+
+def _check_state_changes() -> None:
+    """Detect todos added or completed since last tick and fire toasts."""
+    global _last_seen_todos
+    current = {t["id"]: t.get("completed", False) for t in state_mod.todos}
+
+    for tid, completed in current.items():
+        prev = _last_seen_todos.get(tid)
+        if prev is None:
+            # Newly added task
+            todo = next((t for t in state_mod.todos if t["id"] == tid), None)
+            if todo:
+                send_notification(
+                    f"📋 New task",
+                    todo["title"],
+                    tag=f"agent-{tid}",
+                    group="taskbean-agent",
+                )
+        elif not prev and completed:
+            # Task just completed
+            todo = next((t for t in state_mod.todos if t["id"] == tid), None)
+            if todo:
+                send_notification(
+                    f"🎉 Task completed",
+                    todo["title"],
+                    tag=f"agent-{tid}",
+                    group="taskbean-agent",
+                )
+
+    _last_seen_todos = current
