@@ -2176,7 +2176,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
     <div class="settings-modal-header">
       <h2><i data-lucide="settings"></i> Settings</h2>
       <input class="settings-search" id="settingsSearch" type="search" placeholder="Search settings…" aria-label="Search settings" oninput="filterSettings(this.value)">
-      <button class="model-modal-close" onclick="closeSettings()" title="Close (Esc)" style="flex-shrink:0"><i data-lucide="x"></i></button>
+      <button class="model-modal-close" onclick="closeSettings()" title="Close (Esc)" aria-label="Close" style="flex-shrink:0;position:relative;z-index:2;min-width:28px;min-height:28px;font-size:18px;line-height:1">✕</button>
     </div>
 
     <div class="settings-layout">
