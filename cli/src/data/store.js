@@ -46,6 +46,7 @@ export function getDb() {
   // Add project/upsert_key columns if missing (migration for existing DBs)
   try { _db.exec('ALTER TABLE todos ADD COLUMN project TEXT'); } catch {}
   try { _db.exec('ALTER TABLE todos ADD COLUMN upsert_key TEXT'); } catch {}
+  try { _db.exec('ALTER TABLE todos ADD COLUMN session_id TEXT'); } catch {}
   try { _db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_todos_upsert ON todos(project, upsert_key)'); } catch {}
 
   // Keep projects table for skill-install tracking (CLI-only metadata)

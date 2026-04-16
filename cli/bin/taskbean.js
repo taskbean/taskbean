@@ -12,6 +12,7 @@ import { trackCommand, untrackCommand } from '../src/commands/track.js';
 import { installCommand } from '../src/commands/install.js';
 import { projectsCommand } from '../src/commands/projects.js';
 import { serveCommand } from '../src/commands/serve.js';
+import { packageCommand } from '../src/commands/package.js';
 
 program
   .name('bean')
@@ -25,6 +26,7 @@ program
   .description('Log a task')
   .argument('<title>', 'Task title/description')
   .option('--key <key>', 'Stable key for upsert (prevents duplicates)')
+  .option('--session-id <id>', 'Link to a Copilot CLI session ID')
   .option('--json', 'Output as JSON')
   .option('--project <path>', 'Override project path')
   .action(addCommand);
@@ -89,6 +91,16 @@ program
   .description('List tracked projects')
   .option('--json', 'Output as JSON')
   .action(projectsCommand);
+
+program
+  .command('package')
+  .description('Generate exportable work packages with session context')
+  .argument('[task-id]', 'Task ID (optional — omit for batch mode)')
+  .option('--date <range>', 'Date range: today, yesterday, week, all', 'today')
+  .option('--format <fmt>', 'Output format: md, json', 'md')
+  .option('--json', 'Shorthand for --format json')
+  .option('--project <path>', 'Filter to specific project')
+  .action(packageCommand);
 
 program
   .command('serve')

@@ -412,6 +412,331 @@ header {
 .template-card.disabled { opacity: .5; }
 .template-card.disabled:hover { opacity: .75; }
 
+/* ── Task Detail Card ── */
+.task-detail {
+  padding: 0; overflow-y: auto; flex: 1; min-height: 0;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.task-detail-inner {
+  max-width: 720px; margin: 0 auto; padding: 28px 32px 40px;
+  animation: td-enter .4s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes td-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Back button */
+.task-detail-back {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted);
+  cursor: pointer; background: none; border: none; font-family: inherit; padding: 6px 10px;
+  border-radius: 8px; margin-bottom: 20px; transition: color .15s, background .15s; letter-spacing: .2px;
+}
+.task-detail-back:hover { color: var(--accent); background: var(--accent-soft); }
+.task-detail-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Header zone */
+.task-detail-hero {
+  margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
+}
+.task-detail-status-line {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+}
+.task-detail-status-chip {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700;
+  padding: 4px 10px; border-radius: 6px; letter-spacing: .5px; text-transform: uppercase;
+  height: 26px;
+}
+.task-detail-status-chip.done { background: var(--green-soft); color: var(--green); }
+.task-detail-status-chip.pending { background: var(--orange-soft); color: var(--orange); }
+.task-detail-date { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; line-height: 26px; }
+.task-detail-title {
+  font-size: 20px; font-weight: 700; line-height: 1.35; color: var(--text);
+  letter-spacing: -.2px; margin-bottom: 12px; text-wrap: balance;
+}
+.task-detail-meta {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+}
+.task-detail-badge {
+  font-size: 10px; padding: 4px 10px; border-radius: 6px; font-weight: 500;
+  font-family: 'DM Mono', monospace; background: var(--surface2); color: var(--muted);
+  display: inline-flex; align-items: center; gap: 4px; border: 1px solid transparent;
+  transition: border-color .15s; height: 26px;
+}
+.task-detail-badge:hover { border-color: var(--border); }
+.task-detail-badge.accent { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.task-detail-badge.purple { background: var(--purple-soft); color: var(--purple, #9b59b6); }
+
+/* Metrics strip — horizontal flowing bar, not grid */
+.task-detail-metrics {
+  display: flex; gap: 1px; margin-bottom: 20px; border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--border);
+}
+.task-detail-metric {
+  flex: 1; text-align: center; padding: 14px 8px 12px; background: var(--surface2);
+  position: relative; transition: background .15s;
+}
+.task-detail-metric:hover { background: var(--surface); }
+.task-detail-metric-value {
+  font-size: 22px; font-weight: 800; font-family: 'DM Mono', monospace; line-height: 1; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.task-detail-metric-label {
+  font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
+  margin-top: 5px; font-weight: 500;
+}
+.task-detail-metric.accent .task-detail-metric-value { color: var(--accent); }
+.task-detail-metric.green .task-detail-metric-value { color: var(--green); }
+.task-detail-metric.orange .task-detail-metric-value { color: var(--orange); }
+.task-detail-metric.purple .task-detail-metric-value { color: var(--purple, #9b59b6); }
+
+/* Sections — clean cards with reveal animation */
+.task-detail-section {
+  margin-bottom: 10px; border-radius: 10px; background: var(--surface2);
+  border: 1px solid var(--border); overflow: hidden;
+  animation: td-section .35s cubic-bezier(.16,1,.3,1) both;
+}
+.task-detail-section:nth-child(1) { animation-delay: .05s; }
+.task-detail-section:nth-child(2) { animation-delay: .1s; }
+.task-detail-section:nth-child(3) { animation-delay: .15s; }
+.task-detail-section:nth-child(4) { animation-delay: .2s; }
+.task-detail-section:nth-child(5) { animation-delay: .25s; }
+@keyframes td-section {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.task-detail-section-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--muted); padding: 12px 16px 10px; display: flex; align-items: center; gap: 7px;
+  cursor: pointer; user-select: none; transition: color .15s;
+}
+.task-detail-section-title:hover { color: var(--text); }
+.task-detail-section-title i { width: 13px; height: 13px; opacity: .6; }
+.task-detail-section-title .td-section-count {
+  font-weight: 400; color: var(--muted); font-size: 9px; margin-left: 2px;
+}
+.task-detail-section-title .td-chevron {
+  margin-left: auto; transition: transform .2s; opacity: .4; width: 12px; height: 12px;
+}
+.task-detail-section.collapsed .td-chevron { transform: rotate(-90deg); }
+.task-detail-section-body { padding: 0 16px 14px; }
+.task-detail-section.collapsed .task-detail-section-body { display: none; }
+
+/* Summary — proper markdown rendering */
+.task-detail-summary {
+  font-size: 13px; line-height: 1.7; color: var(--text);
+}
+.task-detail-summary p { margin-bottom: 10px; }
+.task-detail-summary p:last-child { margin-bottom: 0; }
+.task-detail-summary h2 {
+  font-size: 14px; font-weight: 700; margin: 16px 0 6px; color: var(--text);
+  padding-bottom: 4px; border-bottom: 1px solid var(--border);
+}
+.task-detail-summary h3 {
+  font-size: 13px; font-weight: 700; margin: 12px 0 4px; color: var(--accent);
+}
+.task-detail-summary code {
+  font-family: 'DM Mono', monospace; font-size: 11px; background: var(--bg);
+  padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); color: var(--accent);
+}
+.task-detail-summary pre {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px 12px; margin: 8px 0; overflow-x: auto; font-size: 11px;
+  font-family: 'DM Mono', monospace; line-height: 1.5; color: var(--text);
+}
+.task-detail-summary ul, .task-detail-summary ol {
+  margin: 6px 0 10px 20px; font-size: 13px;
+}
+.task-detail-summary li { margin-bottom: 3px; }
+.task-detail-summary strong { color: var(--text); font-weight: 600; }
+.task-detail-summary hr {
+  border: none; height: 1px; background: var(--border); margin: 12px 0;
+}
+
+/* Clamp summary with expand toggle */
+.task-detail-summary-wrap { position: relative; }
+.task-detail-summary-wrap.clamped .task-detail-summary {
+  max-height: 200px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+}
+.task-detail-summary-toggle {
+  display: none; width: 100%; text-align: center; padding: 8px; font-size: 10px;
+  color: var(--accent); cursor: pointer; font-weight: 600; letter-spacing: .3px;
+  background: none; border: none; font-family: inherit; transition: opacity .15s;
+}
+.task-detail-summary-toggle:hover { opacity: .7; }
+.task-detail-summary-wrap.clamped .task-detail-summary-toggle { display: block; }
+
+/* Files — tighter rows with subtle hover */
+.task-detail-file {
+  display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 11px;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 40%, transparent);
+  transition: background .1s; margin: 0 -4px; padding-left: 4px; padding-right: 4px; border-radius: 4px;
+}
+.task-detail-file:last-child { border-bottom: none; }
+.task-detail-file:hover { background: var(--bg); }
+.task-detail-file-icon { color: var(--accent); flex-shrink: 0; opacity: .7; }
+.task-detail-file-path {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text);
+}
+.task-detail-file-tool {
+  font-size: 9px; padding: 3px 8px; border-radius: 4px; font-family: 'DM Mono', monospace;
+  font-weight: 500; flex-shrink: 0; height: 20px; display: inline-flex; align-items: center;
+}
+.task-detail-file-tool.create { background: var(--green-soft); color: var(--green); }
+.task-detail-file-tool.edit { background: var(--accent-soft); color: var(--accent); }
+.task-detail-file-tool.view { background: var(--muted-soft); color: var(--muted); }
+.task-detail-file-turn {
+  font-size: 9px; color: var(--muted); font-family: 'DM Mono', monospace; flex-shrink: 0;
+}
+
+/* Tools — proportional bar chips */
+.task-detail-tool-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.task-detail-tool-chip {
+  font-size: 10px; padding: 5px 10px; border-radius: 6px; background: var(--bg);
+  border: 1px solid var(--border); font-family: 'DM Mono', monospace; color: var(--text);
+  display: inline-flex; align-items: center; gap: 6px; transition: border-color .15s;
+  height: 26px;
+}
+.task-detail-tool-chip:hover { border-color: var(--accent); }
+.task-detail-tool-chip .tool-count {
+  color: var(--accent); font-weight: 700;
+}
+.task-detail-tool-chip .tool-bar {
+  width: 24px; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden;
+}
+.task-detail-tool-chip .tool-bar-fill {
+  height: 100%; border-radius: 2px; background: var(--accent); transition: width .4s ease;
+}
+
+/* Refs */
+.task-detail-ref {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 11px;
+}
+.task-detail-ref-type {
+  font-size: 9px; padding: 2px 7px; border-radius: 4px; text-transform: uppercase;
+  font-family: 'DM Mono', monospace; letter-spacing: .5px; font-weight: 500;
+}
+.task-detail-ref-type.pr { background: var(--green-soft); color: var(--green); }
+.task-detail-ref-type.issue { background: var(--purple-soft); color: var(--purple, #9b59b6); }
+.task-detail-ref-type.commit { background: var(--accent-soft); color: var(--accent); }
+.task-detail-ref-value { font-family: 'DM Mono', monospace; color: var(--text); font-weight: 500; }
+
+/* Action buttons — bottom bar */
+.task-detail-actions {
+  display: flex; gap: 8px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border);
+}
+.task-detail-action {
+  display: inline-flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+  font-size: 10px; font-family: inherit; cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s, transform .1s, box-shadow .15s;
+  font-weight: 500; height: 26px;
+}
+.task-detail-action:hover {
+  border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
+  transform: translateY(-1px); box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 15%, transparent);
+}
+.task-detail-action:active { transform: translateY(0); }
+.task-detail-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.task-detail-action i { width: 12px; height: 12px; }
+
+/* Skeleton loading */
+.task-detail-skeleton {
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface) 50%, var(--surface2) 75%);
+  background-size: 200% 100%; animation: skeleton-shimmer 1.5s infinite; border-radius: 6px;
+}
+@keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* Empty / error state */
+.task-detail-empty { text-align: center; color: var(--muted); padding: 60px 20px; }
+.task-detail-empty p { font-size: 12px; margin-top: 8px; }
+
+/* No-session info box */
+.task-detail-no-session {
+  text-align: center; padding: 20px; color: var(--muted); font-size: 11px;
+  border: 1px dashed var(--border); border-radius: 10px; margin-bottom: 16px;
+  line-height: 1.6;
+}
+
+/* Mini chat zone — inline responses below card */
+/* Ask bar — inline question input inside the card */
+.task-detail-ask {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--surface2);
+  margin-bottom: 20px; transition: border-color .15s, box-shadow .15s;
+}
+.task-detail-ask:focus-within {
+  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.task-detail-ask i.ask-icon { width: 15px; height: 15px; color: var(--muted); flex-shrink: 0; }
+.task-detail-ask input {
+  flex: 1; border: none; background: transparent; font-size: 12.5px; color: var(--text);
+  font-family: inherit; outline: none; min-width: 0; padding: 4px 0;
+}
+.task-detail-ask input::placeholder { color: var(--muted); }
+.task-detail-ask-btn {
+  width: 28px; height: 28px; border-radius: 7px; border: none; background: var(--accent);
+  color: var(--bg); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: opacity .15s, transform .15s;
+}
+.task-detail-ask-btn:hover { opacity: .85; }
+.task-detail-ask-btn:active { transform: scale(.92); }
+.task-detail-ask-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.task-detail-ask-btn:disabled { opacity: .4; cursor: default; transform: none; }
+.task-detail-ask-btn i { width: 14px; height: 14px; }
+
+/* Answer zone — slides in below the ask bar */
+.task-detail-answer {
+  border-radius: 10px; border: 1px solid var(--border); background: var(--surface2);
+  margin-bottom: 20px; overflow: hidden;
+  animation: td-answer-in .3s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes td-answer-in {
+  from { opacity: 0; max-height: 0; margin-bottom: 0; }
+  to   { opacity: 1; max-height: 60vh; margin-bottom: 20px; }
+}
+.task-detail-answer-q {
+  font-size: 11px; color: var(--muted); padding: 10px 14px 0; font-style: italic;
+  display: flex; align-items: center; gap: 6px;
+}
+.task-detail-answer-q i { width: 12px; height: 12px; opacity: .5; }
+.task-detail-answer-q .ask-copy-btn {
+  margin-left: auto; font-style: normal; padding: 2px 4px; border-radius: 4px;
+  border: none; background: transparent; color: var(--muted); cursor: pointer;
+  display: inline-flex; align-items: center; opacity: 0; transition: opacity .15s, color .15s;
+}
+.task-detail-answer:hover .ask-copy-btn { opacity: 1; }
+.task-detail-answer-q .ask-copy-btn:hover { color: var(--accent); }
+.task-detail-answer-q .ask-copy-btn:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 1px; }
+.task-detail-answer-q .ask-copy-btn i { width: 11px; height: 11px; }
+.task-detail-answer-body {
+  font-size: 13px; line-height: 1.65; color: var(--text); padding: 8px 14px 12px;
+}
+.task-detail-answer-body .typing-cursor { animation: blink .6s step-end infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .task-detail-answer { animation: none; }
+}
+
+/* Responsive: stack metrics on mobile */
+@media (max-width: 600px) {
+  .task-detail-inner { padding: 20px 16px 32px; }
+  .task-detail-metrics { flex-wrap: wrap; }
+  .task-detail-metric { flex: 1 1 45%; }
+  .task-detail-title { font-size: 17px; }
+  .task-detail-status-line { gap: 6px; }
+}
+/* Reduced motion: disable card animations */
+@media (prefers-reduced-motion: reduce) {
+  .task-detail-inner, .task-detail-section { animation: none !important; }
+  .task-detail-action:hover { transform: none; }
+  .td-chevron { transition: none; }
+}
+/* Focus-visible for collapsible section titles (keyboard nav) */
+.task-detail-section-title:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+
 @keyframes slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -3069,9 +3394,10 @@ async function refreshTodos() {
         localTodos = readCachedJson(STORAGE_KEYS.todos, []);
     }
     renderTodos();
-    // Update project count badge from local data
-    const projectNames = new Set(localTodos.filter(t => t.project).map(t => t.project));
-    document.getElementById('projectCount').textContent = projectNames.size || '0';
+    // Update project count badge — prefer the authoritative /api/projects cache,
+    // fall back to counting unique project names in local todos
+    const projCount = _projectsCache.length || new Set(localTodos.filter(t => t.project).map(t => t.project)).size;
+    document.getElementById('projectCount').textContent = projCount || '0';
     await processReminderNotifications();
 }
 
@@ -3142,6 +3468,16 @@ function updateTodoScrollHint() {
 let _projectsCache = [];
 let _expandedProject = null;
 let _usagePeriod = 'today';
+
+// Lightweight fetch to populate _projectsCache and badge on startup (no full render)
+async function fetchProjectCount() {
+    try {
+        const res = await fetch('/api/projects', { cache: 'no-store' });
+        _projectsCache = await res.json();
+        document.getElementById('projectCount').textContent = _projectsCache.length || '0';
+    } catch { /* offline */ }
+}
+
 async function renderProjects() {
     try {
         const res = await fetch('/api/projects', { cache: 'no-store' });
@@ -3257,14 +3593,542 @@ async function loadProjectTasks(name) {
         }
         const sorted = [...tasks].sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0) || new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
         container.innerHTML = sorted.map(t => `
-            <div class="project-task-item ${t.completed ? 'completed' : ''}">
+            <div class="project-task-item ${t.completed ? 'completed' : ''}" onclick="event.stopPropagation();openTaskDetail('${esc(t.id)}')" style="cursor:pointer" title="Click for details">
                 <i data-lucide="${t.completed ? 'check-circle' : 'circle'}" class="icon-sm ${t.completed ? 'ptask-check' : 'ptask-pending'}"></i>
                 <span>${esc(t.title)}</span>
+                <i data-lucide="chevron-right" class="icon-xs" style="color:var(--muted);margin-left:auto;flex-shrink:0;opacity:.5"></i>
             </div>
         `).join('');
         container.style.display = 'block';
         lucide.createIcons();
     } catch { container.innerHTML = '<div style="font-size:10px;color:var(--red)">Failed to load</div>'; }
+}
+
+// ── Task Detail Card ──
+let _taskDetailOpen = false;
+let _taskDetailCache = {};
+let _activeTaskDetailData = null;  // explicitly tracks the currently-open task
+let _askStreamController = null;   // AbortController for in-flight ask requests
+
+function buildTaskContext(data) {
+    if (!data) return '';
+    const t = data.task || {};
+    const s = data.session;
+    const files = data.files || [];
+    const tools = data.tools || {};
+    const cp = data.checkpoint;
+
+    let ctx = `[Task Context] You are answering questions about a specific task the user is inspecting.\n`;
+    ctx += `Task: "${t.title || 'unknown'}" (${t.completed ? 'completed' : 'in progress'})\n`;
+    ctx += `Project: ${t.project || 'unknown'}\n`;
+    if (t.created_at) ctx += `Created: ${t.created_at}\n`;
+
+    if (s) {
+        ctx += `\nCopilot CLI Session:\n`;
+        ctx += `- Model: ${s.model || 'unknown'}\n`;
+        ctx += `- Turns: ${s.turns || 0}\n`;
+        ctx += `- Output tokens: ${s.outputTokens || 0}\n`;
+        if (s.branch) ctx += `- Branch: ${s.branch}\n`;
+        if (s.repository) ctx += `- Repository: ${s.repository}\n`;
+        if (s.taskCompleteSummary) {
+            ctx += `\nSession Summary:\n${s.taskCompleteSummary}\n`;
+        }
+    }
+
+    if (files.length) {
+        ctx += `\nFiles changed (${files.length}):\n`;
+        files.forEach(f => {
+            const shortPath = (f.path || '').split(/[\\\/]/).slice(-3).join('/');
+            ctx += `- ${shortPath} (${f.tool || 'edit'})\n`;
+        });
+    }
+
+    if (Object.keys(tools).length) {
+        const sorted = Object.entries(tools).sort((a, b) => b[1] - a[1]);
+        ctx += `\nTools used: ${sorted.map(([n, c]) => `${n}(${c})`).join(', ')}\n`;
+    }
+
+    if (cp?.overview) {
+        ctx += `\nCheckpoint overview:\n${cp.overview}\n`;
+    }
+    if (cp?.workDone) {
+        ctx += `\nWork done:\n${cp.workDone}\n`;
+    }
+
+    ctx += `\nAnswer questions about this task, the session, files changed, tools used, or the project. Be specific and cite details from the context above.`;
+    return ctx;
+}
+
+function getActiveTaskDetail() {
+    return _activeTaskDetailData;
+}
+
+async function openTaskDetail(taskId) {
+    _taskDetailOpen = true;
+    _activeTaskDetailData = null;
+
+    // Abort any in-flight ask
+    if (_askStreamController) { _askStreamController.abort(); _askStreamController = null; }
+
+    // Target the .right-panel which contains panel-header, chatFeed, input-bar
+    const rightPanel = document.querySelector('.right-panel');
+    if (!rightPanel) return;
+
+    // Hide chat feed, header, AND input-bar — ask bar is inside the card
+    const chatFeed = document.getElementById('chatFeed');
+    const panelHeader = rightPanel.querySelector('.panel-header');
+    const inputBar = rightPanel.querySelector('.input-bar');
+    if (chatFeed) chatFeed.style.display = 'none';
+    if (panelHeader) panelHeader.style.display = 'none';
+    if (inputBar) inputBar.style.display = 'none';
+
+    // Create or get detail container inside right-panel
+    let detailEl = document.getElementById('taskDetailPanel');
+    if (!detailEl) {
+        detailEl = document.createElement('div');
+        detailEl.id = 'taskDetailPanel';
+        detailEl.className = 'task-detail';
+        rightPanel.appendChild(detailEl);
+    }
+    detailEl.style.display = 'block';
+
+    // Show skeleton while loading
+    detailEl.innerHTML = renderTaskDetailSkeleton();
+    lucide.createIcons();
+
+    try {
+        const res = await fetch('/api/task-detail/' + encodeURIComponent(taskId), { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        _taskDetailCache[taskId] = data;
+        _activeTaskDetailData = data;
+        detailEl.innerHTML = renderTaskDetailCard(data);
+        lucide.createIcons();
+        // Focus the ask input for immediate typing
+        const askInput = detailEl.querySelector('.task-detail-ask input');
+        if (askInput) askInput.focus();
+    } catch (err) {
+        detailEl.innerHTML = `<div class="task-detail-inner">
+            <button class="task-detail-back" onclick="closeTaskDetail()">
+                <i data-lucide="arrow-left" class="icon-sm"></i> Back to chat
+            </button>
+            <div class="task-detail-empty">
+                <i data-lucide="alert-circle" class="icon-xl" style="color:var(--red)"></i>
+                <p>Failed to load task details</p>
+                <p style="font-size:10px;margin-top:4px;color:var(--muted)">${esc(err.message)}</p>
+            </div>
+        </div>`;
+        lucide.createIcons();
+    }
+}
+
+function closeTaskDetail() {
+    _taskDetailOpen = false;
+    _activeTaskDetailData = null;
+    if (_askStreamController) { _askStreamController.abort(); _askStreamController = null; }
+    const detailEl = document.getElementById('taskDetailPanel');
+    if (detailEl) {
+        detailEl.style.display = 'none';
+        detailEl.innerHTML = '';
+    }
+    // Restore chat content, header, and input bar
+    const rightPanel = document.querySelector('.right-panel');
+    if (rightPanel) {
+        const chatFeed = document.getElementById('chatFeed');
+        const panelHeader = rightPanel.querySelector('.panel-header');
+        const inputBar = rightPanel.querySelector('.input-bar');
+        if (chatFeed) chatFeed.style.display = '';
+        if (panelHeader) panelHeader.style.display = '';
+        if (inputBar) inputBar.style.display = '';
+    }
+}
+
+function renderTaskDetailSkeleton() {
+    return `<div class="task-detail-inner">
+        <button class="task-detail-back" onclick="closeTaskDetail()">
+            <i data-lucide="arrow-left" class="icon-sm"></i> Back to chat
+        </button>
+        <div style="margin-bottom:20px">
+            <div class="task-detail-skeleton" style="height:14px;width:60px;margin-bottom:10px"></div>
+            <div class="task-detail-skeleton" style="height:24px;width:80%;margin-bottom:12px"></div>
+            <div style="display:flex;gap:6px">
+                <div class="task-detail-skeleton" style="height:22px;width:70px;border-radius:6px"></div>
+                <div class="task-detail-skeleton" style="height:22px;width:90px;border-radius:6px"></div>
+                <div class="task-detail-skeleton" style="height:22px;width:110px;border-radius:6px"></div>
+            </div>
+        </div>
+        <div style="display:flex;gap:1px;border-radius:10px;overflow:hidden;border:1px solid var(--border);margin-bottom:20px">
+            ${[1,2,3,4].map(() => '<div style="flex:1;padding:14px 8px;background:var(--surface2);text-align:center"><div class="task-detail-skeleton" style="height:22px;width:32px;margin:0 auto 5px"></div><div class="task-detail-skeleton" style="height:8px;width:40px;margin:0 auto"></div></div>').join('')}
+        </div>
+        <div class="task-detail-skeleton" style="height:120px;width:100%;border-radius:10px;margin-bottom:10px"></div>
+        <div class="task-detail-skeleton" style="height:80px;width:100%;border-radius:10px"></div>
+    </div>`;
+}
+
+function fmtTokens(n) {
+    if (!n) return '0';
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+    return String(n);
+}
+
+function fmtRelativeTime(isoStr) {
+    if (!isoStr) return '';
+    try {
+        const d = new Date(isoStr);
+        const now = new Date();
+        const diffMs = now - d;
+        const mins = Math.floor(diffMs / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        const days = Math.floor(hrs / 24);
+        if (days < 7) return `${days}d ago`;
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch { return ''; }
+}
+
+function renderMarkdownHtml(raw) {
+    if (!raw) return '';
+    // Proper markdown → HTML (enough for task summaries)
+    let html = raw
+        // Code blocks (```...```)
+        .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+            `<pre><code>${esc(code.trim())}</code></pre>`)
+        // Headings
+        .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        // Horizontal rules
+        .replace(/^---+$/gm, '<hr>')
+        // Bold
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        // Inline code
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        // Unordered lists
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        // Wrap consecutive <li> in <ul>
+        .replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
+        // Ordered lists (1. 2. 3.)
+        .replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    // Paragraphs: split on double newlines, wrap non-tag lines
+    html = html.split(/\n{2,}/).map(block => {
+        block = block.trim();
+        if (!block) return '';
+        if (/^<(h[2-4]|ul|ol|pre|hr|li|div|p)/.test(block)) return block;
+        return `<p>${block.replace(/\n/g, '<br>')}</p>`;
+    }).join('\n');
+    return html;
+}
+
+function renderTaskDetailCard(data) {
+    const t = data.task || {};
+    const s = data.session;
+    const files = data.files || [];
+    const refs = data.refs || [];
+    const tools = data.tools || {};
+    const cp = data.checkpoint;
+
+    const isDone = t.completed;
+    const taskDate = t.created_at || t.createdAt || '';
+    const dateStr = taskDate ? new Date(taskDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
+
+    // Action buttons (at the top)
+    const actions = `<div class="task-detail-actions" style="margin-top:0;padding-top:0;border-top:none;margin-bottom:0">
+        <button class="task-detail-action" onclick="copyTaskPackage('${esc(t.id)}')">
+            <i data-lucide="clipboard-copy"></i> Copy
+        </button>
+        <button class="task-detail-action" onclick="exportTaskPackage('${esc(t.id)}')">
+            <i data-lucide="download"></i> Export
+        </button>
+        ${s?.id ? `<button class="task-detail-action" onclick="navigator.clipboard.writeText('${esc(s.id)}').then(() => { const b=event.target.closest('.task-detail-action'); if(b){const o=b.innerHTML;b.innerHTML='<i data-lucide=\\'check\\' class=\\'icon-sm\\'></i> Copied ID';lucide.createIcons();setTimeout(()=>{b.innerHTML=o;lucide.createIcons()},1500)} })" title="Copy session ID: ${esc(s.id)}">
+            <i data-lucide="terminal"></i> Session
+        </button>` : ''}
+    </div>`;
+
+    // Meta badges
+    let badges = '';
+    if (t.project) badges += `<span class="task-detail-badge accent">${esc(t.project)}</span>`;
+    if (s?.branch) badges += `<span class="task-detail-badge"><i data-lucide="git-branch" class="icon-xs"></i>${esc(s.branch)}</span>`;
+    if (s?.model) badges += `<span class="task-detail-badge purple"><i data-lucide="cpu" class="icon-xs"></i>${esc(s.model)}</span>`;
+    if (t.source === 'agent') badges += `<span class="task-detail-badge"><i data-lucide="bot" class="icon-xs"></i>agent</span>`;
+
+    // Hero header
+    const hero = `<div class="task-detail-hero">
+        <div class="task-detail-status-line">
+            <span class="task-detail-status-chip ${isDone ? 'done' : 'pending'}">
+                <i data-lucide="${isDone ? 'check-circle' : 'clock'}" class="icon-sm"></i>
+                ${isDone ? 'Completed' : 'In Progress'}
+            </span>
+            ${dateStr ? `<span class="task-detail-date">${dateStr}</span>` : ''}
+            <div style="flex:1"></div>
+            ${actions}
+        </div>
+        <div class="task-detail-title">${esc(t.title || 'Untitled task')}</div>
+        <div class="task-detail-meta">${badges}</div>
+    </div>`;
+
+    // Metrics strip
+    let metricsHtml = '';
+    if (s) {
+        metricsHtml = `<div class="task-detail-metrics">
+            <div class="task-detail-metric accent"><div class="task-detail-metric-value">${s.turns || 0}</div><div class="task-detail-metric-label">Turns</div></div>
+            <div class="task-detail-metric green"><div class="task-detail-metric-value">${fmtTokens(s.outputTokens)}</div><div class="task-detail-metric-label">Tokens</div></div>
+            <div class="task-detail-metric orange"><div class="task-detail-metric-value">${files.length}</div><div class="task-detail-metric-label">Files</div></div>
+            <div class="task-detail-metric purple"><div class="task-detail-metric-value">${Object.values(tools).reduce((a,b) => a+b, 0)}</div><div class="task-detail-metric-label">Tool Calls</div></div>
+        </div>`;
+    }
+
+    // Summary section with clamping
+    let summaryHtml = '';
+    const summaryText = s?.taskCompleteSummary || cp?.overview || s?.summary || '';
+    if (summaryText) {
+        const rendered = renderMarkdownHtml(summaryText);
+        summaryHtml = `<div class="task-detail-section">
+            <div class="task-detail-section-title" onclick="this.parentElement.classList.toggle('collapsed')">
+                <i data-lucide="file-text"></i> Summary
+                <i data-lucide="chevron-down" class="td-chevron"></i>
+            </div>
+            <div class="task-detail-section-body">
+                <div class="task-detail-summary-wrap clamped" id="summaryWrap">
+                    <div class="task-detail-summary">${rendered}</div>
+                    <button class="task-detail-summary-toggle" onclick="event.stopPropagation();document.getElementById('summaryWrap').classList.toggle('clamped');this.textContent=this.textContent==='Show more'?'Show less':'Show more'">Show more</button>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    // Files section
+    let filesHtml = '';
+    if (files.length > 0) {
+        const fileRows = files.map(f => {
+            const shortPath = (f.path || '').replace(/^.*[\\\/](?=(?:app|cli|src|lib|test|agent)[\\\/])/, '');
+            const toolClass = (f.tool || 'edit').toLowerCase();
+            return `<div class="task-detail-file">
+                <i data-lucide="${f.tool === 'create' ? 'file-plus-2' : f.tool === 'view' ? 'eye' : 'file-pen'}" class="icon-sm task-detail-file-icon"></i>
+                <span class="task-detail-file-path" title="${esc(f.path)}">${esc(shortPath || f.path)}</span>
+                <span class="task-detail-file-tool ${toolClass}">${esc(f.tool || 'edit')}</span>
+                ${f.turn != null ? `<span class="task-detail-file-turn">t${f.turn}</span>` : ''}
+            </div>`;
+        }).join('');
+        filesHtml = `<div class="task-detail-section">
+            <div class="task-detail-section-title" onclick="this.parentElement.classList.toggle('collapsed')">
+                <i data-lucide="folder-open"></i> Files Changed <span class="td-section-count">${files.length}</span>
+                <i data-lucide="chevron-down" class="td-chevron"></i>
+            </div>
+            <div class="task-detail-section-body">${fileRows}</div>
+        </div>`;
+    }
+
+    // Tools section with proportion bars
+    let toolsHtml = '';
+    const toolEntries = Object.entries(tools).sort((a,b) => b[1] - a[1]);
+    if (toolEntries.length > 0) {
+        const maxCount = toolEntries[0][1];
+        const chips = toolEntries.map(([name, count]) => {
+            const pct = Math.round((count / maxCount) * 100);
+            return `<span class="task-detail-tool-chip">${esc(name)}<span class="tool-count">×${count}</span><span class="tool-bar"><span class="tool-bar-fill" style="width:${pct}%"></span></span></span>`;
+        }).join('');
+        toolsHtml = `<div class="task-detail-section">
+            <div class="task-detail-section-title" onclick="this.parentElement.classList.toggle('collapsed')">
+                <i data-lucide="wrench"></i> Tools Used <span class="td-section-count">${toolEntries.length}</span>
+                <i data-lucide="chevron-down" class="td-chevron"></i>
+            </div>
+            <div class="task-detail-section-body">
+                <div class="task-detail-tool-grid">${chips}</div>
+            </div>
+        </div>`;
+    }
+
+    // Refs section
+    let refsHtml = '';
+    if (refs.length > 0) {
+        const refRows = refs.map(r => {
+            const icon = r.type === 'pr' ? 'git-pull-request' : r.type === 'issue' ? 'circle-dot' : 'git-commit';
+            const typeClass = r.type || 'commit';
+            return `<div class="task-detail-ref">
+                <i data-lucide="${icon}" class="icon-sm" style="color:var(--accent)"></i>
+                <span class="task-detail-ref-type ${typeClass}">${esc(r.type)}</span>
+                <span class="task-detail-ref-value">#${esc(r.value)}</span>
+            </div>`;
+        }).join('');
+        refsHtml = `<div class="task-detail-section">
+            <div class="task-detail-section-title" onclick="this.parentElement.classList.toggle('collapsed')">
+                <i data-lucide="link"></i> References <span class="td-section-count">${refs.length}</span>
+                <i data-lucide="chevron-down" class="td-chevron"></i>
+            </div>
+            <div class="task-detail-section-body">${refRows}</div>
+        </div>`;
+    }
+
+    // Technical details (collapsed by default)
+    let techHtml = '';
+    if (cp?.workDone || cp?.technicalDetails) {
+        const techText = (cp.workDone || '') + (cp.technicalDetails ? '\n\n' + cp.technicalDetails : '');
+        const rendered = renderMarkdownHtml(techText);
+        techHtml = `<div class="task-detail-section collapsed">
+            <div class="task-detail-section-title" onclick="this.parentElement.classList.toggle('collapsed')">
+                <i data-lucide="code"></i> Technical Details
+                <i data-lucide="chevron-down" class="td-chevron"></i>
+            </div>
+            <div class="task-detail-section-body">
+                <div class="task-detail-summary">${rendered}</div>
+            </div>
+        </div>`;
+    }
+
+    // No-session notice
+    let noSessionHtml = '';
+    if (!s) {
+        noSessionHtml = `<div class="task-detail-no-session">
+            <i data-lucide="info" class="icon-sm" style="vertical-align:middle;margin-right:4px;opacity:.5"></i>
+            No linked Copilot CLI session found.<br>
+            Session details appear when tasks are created by an AI agent.
+        </div>`;
+    }
+
+    return `<div class="task-detail-inner">
+        <button class="task-detail-back" onclick="closeTaskDetail()">
+            <i data-lucide="arrow-left" class="icon-sm"></i> Back to chat
+        </button>
+        <div class="task-detail-ask">
+            <i data-lucide="message-circle-question" class="ask-icon"></i>
+            <input type="text" placeholder="Ask about this task, session, or project\u2026" spellcheck="false"
+                   aria-label="Ask about this task" autocomplete="off"
+                   onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askAboutTask(this.value);this.value='';}" />
+            <button class="task-detail-ask-btn" aria-label="Ask" onclick="const i=this.previousElementSibling;askAboutTask(i.value);i.value='';">
+                <i data-lucide="arrow-up"></i>
+            </button>
+        </div>
+        <div id="taskDetailAnswer" class="task-detail-answer" style="display:none"></div>
+        ${hero}
+        ${metricsHtml}
+        ${noSessionHtml}
+        ${summaryHtml}
+        ${filesHtml}
+        ${toolsHtml}
+        ${refsHtml}
+        ${techHtml}
+    </div>`;
+}
+
+async function copyTaskPackage(taskId) {
+    try {
+        const res = await fetch('/api/task-detail/' + encodeURIComponent(taskId) + '/export?format=md');
+        const md = await res.text();
+        await navigator.clipboard.writeText(md);
+        // Visual feedback
+        const btn = event?.target?.closest?.('.task-detail-action');
+        if (btn) { const orig = btn.innerHTML; btn.innerHTML = '<i data-lucide="check" class="icon-sm"></i> Copied!'; lucide.createIcons(); setTimeout(() => { btn.innerHTML = orig; lucide.createIcons(); }, 1500); }
+    } catch (err) {
+        console.error('Copy failed:', err);
+    }
+}
+
+async function exportTaskPackage(taskId) {
+    try {
+        const res = await fetch('/api/task-detail/' + encodeURIComponent(taskId) + '/export?format=md');
+        const md = await res.text();
+        const blob = new Blob([md], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `task-${taskId.slice(0, 8)}.md`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error('Export failed:', err);
+    }
+}
+
+async function askAboutTask(question) {
+    question = (question || '').trim();
+    if (!question || !_taskDetailOpen) return;
+    const data = getActiveTaskDetail();
+    if (!data) return;
+
+    // Abort any previous in-flight ask
+    if (_askStreamController) { _askStreamController.abort(); }
+    _askStreamController = new AbortController();
+    const signal = _askStreamController.signal;
+
+    const answerEl = document.getElementById('taskDetailAnswer');
+    if (!answerEl) return;
+
+    // Show the question + loading state
+    answerEl.style.display = '';
+    answerEl.style.animation = 'none'; void answerEl.offsetHeight; answerEl.style.animation = '';
+    answerEl.innerHTML = `
+        <div class="task-detail-answer-q"><i data-lucide="user"></i> ${esc(question)}<button class="ask-copy-btn" aria-label="Copy answer" style="visibility:hidden"><i data-lucide="clipboard"></i></button></div>
+        <div class="task-detail-answer-body"><span class="typing-cursor">\u25CB</span></div>`;
+    lucide.createIcons();
+
+    const bodyEl = answerEl.querySelector('.task-detail-answer-body');
+    let streamText = '';
+
+    try {
+        const taskContext = buildTaskContext(data);
+        const messages = [
+            { id: genId(), role: 'system', content: taskContext },
+            { id: genId(), role: 'user', content: question }
+        ];
+
+        const res = await fetch('/api/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'traceparent': generateTraceparent() },
+            body: JSON.stringify({
+                threadId: 'ask-' + genId(),
+                runId: genId(),
+                state: { todos: localTodos, recurringTemplates: activeTemplates },
+                messages,
+                tools: [],
+                context: [],
+                forwardedProps: {}
+            }),
+            signal
+        });
+
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+        await processAGUISSE(res, {
+            onTextContent(ev) {
+                if (signal.aborted) return;
+                streamText += ev.delta;
+                if (bodyEl) bodyEl.innerHTML = esc(streamText).replace(/\n/g, '<br>') + '<span class="typing-cursor">\u25CB</span>';
+                answerEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            },
+            onTextEnd() {
+                if (signal.aborted) return;
+                if (bodyEl) bodyEl.innerHTML = esc(streamText).replace(/\n/g, '<br>');
+                // Reveal the inline copy button on the question line
+                const copyBtn = answerEl.querySelector('.ask-copy-btn');
+                if (copyBtn) {
+                    copyBtn.style.visibility = '';
+                    copyBtn.onclick = () => {
+                        navigator.clipboard.writeText(streamText);
+                        copyBtn.innerHTML = '<i data-lucide="check"></i>';
+                        lucide.createIcons();
+                        setTimeout(() => { copyBtn.innerHTML = '<i data-lucide="clipboard"></i>'; lucide.createIcons(); }, 1500);
+                    };
+                }
+            },
+            onStateSnapshot() {},
+            onStateDelta() {},
+            onToolCallStart() {},
+            onToolCallEnd() {},
+            onError(ev) { throw new Error(ev.message || 'AI error'); },
+            onStreamDrop() {}
+        });
+    } catch (err) {
+        if (signal.aborted) return;
+        if (bodyEl) bodyEl.innerHTML = `<span style="color:var(--red);font-size:12px"><i data-lucide="alert-circle" class="icon-sm" style="vertical-align:middle;margin-right:4px"></i>${esc(err.message)}</span>`;
+        lucide.createIcons();
+    } finally {
+        if (_askStreamController?.signal === signal) _askStreamController = null;
+    }
 }
 function fmtTime(iso) { try { return new Date(iso).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}); } catch { return iso||''; } }
 function fmtRelativeDate(dateStr) {
@@ -3959,9 +4823,13 @@ function generateTraceparent() {
 let _streamBubble = null;
 let _streamContent = '';
 
+function _getStreamTarget() {
+    return document.getElementById('chatFeed');
+}
+
 function _startStreamBubble() {
     removeTypingIndicator();
-    const feed = document.getElementById('chatFeed');
+    const feed = _getStreamTarget();
     const div = document.createElement('div');
     div.className = 'chat-msg ai';
     div.innerHTML = '<i data-lucide="bot" class="msg-icon"></i><span class="msg-content"><span class="typing-cursor">▋</span></span>';
@@ -3978,7 +4846,8 @@ function _appendStream(delta) {
     const el = _streamBubble.querySelector('.msg-content');
     if (el) {
         el.innerHTML = esc(_streamContent).replace(/\n/g, '<br>') + '<span class="typing-cursor">▋</span>';
-        document.getElementById('chatFeed').scrollTop = document.getElementById('chatFeed').scrollHeight;
+        const feed = _getStreamTarget();
+        feed.scrollTop = feed.scrollHeight;
     }
 }
 
@@ -4008,7 +4877,7 @@ async function sendCommand(cmd) {
     isProcessing = true; { const _sb = document.getElementById('sendBtn'); if (_sb) _sb.disabled = true; }
     chatInput.value = ''; autoResize();
 
-    // Add user message to conversation history and show in chat
+    // Add user message to chat feed and history
     const userMsgId = genId();
     addChat('user','message-square', esc(cmd));
     conversationHistory.push({ id: userMsgId, role: 'user', content: cmd });
@@ -4022,13 +4891,15 @@ async function sendCommand(cmd) {
 
     try {
         const runId = genId();
+        const commandState = { todos: localTodos, recurringTemplates: activeTemplates };
+
         const res = await fetch('/api/command', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'traceparent': generateTraceparent() },
             body: JSON.stringify({
                 threadId: agThreadId,
                 runId,
-                state: { todos: localTodos, recurringTemplates: activeTemplates },
+                state: commandState,
                 messages: conversationHistory,
                 tools: [],
                 context: [],
@@ -4102,7 +4973,6 @@ async function sendCommand(cmd) {
         // Store assistant reply in conversation history
         if (assistantText) {
             conversationHistory.push({ id: assistantMsgId || genId(), role: 'assistant', content: assistantText });
-            // Keep history bounded to avoid unbounded context growth
             if (conversationHistory.length > MAX_HISTORY) {
                 conversationHistory = conversationHistory.slice(-MAX_HISTORY);
             }

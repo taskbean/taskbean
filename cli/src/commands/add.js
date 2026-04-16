@@ -25,9 +25,9 @@ export function addCommand(title, opts) {
 
   const id = randomUUID();
   run(
-    `INSERT INTO todos (id, title, completed, source, priority, tags, project, upsert_key, created_at)
-     VALUES (?, ?, 0, 'agent', 'none', '[]', ?, ?, ?)`,
-    [id, title, project.name, opts.key || null, new Date().toISOString()]
+    `INSERT INTO todos (id, title, completed, source, priority, tags, project, upsert_key, session_id, created_at)
+     VALUES (?, ?, 0, 'agent', 'none', '[]', ?, ?, ?, ?)`,
+    [id, title, project.name, opts.key || null, opts.sessionId || null, new Date().toISOString()]
   );
 
   const task = getRow('SELECT * FROM todos WHERE id = ?', [id]);
