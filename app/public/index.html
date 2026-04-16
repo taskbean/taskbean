@@ -7474,15 +7474,16 @@ function populateSettingsFromConfig(cfg) {
     const devSel = document.getElementById('settingsDevice');
     if (devSel && cfg.preferredDevice) devSel.value = cfg.preferredDevice;
 
-    // Timezone — sync to clock variable so the preview and main clock agree
+    // Timezone — always sync to clock variable.
+    // If server has explicit tz, use it. Otherwise use browser's detected tz.
+    // This clears any stale localStorage timezone that may have been set previously.
     const tzSel = document.getElementById('settingsTimezone');
     const effectiveTz = cfg.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (tzSel) {
         populateTimezoneSelect(tzSel, effectiveTz);
     }
-    // Sync the clock's timezone variable if server has an explicit timezone set
-    if (cfg.timezone && typeof setClockTimezone === 'function') {
-        setClockTimezone(cfg.timezone);
+    if (typeof setClockTimezone === 'function') {
+        setClockTimezone(effectiveTz);
     }
 
     // Run on startup
