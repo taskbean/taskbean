@@ -32,17 +32,23 @@ taskbean is a **local-first task manager** built for developers who work with AI
 
 Both halves read and write the same local SQLite database at `~/.taskbean/taskbean.db`. The CLI is the **mechanism** — Copilot tracks your work automatically. The app is the **experience** — you see everything in a beautiful local dashboard.
 
-```
-Agent (Copilot/Claude)          CLI                    Desktop App (PWA)
-       │                         │                          │
-       ├── bean add "fix bug" ──▶│                          │
-       ├── bean done t_abc ────▶ │                          │
-       │                         │── writes ──▶ SQLite ◀── reads ──│
-       │                         │                          │
-       │                         │    bean serve ──▶ mini dashboard │
-       │                         │                          │
-       │                         │         Foundry Local ──▶│ AI chat, voice,
-       │                         │                          │ reminders, themes
+```mermaid
+flowchart LR
+    subgraph Agents["Coding agents"]
+        A1["Copilot CLI"]
+        A2["Claude Code"]
+        A3["OpenCode / Codex"]
+    end
+
+    CLI["<b>bean</b> CLI<br/><i>add · done · report</i>"]
+    DB[("SQLite<br/>~/.taskbean/taskbean.db")]
+    APP["Desktop App (PWA)<br/><i>bean serve</i>"]
+    AI["Foundry Local<br/><i>optional · on-device AI</i>"]
+
+    A1 & A2 & A3 -->|"Skill auto-logs"| CLI
+    CLI -->|write| DB
+    DB -->|read| APP
+    APP <-->|"chat · voice · reminders"| AI
 ```
 
 ## Quick Start
