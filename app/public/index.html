@@ -609,8 +609,7 @@ header {
    - Projects gets a wider default via clamp() since it carries richer content
    - min/max form the drag clamp range for .panel-resizer */
 :root {
-  --left-panel-w: 280px;
-  --left-panel-w-projects: clamp(320px, 34vw, 480px);
+  --left-panel-w: clamp(320px, 34vw, 480px);
   --left-panel-w-min: 240px;
   --left-panel-w-max: 560px;
 }
@@ -624,10 +623,6 @@ header {
   background: var(--surface);
   flex-shrink: 0; min-height: 0;
   transition: width .26s cubic-bezier(.4,0,.2,1);
-}
-/* When Projects is the active tab, widen the panel to fit its richer content. */
-.app-shell:has(#tabContentProjects.active) .left-panel {
-  width: var(--left-panel-w-projects);
 }
 .right-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 
@@ -679,10 +674,6 @@ header {
 @media (min-width: 1100px) {
   .nav-rail:not(.expanded) ~ .app-shell .left-panel {
     width: calc(var(--left-panel-w) + 232px);
-    max-width: var(--left-panel-w-max);
-  }
-  .nav-rail:not(.expanded) ~ .app-shell:has(#tabContentProjects.active) .left-panel {
-    width: calc(var(--left-panel-w-projects) + 232px);
     max-width: var(--left-panel-w-max);
   }
 }
@@ -5336,8 +5327,11 @@ let _showDisabledReminders = false;
 let _showCompletedTodos = true; // default: show completed
 let _expandedTodoId = null; // currently expanded todo ID (persists across re-renders)
 function switchSidebarTab(tab) {
+    const sameTab = _activeSidebarTab === tab;
+    // Commit the active-tab state synchronously so rapid clicks see the
+    // updated value (startViewTransition defers the DOM mutation).
+    _activeSidebarTab = tab;
     const apply = () => {
-        _activeSidebarTab = tab;
         document.getElementById('tabTodos').classList.toggle('active', tab === 'todos');
         document.getElementById('tabRecurring').classList.toggle('active', tab === 'recurring');
         document.getElementById('tabProjects').classList.toggle('active', tab === 'projects');
@@ -5347,11 +5341,16 @@ function switchSidebarTab(tab) {
         if (tab === 'projects') renderProjects();
         updateSidebarActionButtons();
         lucide.createIcons();
-        // Auto-expand nav rail when switching tabs to show content
-        const rail = document.getElementById('navRail');
-        if (!rail.classList.contains('expanded')) toggleNavRail();
     };
     if (document.startViewTransition) document.startViewTransition(apply); else apply();
+
+    // Click-twice on the already-active tab collapses the nav rail.
+    // Clicking a different tab NEVER auto-expands the rail — the left panel
+    // updates in place so the rail stays in the user's chosen state.
+    if (sameTab) {
+        const rail = document.getElementById('navRail');
+        if (rail && rail.classList.contains('expanded')) toggleNavRail();
+    }
 }
 
 function toggleNavRail() {

@@ -96,4 +96,45 @@ test.describe('left-panel reflow', () => {
 
     expect(after).toBeGreaterThan(before);
   });
+
+  test('Tasks and Recurring share the same panel width as Projects', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.locator('#panelResizer').waitFor();
+    await page.waitForFunction(() => !!document.getElementById('panelResizer')?.getAttribute('aria-valuenow'));
+
+    const widthOf = () => page.locator('.left-panel').evaluate(el => Math.round(el.getBoundingClientRect().width));
+
+    const wProjects = await widthOf();
+    await page.locator('#tabTodos').click();
+    await page.waitForTimeout(700);
+    const wTodos = await widthOf();
+    await page.locator('#tabRecurring').click();
+    await page.waitForTimeout(700);
+    const wRecurring = await widthOf();
+
+    expect(wTodos).toBe(wProjects);
+    expect(wRecurring).toBe(wProjects);
+  });
+
+  test('double-click active tab collapses rail; clicking another tab while collapsed keeps rail collapsed', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.locator('#panelResizer').waitFor();
+
+    const rail = page.locator('#navRail');
+    await expect(rail).toHaveClass(/expanded/);
+
+    // Click-twice on active Projects → collapse.
+    await page.locator('#tabProjects').click();
+    await page.waitForTimeout(700);
+    await expect(rail).not.toHaveClass(/expanded/);
+
+    // Now click Tasks while collapsed → rail STAYS collapsed, tab switches.
+    await page.locator('#tabTodos').click();
+    await page.waitForTimeout(900);
+    await expect(rail).not.toHaveClass(/expanded/);
+    await expect(page.locator('#tabTodos')).toHaveClass(/active/);
+    await expect(page.locator('#tabContentTodos')).toHaveClass(/active/);
+  });
 });
