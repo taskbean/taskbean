@@ -21,16 +21,16 @@
 
 ## What is taskbean?
 
-taskbean is a **local-first task manager** built for developers who work with AI coding agents. It has two halves:
+A local-first task manager for developers whose day job involves a coding agent. Two halves, one SQLite file:
 
-| | CLI (`cli/`) | Desktop App (`app/`) |
+| | CLI (`cli/`) | Desktop app (`app/`) |
 |---|---|---|
-| **For** | AI agents (Copilot, Claude, etc.) | You, the developer |
-| **Does** | Logs tasks as the agent works | Dashboard, AI chat, reminders, reports |
+| **For** | The agent (Copilot, Claude, Codex, OpenCode) | You |
+| **Does** | Logs tasks as the agent works | Dashboard, chat, reminders, reports |
 | **How** | `bean add "fix auth bug"` → `bean done` | PWA with Foundry Local on-device inference |
 | **Tech** | Node.js, commander, SQLite | FastAPI + Express, Foundry Local SDK, vanilla JS PWA |
 
-Both halves read and write the same local SQLite database at `~/.taskbean/taskbean.db`. The CLI is the **mechanism** — Copilot tracks your work automatically. The app is the **experience** — you see everything in a beautiful local dashboard.
+Both halves read and write `~/.taskbean/taskbean.db`. The agent does the typing; you do the reviewing. Nothing leaves the machine.
 
 ```mermaid
 flowchart LR
@@ -51,9 +51,9 @@ flowchart LR
     APP <-->|"chat · voice · reminders"| AI
 ```
 
-## Quick Start
+## Quick start
 
-### CLI (Agent Skill)
+### CLI (agent skill)
 
 ```bash
 # Install globally
@@ -70,7 +70,7 @@ bean list
 bean report
 ```
 
-### Desktop App
+### Desktop app
 
 ```bash
 cd app
@@ -86,7 +86,7 @@ npm start
 # Open http://localhost:2326
 ```
 
-## Project Structure
+## Project structure
 
 ```
 taskbean/
@@ -115,16 +115,16 @@ taskbean/
 └── README.md               # ← you are here
 ```
 
-## Works With
+## Works with
 
-taskbean ships as an [Agent Skill](https://agentskills.io). Install the skill, and your coding agent auto-discovers it — calling `bean add` / `bean done` as it works.
+taskbean ships as an [Agent Skill](https://agentskills.io). Drop it in the right folder and the agent picks it up on its next run. `bean install` handles the folder.
 
 ```bash
-bean install              # install to .agents/skills/ (discovered by Copilot CLI, OpenCode, Codex)
-bean install --global     # same, but into ~/ so every project sees it
-bean install --agent claude                  # also install to .claude/skills/ (Claude Code)
-bean install --agent codex --codex-sandbox   # Codex + whitelist ~/.taskbean in ~/.codex/config.toml
-bean install --agent all                     # .agents/skills/ + .github/skills/ + .claude/skills/
+bean install              # .agents/skills/  (Copilot CLI, OpenCode, Codex)
+bean install --global     # same, but in ~/  so every project sees it
+bean install --agent claude                  # .claude/skills/  (Claude Code needs its own folder)
+bean install --agent codex --codex-sandbox   # also whitelists ~/.taskbean in ~/.codex/config.toml
+bean install --agent all                     # install everywhere
 ```
 
 | Agent | Skill Discovery | Status | Notes |
@@ -135,44 +135,46 @@ bean install --agent all                     # .agents/skills/ + .github/skills/
 | **Claude Code** | `.claude/skills/` | ✅ Verified | Needs `.claude/skills/` (does not scan `.agents/skills/`). `bean install` handles this |
 | **Any Agent Skills-compatible agent** | `.agents/skills/` | ✅ Expected | Follows the [Agent Skills spec](https://agentskills.io) |
 
-## How It Works
+## How it works
 
-### The CLI — an agent skill
+### The CLI is the robot
 
-taskbean ships as an [Agent Skill](https://agentskills.io) that Copilot CLI, Claude Code, Codex, and OpenCode auto-discover. While an agent works, it calls `bean add` to log tasks and `bean done` to close them — no prompting from you required. 17 commands cover the full lifecycle: `add`, `start`, `done`, `list`, `edit`, `remove`, `remind`, `block`, `track`, `projects`, `report`, `export`, `serve`, and more. Every write goes straight to `~/.taskbean/taskbean.db`.
+17 commands (`add`, `start`, `done`, `list`, `edit`, `remove`, `remind`, `block`, `track`, `projects`, `report`, `export`, `serve`, and a few more). The agent picks up the skill, notices a task is underway, and calls `bean add`. It closes with `bean done`. You never type any of this. You open the dashboard at the end of the day and there it is: a receipt of what got built.
 
-### The desktop app — local AI on your device
+### The app is the human side
 
-The app is a single-page PWA served by a Python FastAPI backend (`agent/main.py`). All AI inference runs locally via [Microsoft Foundry Local](https://github.com/microsoft/foundry-local), which picks the best execution provider on your machine — NPU (VitisAI), GPU (MIGraphX/CUDA), or CPU — and loads models like Phi-4, Qwen, or Llama entirely on-device.
+A single-page PWA behind a FastAPI backend (`agent/main.py`). All inference is on-device through [Microsoft Foundry Local](https://github.com/microsoft/foundry-local), which auto-routes to the best silicon on the box: NPU via VitisAI, GPU via MIGraphX or CUDA, CPU as a fallback. Pick a model (Phi-4, Qwen, Llama, anything in the Foundry Local catalog) and switch between them from the settings panel.
 
-Chat uses the [AG-UI protocol](https://github.com/ag-ui-protocol/ag-ui) over Server-Sent Events. Your message streams into the agent, the agent calls tools (`add_task`, `set_reminder`, `complete_task`, etc.), and state deltas stream back to the UI — so you see tasks appear as the model decides to create them.
+Chat rides the [AG-UI protocol](https://github.com/ag-ui-protocol/ag-ui) over SSE. Tools like `add_task`, `set_reminder`, and `complete_task` run on the backend while state deltas stream back to the UI, so you watch tasks appear as the model invents them.
 
-Features:
+What's in the box:
 
-- 💬 Natural language task management with multi-turn tool calling
-- ⏰ Smart reminders with native Windows toast notifications
-- 🔄 Recurring task templates
-- 🧠 In-app model switching (Phi-4, Qwen, Llama — any Foundry Local catalog model)
-- 🎤 Voice input
-- 📎 File extraction — paste meeting notes or drop documents; MCP + MarkItDown converts and chunks them into tasks
-- 🎨 4 coffee-themed palettes — Dark Roast, Latte, Espresso, Black Coffee
-- 🤓 **Nerd panel** — live OpenTelemetry trace stream with 4 tabs (Events, Metrics, Traces, Logs), plus a bundled [Jaeger v2](http://localhost:16686) UI for waterfall inspection
-- 📊 **Multi-agent usage tracking** — scans Copilot CLI, Claude Code, Codex, and OpenCode session logs on disk and attributes each task to the agent/session that created it. Only metadata and aggregate token counts are stored; prompts, tool outputs, and code blocks never leave the agent's own logs. Toggle per-agent from **Settings → Agents**.
+- Natural-language task management with multi-turn tool calling 💬
+- Reminders that fire real Windows toasts ⏰
+- Recurring task templates 🔄
+- In-app model switching across the Foundry Local catalog 🧠
+- Voice input 🎤
+- Paste a meeting transcript or drop a PDF; MCP + MarkItDown chew it into tasks 📎
+- Four coffee-themed palettes: Dark Roast, Latte, Espresso, Black Coffee ☕
+- A nerd panel with live OpenTelemetry traces (Events, Metrics, Traces, Logs tabs) plus a bundled [Jaeger v2](http://localhost:16686) waterfall 🤓
+- Multi-agent usage tracking that watches Copilot CLI, Claude Code, Codex, and OpenCode session files on disk and attributes each task to the session that spawned it 📊
 
-### The shared database
+On that last one: only metadata and aggregate token counts are stored. Prompts, tool outputs, and code blocks stay in the agent's own logs where you left them. Toggle agents on and off under **Settings → Agents**.
 
-The CLI and the app both point at `~/.taskbean/taskbean.db`. The CLI owns task writes; the Python backend owns agent-usage writes (`agent_sessions`, `agent_turns`, `agent_sources`). A scanner in the backend tails each agent's local log files forward-only (crash-safe, rotation-aware) and backfills `todos.agent` / `todos.agent_session_id` so every task has a traceable source.
+### How the two halves stay honest
+
+Same SQLite file, different lanes. The CLI writes `todos`. The Python backend writes `agent_sessions`, `agent_turns`, and `agent_sources` by tailing each agent's log files forward-only, with rotation detection so a crashed scan never double-counts. When a new session appears within 30 minutes of a fresh task in the same cwd, it backfills `todos.agent_session_id` so every todo can be traced back to the run that created it.
 
 ## Storage
 
-All data stays local in a single SQLite database:
+Everything lives in one file:
 
 ```
 ~/.taskbean/taskbean.db
 ```
 
-Both the CLI and the desktop app read and write to this file. No cloud sync, no accounts, no telemetry.
+No cloud sync, no accounts, no phone-home telemetry. Delete the file, taskbean forgets.
 
 ## License
 
-[MIT](LICENSE) — free forever.
+[MIT](LICENSE). Free forever.
