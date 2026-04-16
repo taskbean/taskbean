@@ -9,6 +9,7 @@
 <br /><br />
 **No cloud. No subscription. No data leaves your machine.**
 
+[![Website](https://img.shields.io/badge/site-taskbean.ai-E8863C)](https://taskbean.ai)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows)](https://www.microsoft.com/windows)
 [![PWA](https://img.shields.io/badge/install-PWA-5A0FC8?logo=pwa)](https://web.dev/progressive-web-apps/)
