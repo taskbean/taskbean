@@ -566,10 +566,14 @@ header {
 .settings-footer {
   padding: 8px 16px; border-top: 1px solid var(--border); font-size: 10px;
   color: var(--muted); flex-shrink: 0; display: flex; align-items: center;
-  justify-content: space-between; gap: 8px;
+  justify-content: center; gap: 12px;
 }
-.settings-footer-left { display: flex; align-items: center; gap: 8px; }
-.settings-footer-right { display: flex; align-items: center; gap: 8px; }
+.settings-footer-left, .settings-footer-right {
+  position: absolute; display: flex; align-items: center;
+}
+.settings-footer-left { left: 16px; }
+.settings-footer-right { right: 16px; }
+.settings-footer { position: relative; }
 .coffee-btn {
   display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 99px;
   font-size: 10px; font-weight: 600; cursor: pointer; border: 1px solid var(--orange);
@@ -2172,7 +2176,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
     <div class="settings-modal-header">
       <h2><i data-lucide="settings"></i> Settings</h2>
       <input class="settings-search" id="settingsSearch" type="search" placeholder="Search settings…" aria-label="Search settings" oninput="filterSettings(this.value)">
-      <button class="model-modal-close" onclick="closeSettings()" title="Close (Esc)"><i data-lucide="x"></i></button>
+      <button class="model-modal-close" onclick="closeSettings()" title="Close (Esc)" style="flex-shrink:0"><i data-lucide="x"></i></button>
     </div>
 
     <div class="settings-layout">
@@ -2551,9 +2555,9 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       <div class="settings-footer-left">
         <span id="settingsSaveStatus" aria-live="polite" style="font-size:11px"></span>
       </div>
+      <a class="coffee-btn" href="https://buymeacoffee.com/nicholasdbrady" target="_blank" rel="noopener"><span class="coffee-emoji">☕</span> Buy Nick a Coffee</a>
       <div class="settings-footer-right">
-        <a class="coffee-btn" href="https://buymeacoffee.com/nicholasdbrady" target="_blank" rel="noopener"><span class="coffee-emoji">☕</span> Buy Nick a Coffee</a>
-        <span>v1.0.0 · Foundry Local</span>
+        <span style="font-size:10px;color:var(--muted)">taskbean v0.5</span>
       </div>
     </div>
   </div>
