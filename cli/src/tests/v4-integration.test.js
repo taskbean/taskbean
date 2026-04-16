@@ -43,6 +43,16 @@ describe('v0.4 CLI → todos table integration', () => {
     assert.ok(task.project, 'should have project set');
   });
 
+  it('add sets project_path alongside project name (B2)', () => {
+    const task = beanJson('add "path-bound task"');
+    assert.ok(task.project_path, 'should have project_path column populated');
+    // project_path should be an absolute path (starts with drive letter on
+    // Windows or / on POSIX).
+    assert.ok(
+      /^[A-Za-z]:\\|^\//.test(task.project_path),
+      `project_path should be absolute, got: ${task.project_path}`,
+    );
+  });
   it('add with --key does upsert (same id, updated title)', () => {
     const t1 = beanJson('add "original title" --key upsert-test');
     const t2 = beanJson('add "updated title" --key upsert-test');

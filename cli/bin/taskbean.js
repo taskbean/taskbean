@@ -26,7 +26,8 @@ program
   .description('Log a task')
   .argument('<title>', 'Task title/description')
   .option('--key <key>', 'Stable key for upsert (prevents duplicates)')
-  .option('--session-id <id>', 'Link to a Copilot CLI session ID')
+  .option('--agent <name>', 'Coding agent: copilot | claude-code | codex | opencode')
+  .option('--session-id <id>', 'Native session id for the chosen agent')
   .option('--json', 'Output as JSON')
   .option('--project <path>', 'Override project path')
   .action(addCommand);

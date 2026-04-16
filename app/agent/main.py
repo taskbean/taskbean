@@ -46,7 +46,7 @@ from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool
 
 from opentelemetry import trace
 
@@ -900,7 +900,50 @@ async def switch_model(body: SwitchRequest) -> StreamingResponse:
 
 @app.get("/api/todos")
 async def get_todos() -> list:
-    return state_mod.todos
+    """Return in-memory todos merged with CLI-written SQLite todos.
+
+    CLI `bean add` / `bean done` writes to `~/.taskbean/taskbean.db` directly;
+    without this merge those rows stay invisible until the user reloads. DB
+    is source of truth for rows whose `id` exists in both halves (so a `bean
+    done` after the server booted reflects immediately).
+    """
+    mem = list(state_mod.todos)
+    mem_by_id = {t.get("id"): i for i, t in enumerate(mem) if t.get("id")}
+
+    conn = _get_taskbean_db()
+    if not conn:
+        return mem
+    try:
+        rows = conn.execute(
+            "SELECT id, title, emoji, due_date as dueDate, due_time as dueTime, "
+            "completed, reminder, remind_at as remindAt, reminder_fired as reminderFired, "
+            "source, priority, notes, tags, project, created_at as createdAt "
+            "FROM todos ORDER BY created_at DESC"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    for r in rows:
+        d = dict(r)
+        d["completed"] = bool(d["completed"])
+        d["reminder"] = bool(d.get("reminder"))
+        d["reminderFired"] = bool(d.get("reminderFired"))
+        # tags is stored in SQLite as a JSON string; the frontend expects a list.
+        raw_tags = d.get("tags")
+        if isinstance(raw_tags, str):
+            try:
+                d["tags"] = json.loads(raw_tags) if raw_tags else []
+            except (ValueError, TypeError):
+                d["tags"] = []
+        elif raw_tags is None:
+            d["tags"] = []
+        idx = mem_by_id.get(d["id"])
+        if idx is None:
+            mem.append(d)
+        else:
+            # DB is source of truth for completion state of shared rows.
+            mem[idx] = {**mem[idx], **d}
+    return mem
 
 
 class TodoCreate(BaseModel):
@@ -1057,7 +1100,8 @@ async def get_project_tasks(project: str = "") -> list:
         try:
             rows = conn.execute(
                 "SELECT id, title, emoji, due_date as dueDate, due_time as dueTime, "
-                "completed, source, priority, notes, tags, project, created_at as createdAt "
+                "completed, source, priority, notes, tags, project, created_at as createdAt, "
+                "agent, agent_session_id as agentSessionId "
                 "FROM todos WHERE project = ? ORDER BY created_at DESC",
                 (project,),
             ).fetchall()
@@ -1073,7 +1117,47 @@ async def get_project_tasks(project: str = "") -> list:
     return combined
 
 
-# ── Copilot Usage Stats ──────────────────────────────────────────────────────
+# ── Multi-agent Usage Stats ──────────────────────────────────────────────────
+
+from usage import ingest as usage_ingest  # noqa: E402
+from usage.types import AGENTS as _USAGE_AGENTS  # noqa: E402
+
+
+@app.get("/api/agent-usage")
+async def get_agent_usage(period: str = "today", agents: str | None = None) -> dict:
+    """Cross-agent usage (Copilot, Claude Code, Codex, OpenCode).
+
+    Runs a rate-limited ingest pass then returns aggregate + per-agent stats.
+    Pass ``agents=copilot,claude-code`` to filter.
+    """
+    wanted = None
+    if agents:
+        wanted = [a.strip() for a in agents.split(",") if a.strip() in _USAGE_AGENTS]
+        if not wanted:
+            wanted = None
+    return await usage_ingest.get_agent_usage(period=period, agents=wanted)
+
+
+@app.get("/api/agent-usage/detection")
+async def get_agent_detection() -> dict:
+    return await usage_ingest.get_detection_status()
+
+
+class _AgentToggle(BaseModel):
+    # StrictBool rejects truthy strings like "true"/"1" — the Settings UI
+    # sends JSON bool, and we don't want a typo'd body to silently enable/disable.
+    enabled: StrictBool
+
+
+@app.post("/api/agent-usage/settings/{agent}")
+async def set_agent_toggle(agent: str, body: _AgentToggle) -> dict:
+    if agent not in _USAGE_AGENTS:
+        raise HTTPException(status_code=400, detail=f"Unknown agent: {agent}")
+    await usage_ingest.set_agent_enabled(agent, body.enabled)
+    return {"agent": agent, "enabled": body.enabled}
+
+
+# ── Copilot Usage Stats (back-compat shim) ───────────────────────────────────
 
 
 @app.get("/api/copilot-usage")
@@ -1310,12 +1394,18 @@ async def _build_task_detail(task_id: str) -> dict:
     if task is None:
         raise HTTPException(404, f"Task {task_id} not found")
 
-    task = dict(row)
-
-    # 2. Correlate with Copilot session
+    # 2. Correlate with Copilot session — only for Copilot-attributed or
+    # unattributed tasks. For tasks owned by a non-Copilot agent, the
+    # Source Card (below) carries the authoritative session info; the legacy
+    # Copilot correlator would otherwise pick a nearby-in-time Copilot session
+    # that has nothing to do with the task.
     copilot_conn = _get_copilot_db()
     try:
-        session_row = _correlate_session(task, copilot_conn)
+        task_agent = (task.get("agent") or "").lower()
+        if task_agent in ("", "copilot"):
+            session_row = _correlate_session(task, copilot_conn)
+        else:
+            session_row = None
     finally:
         if copilot_conn:
             copilot_conn.close()
@@ -1376,6 +1466,12 @@ async def _build_task_detail(task_id: str) -> dict:
             finally:
                 copilot_conn2.close()
 
+    # Cross-agent source card (Copilot, Claude Code, Codex, OpenCode).
+    # Enriches task-detail for any task with `todos.agent` + `agent_session_id`
+    # stamped by the CLI attribution pipeline. Joins agent_sessions and
+    # aggregates agent_turns to produce a single summary row.
+    source_card = await asyncio.to_thread(_build_source_card, task)
+
     return {
         "task": {
             "id": task["id"],
@@ -1383,13 +1479,85 @@ async def _build_task_detail(task_id: str) -> dict:
             "completed": bool(task.get("completed")),
             "project": task.get("project"),
             "source": task.get("source"),
+            "agent": task.get("agent"),
+            "agent_session_id": task.get("agent_session_id"),
             "created_at": task.get("created_at"),
         },
         "session": session_data,
+        "sourceCard": source_card,
         "files": files,
         "refs": refs,
         "tools": tools,
         "checkpoint": checkpoint,
+    }
+
+
+def _build_source_card(task: dict) -> dict | None:
+    """Build a cross-agent Source Card payload for the task detail view.
+
+    Returns None when the task has no agent attribution. Reads from the shared
+    ``agent_sessions`` / ``agent_turns`` tables via the usage-module connector.
+    """
+    agent = task.get("agent")
+    session_id = task.get("agent_session_id")
+    if not agent or not session_id:
+        return None
+    try:
+        from usage.db import connect as _usage_connect
+    except Exception:
+        return None
+    conn = None
+    try:
+        conn = _usage_connect()
+        sess = conn.execute(
+            "SELECT id, agent, native_id, cwd, title, model, provider, "
+            "cli_version, git_branch, started_at, updated_at "
+            "FROM agent_sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        if not sess:
+            return None
+        agg = conn.execute(
+            "SELECT COUNT(*) AS turns, "
+            "COALESCE(SUM(input_tokens),0) AS input_tokens, "
+            "COALESCE(SUM(cached_input_tokens),0) AS cached_input_tokens, "
+            "COALESCE(SUM(output_tokens),0) AS output_tokens, "
+            "COALESCE(SUM(reasoning_tokens),0) AS reasoning_tokens, "
+            "COALESCE(SUM(total_tokens),0) AS total_tokens, "
+            "COALESCE(SUM(tool_calls),0) AS tool_calls "
+            "FROM agent_turns WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        last_model = conn.execute(
+            "SELECT model FROM agent_turns WHERE session_id = ? "
+            "AND model IS NOT NULL ORDER BY seq DESC LIMIT 1",
+            (session_id,),
+        ).fetchone()
+    finally:
+        if conn is not None:
+            conn.close()
+
+    effective_model = (last_model["model"] if last_model else None) or sess["model"]
+    return {
+        "agent": sess["agent"],
+        "sessionId": sess["id"],
+        "nativeId": sess["native_id"],
+        "title": sess["title"],
+        "model": effective_model,
+        "sessionModel": sess["model"],
+        "provider": sess["provider"],
+        "cliVersion": sess["cli_version"],
+        "gitBranch": sess["git_branch"],
+        "cwd": sess["cwd"],
+        "startedAt": sess["started_at"],
+        "updatedAt": sess["updated_at"],
+        "turns": agg["turns"] if agg else 0,
+        "inputTokens": agg["input_tokens"] if agg else 0,
+        "cachedInputTokens": agg["cached_input_tokens"] if agg else 0,
+        "outputTokens": agg["output_tokens"] if agg else 0,
+        "reasoningTokens": agg["reasoning_tokens"] if agg else 0,
+        "totalTokens": agg["total_tokens"] if agg else 0,
+        "toolCalls": agg["tool_calls"] if agg else 0,
     }
 
 

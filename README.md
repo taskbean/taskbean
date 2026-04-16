@@ -1,15 +1,5 @@
 <div align="center">
 
-<a href="https://github.com/taskbean/taskbean">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://socialify.git.ci/taskbean/taskbean/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Plus&pulls=1&stargazers=1&theme=Dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://socialify.git.ci/taskbean/taskbean/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Plus&pulls=1&stargazers=1&theme=Light" />
-    <img alt="taskbean" src="https://socialify.git.ci/taskbean/taskbean/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Plus&pulls=1&stargazers=1&theme=Auto" width="720" />
-  </picture>
-</a>
-
-<br />
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="app/public/icons/taskbean-wordmark-light.png" />
   <source media="(prefers-color-scheme: light)" srcset="app/public/icons/taskbean-wordmark.png" />
@@ -150,6 +140,7 @@ The desktop app runs entirely on your device using [Microsoft Foundry Local](htt
 - 📎 File extraction (meeting notes → tasks)
 - 🎨 4 themes (Dark, Light, Java Cream, High Contrast)
 - 🤓 Nerd mode with live telemetry
+- 📊 Multi-agent usage tracking — detects Copilot CLI, Claude Code, Codex, and OpenCode sessions on disk and attributes each task to the agent that created it. Only metadata and aggregate token counts are stored; message bodies never leave the agent's own logs. Toggle per-agent from **Settings → Agents**.
 
 ## Storage
 
@@ -160,16 +151,6 @@ All data stays local in a single SQLite database:
 ```
 
 Both the CLI and the desktop app read and write to this file. No cloud sync, no accounts, no telemetry.
-
-## Star History
-
-<a href="https://www.star-history.com/#taskbean/taskbean&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=taskbean/taskbean&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=taskbean/taskbean&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=taskbean/taskbean&type=Date" width="600" />
- </picture>
-</a>
 
 ## License
 
