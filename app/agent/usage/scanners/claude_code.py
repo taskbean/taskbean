@@ -20,8 +20,12 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 import time
+
+
+logger = logging.getLogger(__name__)
 
 from ..jsonl_reader import read_jsonl_incremental
 from ..types import (
@@ -130,21 +134,30 @@ class ClaudeCodeScanner:
             if not lines:
                 continue
 
+            # Metadata (sessionId/cwd/version/...) is on every line in Claude
+            # Code JSONL, but defensively fall back to the file head so we
+            # never emit TurnRows with native_session_id="" (which would hit
+            # the agent_turns FK to agent_sessions.id on write_scan_result).
+            head_meta = _scan_for_metadata(path) or {}
+            session_id = head_meta.get("sessionId")
+            session_cwd = head_meta.get("cwd")
+            session_model = head_meta.get("model")
+            session_branch = head_meta.get("gitBranch")
+            cli_version = head_meta.get("version")
+            if not session_id:
+                logger.warning("claude-code: no sessionId in %s, skipping scan", path)
+                continue
+
             prior_turns = _count_assistant_turns(path, existing.last_offset)
             seq = prior_turns
-            session_id = None
-            session_cwd = None
-            session_model = None
-            session_branch = None
-            cli_version = None
 
             for raw in lines:
                 try:
                     ev = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
-                if not session_id:
-                    session_id = ev.get("sessionId")
+                # In-range metadata overrides the head-read fallback only if
+                # the head read missed a field.
                 if not session_cwd and ev.get("cwd"):
                     session_cwd = ev["cwd"]
                 if not session_branch and ev.get("gitBranch"):
@@ -196,20 +209,20 @@ class ClaudeCodeScanner:
                     finish_reason=msg.get("stop_reason"),
                 ))
 
-            if session_id:
-                result.sessions.append(SessionRow(
-                    agent=self.agent,
-                    native_id=session_id,
-                    cwd=canonical_cwd(session_cwd),
-                    title=None,
-                    model=session_model,
-                    provider="anthropic",
-                    cli_version=cli_version,
-                    git_branch=session_branch,
-                    source_path=path,
-                    started_at=iso_from_ms(existing.last_mtime or new_mtime),
-                    updated_at=iso_from_ms(new_mtime),
-                ))
+            # session_id is guaranteed non-empty (we'd have skipped above).
+            result.sessions.append(SessionRow(
+                agent=self.agent,
+                native_id=session_id,
+                cwd=canonical_cwd(session_cwd),
+                title=None,
+                model=session_model,
+                provider="anthropic",
+                cli_version=cli_version,
+                git_branch=session_branch,
+                source_path=path,
+                started_at=iso_from_ms(existing.last_mtime or new_mtime),
+                updated_at=iso_from_ms(new_mtime),
+            ))
 
             result.updated_sources[path] = AgentSource(
                 agent=self.agent, source_path=path,

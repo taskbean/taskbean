@@ -650,6 +650,149 @@ def test_codex_partial_line_safety(codex_paths):
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# Regression: cursor advanced past session_meta still yields attributed turns.
+# Before the fix, an incremental scan whose new byte range didn't include the
+# first-line session_meta/sessionId would emit TurnRows with
+# native_session_id="", producing sid="codex:"/"claude-code:" on write and
+# violating the agent_turns FK to agent_sessions.id — rolling back the ingest
+# txn and surfacing as HTTP 500 on /api/agent-usage.
+# ════════════════════════════════════════════════════════════════════════════
+
+def _append_codex_turn(path, seq_timestamp: str):
+    with open(path, "a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps({
+            "type": "event_msg",
+            "timestamp": seq_timestamp,
+            "payload": {"type": "task_started"},
+        }) + "\n")
+        f.write(json.dumps({
+            "type": "event_msg",
+            "timestamp": seq_timestamp,
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "last_token_usage": {
+                        "input_tokens": 10,
+                        "cached_input_tokens": 0,
+                        "output_tokens": 20,
+                        "reasoning_output_tokens": 0,
+                        "total_tokens": 30,
+                    },
+                },
+            },
+        }) + "\n")
+
+
+def _append_claude_turn(path, ts: str):
+    with open(path, "a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps({
+            "type": "assistant",
+            "sessionId": CLAUDE_SESSION_ID,
+            "timestamp": ts,
+            "cwd": "/some/cwd",
+            "message": {
+                "model": "claude-sonnet-4-20250514",
+                "usage": {"input_tokens": 5, "output_tokens": 10},
+                "stop_reason": "end_turn",
+                "content": [{"type": "text", "text": "ok"}],
+            },
+        }) + "\n")
+
+
+def test_codex_scan_past_session_meta_yields_attributed_turns(codex_paths):
+    """Pin cursor past session_meta, append a new turn, verify attribution."""
+    from usage.types import AgentSource
+    path = str(codex_paths["path"])
+    st = os.stat(path)
+    # Cursor at EOF — session_meta is now behind us.
+    cursor = {path: AgentSource(agent="codex", source_path=path,
+                                last_offset=st.st_size,
+                                last_mtime=int(st.st_mtime * 1000))}
+    _append_codex_turn(path, "2026-04-01T00:01:00Z")
+
+    result = CodexScanner().scan(cursor)
+
+    assert len(result.turns) == 1, "new token_count event should produce a turn"
+    turn = result.turns[0]
+    assert turn.native_session_id == CODEX_SESSION_ID, \
+        "turn must be attributed to the session from the file head"
+    assert turn.model == "gpt-5-codex"
+    # SessionRow must be emitted (for updated_at bump) even though no in-range session_meta.
+    assert len(result.sessions) == 1
+    assert result.sessions[0].native_id == CODEX_SESSION_ID
+
+
+def test_claude_scan_past_metadata_yields_attributed_turns(claude_paths):
+    from usage.types import AgentSource
+    path = str(claude_paths["path"])
+    st = os.stat(path)
+    cursor = {path: AgentSource(agent="claude-code", source_path=path,
+                                last_offset=st.st_size,
+                                last_mtime=int(st.st_mtime * 1000))}
+    _append_claude_turn(path, "2026-04-01T00:01:00Z")
+
+    result = ClaudeCodeScanner().scan(cursor)
+
+    assert len(result.turns) == 1
+    turn = result.turns[0]
+    assert turn.native_session_id == CLAUDE_SESSION_ID
+    assert len(result.sessions) == 1
+    assert result.sessions[0].native_id == CLAUDE_SESSION_ID
+
+
+def test_codex_scan_past_meta_write_does_not_violate_fk(codex_paths, taskbean_conn):
+    """End-to-end: seed → cursor past meta → append turn → write_scan_result succeeds."""
+    from usage.types import AgentSource
+    path = str(codex_paths["path"])
+    # First, persist the seeded session so the FK target exists.
+    seed = CodexScanner().seed()
+    usage_db.write_scan_result(taskbean_conn, "codex", seed)
+
+    # Now: cursor advanced past session_meta, append a new turn, scan+write.
+    st = os.stat(path)
+    cursor = {path: AgentSource(agent="codex", source_path=path,
+                                last_offset=st.st_size,
+                                last_mtime=int(st.st_mtime * 1000))}
+    _append_codex_turn(path, "2026-04-01T00:02:00Z")
+
+    result = CodexScanner().scan(cursor)
+    # Would have raised sqlite3.IntegrityError: FOREIGN KEY constraint failed
+    # before the fix.
+    usage_db.write_scan_result(taskbean_conn, "codex", result)
+
+    n_turns = taskbean_conn.execute(
+        "SELECT COUNT(*) FROM agent_turns WHERE agent='codex'"
+    ).fetchone()[0]
+    assert n_turns == 1
+    sid_row = taskbean_conn.execute(
+        "SELECT session_id FROM agent_turns WHERE agent='codex'"
+    ).fetchone()
+    assert sid_row["session_id"] == f"codex:{CODEX_SESSION_ID}"
+
+
+def test_claude_scan_past_meta_write_does_not_violate_fk(claude_paths, taskbean_conn):
+    from usage.types import AgentSource
+    path = str(claude_paths["path"])
+    seed = ClaudeCodeScanner().seed()
+    usage_db.write_scan_result(taskbean_conn, "claude-code", seed)
+
+    st = os.stat(path)
+    cursor = {path: AgentSource(agent="claude-code", source_path=path,
+                                last_offset=st.st_size,
+                                last_mtime=int(st.st_mtime * 1000))}
+    _append_claude_turn(path, "2026-04-01T00:02:00Z")
+
+    result = ClaudeCodeScanner().scan(cursor)
+    usage_db.write_scan_result(taskbean_conn, "claude-code", result)
+
+    sid_row = taskbean_conn.execute(
+        "SELECT session_id FROM agent_turns WHERE agent='claude-code' "
+        "ORDER BY occurred_at DESC LIMIT 1"
+    ).fetchone()
+    assert sid_row["session_id"] == f"claude-code:{CLAUDE_SESSION_ID}"
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # OpenCode: cost field must NOT surface in TurnRow or SessionRow
 # ════════════════════════════════════════════════════════════════════════════
 

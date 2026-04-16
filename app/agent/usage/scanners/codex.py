@@ -17,8 +17,12 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 import time
+
+
+logger = logging.getLogger(__name__)
 
 from ..jsonl_reader import read_jsonl_incremental
 from ..types import (
@@ -119,10 +123,21 @@ class CodexScanner:
             if not lines:
                 continue
 
+            # session_meta lives on the first line and is behind the cursor on
+            # any incremental scan — read it from the file head so we can
+            # attribute turns even when the new byte range only contains
+            # token_count events. Without this, TurnRow.native_session_id
+            # would be "" and write_scan_result would hit a FK violation.
+            head_meta = _read_session_meta(path) or {}
+            session_id = head_meta.get("id")
+            session_model = head_meta.get("model")
+            if not session_id:
+                # No usable metadata — skip rather than emit orphan turns.
+                logger.warning("codex: no session_meta in %s, skipping scan", path)
+                continue
+
             prior_turns = _count_prior_turns(path, existing.last_offset)
             seq = prior_turns
-            session_id = None
-            session_model = None
             pending_tool_calls = 0
 
             for raw in lines:
@@ -133,6 +148,7 @@ class CodexScanner:
 
                 if ev.get("type") == "session_meta":
                     p = ev.get("payload") or {}
+                    # Prefer in-range metadata if the head read missed a field.
                     session_id = session_id or p.get("id")
                     session_model = session_model or p.get("model")
                     continue
@@ -183,20 +199,23 @@ class CodexScanner:
                 ))
                 pending_tool_calls = 0
 
-            if session_id:
-                result.sessions.append(SessionRow(
-                    agent=self.agent,
-                    native_id=session_id,
-                    cwd=None,
-                    title=None,
-                    model=session_model,
-                    provider="openai",
-                    cli_version=None,
-                    git_branch=None,
-                    source_path=path,
-                    started_at=iso_from_ms(existing.last_mtime or new_mtime),
-                    updated_at=iso_from_ms(new_mtime),
-                ))
+            # session_id is guaranteed non-empty (we'd have skipped above).
+            # Emit unconditionally so updated_at advances even on scans that
+            # picked up no new turns (e.g. only tool_call events arrived).
+            result.sessions.append(SessionRow(
+                agent=self.agent,
+                native_id=session_id,
+                cwd=canonical_cwd(head_meta.get("cwd")),
+                title=None,
+                model=session_model,
+                provider=head_meta.get("model_provider") or "openai",
+                cli_version=head_meta.get("cli_version"),
+                git_branch=None,
+                source_path=path,
+                started_at=head_meta.get("timestamp")
+                    or iso_from_ms(existing.last_mtime or new_mtime),
+                updated_at=iso_from_ms(new_mtime),
+            ))
 
             result.updated_sources[path] = AgentSource(
                 agent=self.agent, source_path=path,

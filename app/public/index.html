@@ -4392,8 +4392,27 @@ async function loadUsageStats() {
     try {
         const qs = '?period=' + _usagePeriod;
         const res = await fetch('/api/agent-usage' + qs, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        if (!res.ok) {
+            // Tag the error so the catch block can distinguish HTTP failures
+            // (server reachable, returned 5xx/4xx) from true network failures
+            // (fetch itself threw — agent not running). Showing the generic
+            // ":2326 not running" hint on HTTP 500 is misleading, since the
+            // PWA itself is served by the agent on :2326.
+            const e = new Error(`HTTP ${res.status}`);
+            e.httpStatus = res.status;
+            throw e;
+        }
+        let data;
+        try {
+            data = await res.json();
+        } catch (parseErr) {
+            // A 200 with malformed/non-JSON body means the agent IS reachable
+            // but responded with garbage (middleware bug, truncated stream,
+            // etc.). Treat as server-side error, not a network outage.
+            const e = new Error('Invalid JSON response');
+            e.httpStatus = res.status;
+            throw e;
+        }
 
         // Enabled agents = those with settings[agent].enabled === 1
         const settings = data.settings || {};
@@ -4524,12 +4543,23 @@ async function loadUsageStats() {
         lucide.createIcons();
     } catch (err) {
         console.error('loadUsageStats failed', err);
-        // F8: distinct backend-down / network error state
-        container.innerHTML = `<div class="usage-panel-error">
-            <i data-lucide="wifi-off" class="icon-sm" style="vertical-align:middle;margin-right:4px"></i>
-            Couldn't reach the taskbean agent. Check that it's running on :2326.
-            <span class="err-hint">${esc(err.message || 'network error')}</span>
-        </div>`;
+        // Distinguish HTTP error (server reachable, replied with an error)
+        // from network failure (fetch threw — agent genuinely unreachable).
+        // The old "Check that it's running on :2326" hint was nonsensical
+        // when the PWA itself was just served by that same agent.
+        if (err && typeof err.httpStatus === 'number') {
+            container.innerHTML = `<div class="usage-panel-error">
+                <i data-lucide="triangle-alert" class="icon-sm" style="vertical-align:middle;margin-right:4px"></i>
+                The usage service returned an error (HTTP ${err.httpStatus}). Check the agent logs for details.
+                <span class="err-hint">${esc(err.message || '')}</span>
+            </div>`;
+        } else {
+            container.innerHTML = `<div class="usage-panel-error">
+                <i data-lucide="wifi-off" class="icon-sm" style="vertical-align:middle;margin-right:4px"></i>
+                Couldn't reach the taskbean agent. Check that it's running on :2326.
+                <span class="err-hint">${esc(err.message || 'network error')}</span>
+            </div>`;
+        }
         if (chipBar) chipBar.innerHTML = '';
         lucide.createIcons();
     }
