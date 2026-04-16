@@ -14,7 +14,7 @@ Both share `~/.taskbean/taskbean.db`. The CLI writes tasks; the app displays and
 ## CLI (`cli/`)
 
 - Entry point: `cli/bin/taskbean.js` (aliased as `bean`)
-- 16 commands in `cli/src/commands/`
+- 17 commands in `cli/src/commands/`
 - SQLite access in `cli/src/data/store.js`
 - Tests: `node --test cli/src/**/*.test.js`
 - Install scripts: `cli/scripts/install.sh`, `cli/scripts/install.ps1`
@@ -88,7 +88,7 @@ The SDK auto-discovers and registers execution providers (VitisAI for NPU, MIGra
 
 ### Frontend
 
-Single-file SPA in `public/index.html` (~4600 lines). No build step, no bundler. Vanilla JS, CSS custom properties for theming (dark-roast/latte/espresso/black-coffee), Lucide icons via CDN, `fast-json-patch` for AG-UI state deltas. PWA support via `sw.js` and `manifest.json`.
+Single-file SPA in `public/index.html` (~7900 lines). No build step, no bundler. Vanilla JS, CSS custom properties for theming (dark-roast/latte/espresso/black-coffee), Lucide icons via CDN, `fast-json-patch` for AG-UI state deltas. PWA support via `sw.js` and `manifest.json`.
 
 The telemetry panel has 4 tabs: **Events** (with filter chips + search), **Metrics** (sparkline cards), **Traces** (native waterfall via `/api/traces` Jaeger proxy), **Logs** (severity-filtered log records).
 
@@ -143,7 +143,7 @@ Tests start a real uvicorn server on port 3001 — no mocking. Shared fixtures i
 
 ```bash
 cd app
-npx playwright test                                    # all specs (17 files)
+npx playwright test                                    # all specs (22 files)
 npx playwright test tests/smoke.spec.js                # single spec
 npx playwright test -g "page loads"                    # single test by title
 npx playwright test --project=smoke                    # smoke project only
@@ -189,3 +189,76 @@ Large file/paste input goes through `/api/extract` which uses MCP (Model Context
 ### Tool parity
 
 `agent/tools.py` (Python) and `NL_TOOLS` in `server.js` define the same tool set. Keep them in sync when adding tools.
+
+### Python backend owns agent-usage writes
+
+`agent_sessions`, `agent_turns`, `agent_sources`, and `agent_settings` are **only** written by the Python backend (scanners under `app/agent/usage/`). The CLI reads these tables but never writes them. The CLI continues to own `todos` (including the new `todos.agent` and `todos.agent_session_id` attribution columns).
+
+## Multi-agent usage tracking
+
+taskbean ingests session and token-usage metadata from the coding agents installed on the machine (Copilot CLI, Claude Code, Codex, OpenCode) and attributes each `bean add` to the agent/session that triggered it.
+
+### Schema (in `cli/src/data/store.js`)
+
+| Table | Role |
+|-------|------|
+| `agent_sessions` | One row per detected session across all agents. PK is the composite id `"{agent}:{native_id}"`. Columns: `agent, native_id, cwd, project_id, title, model, provider, cli_version, git_branch, source_path, started_at, updated_at, ingested_at`. |
+| `agent_turns` | One row per assistant turn with usage. FK to `agent_sessions(id)`, unique on `(session_id, seq)`. Columns: `seq, occurred_at, model, provider, input_tokens, cached_input_tokens, output_tokens, reasoning_tokens, total_tokens, tool_calls, finish_reason`. |
+| `agent_sources` | Ingest bookkeeping, one row per source file/DB. Forward-only cursors: `last_offset, last_mtime, last_native_id`. |
+| `agent_settings` | Per-agent enable/disable toggle plus detection metadata. |
+| `todos.agent` / `todos.agent_session_id` | Attribution columns on the existing `todos` table. |
+
+### Scanner architecture (`app/agent/usage/`)
+
+```
+app/agent/usage/
+├── types.py             # SessionRow / TurnRow dataclasses
+├── jsonl_reader.py      # Forward-only JSONL tailer with rotation detection
+├── db.py                # Write path (BEGIN IMMEDIATE transactions)
+├── ingest.py            # Orchestrator; serialized via asyncio.Lock
+└── scanners/
+    ├── copilot.py
+    ├── claude_code.py
+    ├── codex.py
+    └── opencode.py
+```
+
+- **Sole writer**: the Python backend is the only writer for `agent_sessions` / `agent_turns` / `agent_sources` / `agent_settings`. The CLI treats these tables as read-only.
+- **Forward-only ingest**: the first scan of a source emits metadata-only `SessionRow`s and pins cursors to EOF — no historical backfill of turns.
+- **Crash-safe tailing**: JSONL scanners advance `last_offset` only to the last complete `\n` boundary (safe against partial writes) and detect rotation when `size < last_offset`.
+- **Concurrency**: each scan is wrapped in `BEGIN IMMEDIATE`; `ingest.py` serializes scans via an `asyncio.Lock`.
+- **OpenCode `cost` is dropped** on purpose — taskbean policy is to persist metadata + token counts only.
+
+### Attribution (`cli/src/data/attribution.js`)
+
+`bean add` resolves the agent + session id with a 4-tier precedence:
+
+1. Explicit flags: `--agent=<name> --session-id=<native>`
+2. `TASKBEAN_AGENT` + `TASKBEAN_NATIVE_SESSION_ID` env vars (preferred for skill wrappers)
+3. Vendor env vars: `CLAUDECODE`/`CLAUDE_SESSION_ID`, `CODEX_SESSION_ID`, `OPENCODE_SESSION`, `COPILOT_CLI_SESSION_ID`
+4. CWD + ±30 min heuristic against `agent_sessions`
+
+Ambiguous signals return `null` — never "most recent". Missing attribution is logged and the task is still created without an agent.
+
+### HTTP API
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/agent-usage?period=today\|week\|month\|all&agents=copilot,claude-code` | Canonical multi-agent usage endpoint. |
+| `GET /api/agent-usage/detection` | Per-agent installation + detection status. |
+| `POST /api/agent-usage/settings/{agent}` body `{enabled: bool}` | Toggle per-agent tracking. |
+| `GET /api/copilot-usage` | Back-compat shim. Prefer `/api/agent-usage`. |
+
+### Privacy posture
+
+Only **metadata** (session ids, timestamps, model/provider, cwd, git branch) and **aggregate token counts** are persisted. Message bodies, prompts, code blocks, and tool outputs are never copied into taskbean's DB.
+
+### UI surface
+
+- Usage panel renamed from "Copilot usage" → **"Usage"**, with agent filter chips.
+- **Settings → Agents** section shows detection status and a per-agent enable toggle.
+- Task detail shows a **"Source"** card when `todos.agent` is set.
+
+### `bean report`
+
+Reports now include a `## Usage` section (Markdown) / `usage` key (JSON) with per-agent sessions / turns / tokens / tool calls.

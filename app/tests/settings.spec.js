@@ -691,3 +691,44 @@ test.describe('Settings Modal — UI Overhaul', () => {
   });
 
 });
+
+
+// ── Friday-release coverage: agent toggle rollback on POST failure (C1) ───
+
+test.describe('Agents tab — toggle rollback on error', () => {
+  test.use({ serviceWorkers: 'block' });
+  test('toggle reverts aria-checked and surfaces .agent-settings-err on 500', async ({ page }) => {
+    // Intercept the toggle POST BEFORE navigation so the first click is covered.
+    await page.route('**/api/agent-usage/settings/copilot', (route) =>
+      route.fulfill({ status: 500, contentType: 'application/json', body: '{"detail":"boom"}' })
+    );
+    // Give the detection endpoint a deterministic "installed" response so the
+    // toggle renders as a real (non-disabled) button we can click.
+    await page.route('**/api/agent-usage/detection', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          copilot:       { installed: true,  enabled: false },
+          'claude-code': { installed: false, enabled: false },
+          codex:         { installed: false, enabled: false },
+          opencode:      { installed: false, enabled: false },
+        }),
+      })
+    );
+
+    await page.goto('/');
+    await openSettings(page);
+    await switchTab(page, 'agents');
+
+    const toggle = page.locator('.agent-settings-row[data-agent="copilot"] button.stg-toggle');
+    await expect(toggle).toBeVisible({ timeout: 5000 });
+    const before = await toggle.getAttribute('aria-checked');
+    await toggle.click();
+
+    // After the failed POST resolves, the button''s aria-checked must match the
+    // pre-click value (rolled back) and the inline error must appear.
+    await expect(page.locator('.agent-settings-row[data-agent="copilot"] .agent-settings-err')).toBeVisible({ timeout: 5000 });
+    await expect(toggle).toHaveAttribute('aria-checked', before || 'false');
+  });
+});

@@ -45,7 +45,11 @@ async def test_models_list(client: httpx.AsyncClient) -> None:
 
 # ── 3–6. Todo CRUD ────────────────────────────────────────────────────────────
 
-async def test_todos_empty_after_clear(client: httpx.AsyncClient, clean_state) -> None:
+async def test_todos_empty_after_clear(client: httpx.AsyncClient, clean_state, monkeypatch) -> None:
+    # /api/todos now merges CLI-written taskbean.db rows; patch that out so
+    # this test's "empty" expectation reflects only in-memory state.
+    import main as main_mod
+    monkeypatch.setattr(main_mod, "_get_taskbean_db", lambda: None)
     r = await client.get("/api/todos")
     assert r.status_code == 200
     assert r.json() == []
@@ -893,3 +897,100 @@ async def test_task_detail_export_md(client: httpx.AsyncClient, clean_state) -> 
     assert "export md probe" in body
     assert body.lstrip().startswith("##")
 
+
+
+# ── Friday-release coverage: /api/todos merge & StrictBool toggle ──────────
+
+async def test_todos_merge_db_wins_on_completion(
+    client: httpx.AsyncClient, clean_state, tmp_path, monkeypatch
+) -> None:
+    """C5: DB row is source of truth for completion state on shared ids.
+
+    When a todo exists in both in-memory state and the CLI's SQLite db with
+    the SAME id, the DB's `completed` column must win — this reflects a
+    recent `bean done` even before in-memory state is synced.
+    """
+    import sqlite3
+    import main as main_mod
+    import state as state_mod
+
+    # Build a temp sqlite db mirroring the CLI schema fields /api/todos reads.
+    db_file = tmp_path / "taskbean.db"
+    conn = sqlite3.connect(str(db_file))
+    conn.execute(
+        """
+        CREATE TABLE todos (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            emoji TEXT,
+            due_date TEXT,
+            due_time TEXT,
+            completed INTEGER DEFAULT 0,
+            reminder INTEGER DEFAULT 0,
+            remind_at TEXT,
+            reminder_fired INTEGER DEFAULT 0,
+            source TEXT DEFAULT 'manual',
+            priority TEXT DEFAULT 'none',
+            notes TEXT,
+            tags TEXT DEFAULT '[]',
+            project TEXT,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "INSERT INTO todos (id, title, completed, source, priority, tags, created_at) "
+        "VALUES (?, ?, 1, 'agent', 'none', '[]', ?)",
+        ("shared-1", "done via bean", "2026-04-16T17:05:00Z"),
+    )
+    conn.commit()
+    conn.close()
+
+    def _override_db():
+        c = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
+        c.row_factory = sqlite3.Row
+        return c
+    monkeypatch.setattr(main_mod, "_get_taskbean_db", _override_db)
+
+    # Seed in-memory with the SAME id but the STALE completed=False state.
+    state_mod.todos.append({
+        "id": "shared-1",
+        "title": "done via bean",
+        "completed": False,
+        "source": "agent",
+    })
+
+    r = await client.get("/api/todos")
+    assert r.status_code == 200
+    row = next(t for t in r.json() if t["id"] == "shared-1")
+    assert row["completed"] is True, (
+        f"DB should win for shared rows; got {row['completed']!r}"
+    )
+
+
+@pytest.mark.parametrize("bad_body", [
+    {"enabled": "true"},
+    {"enabled": "false"},
+    {"enabled": 1},
+    {"enabled": 0},
+    {"enabled": None},
+])
+async def test_agent_toggle_strict_bool_rejects(
+    client: httpx.AsyncClient, bad_body
+) -> None:
+    """C6: StrictBool must reject truthy strings / ints / null → 422."""
+    r = await client.post("/api/agent-usage/settings/copilot", json=bad_body)
+    assert r.status_code == 422, (
+        f"Body {bad_body!r} should be rejected; got {r.status_code}: {r.text[:200]}"
+    )
+
+
+async def test_agent_toggle_strict_bool_accepts_true_bool(
+    client: httpx.AsyncClient,
+) -> None:
+    """C6: a real JSON bool must still succeed."""
+    r = await client.post("/api/agent-usage/settings/copilot", json={"enabled": True})
+    assert r.status_code in (200, 204), f"expected 2xx, got {r.status_code}: {r.text[:200]}"
+    if r.status_code == 200:
+        body = r.json()
+        assert body.get("enabled") is True

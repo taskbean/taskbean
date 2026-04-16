@@ -131,9 +131,22 @@ Tasks auto-group by project. Detection order:
 3. Git repository root
 4. Current directory
 
+## Agent attribution
+
+When the desktop app is running, taskbean detects sessions from Copilot CLI, Claude Code, Codex, and OpenCode and stamps each `bean add` with the agent + session that created it. Resolution order:
+
+1. `--agent=<name> --session-id=<native>` flags
+2. `TASKBEAN_AGENT` + `TASKBEAN_NATIVE_SESSION_ID` env vars (preferred for skill wrappers)
+3. Vendor env vars (`CLAUDECODE`/`CLAUDE_SESSION_ID`, `CODEX_SESSION_ID`, `OPENCODE_SESSION`, `COPILOT_CLI_SESSION_ID`)
+4. CWD + ±30 min heuristic against recently-seen sessions
+
+If the signal is ambiguous, attribution is left empty rather than guessing. `bean report` includes a `## Usage` section (Markdown) / `usage` key (JSON) summarizing sessions, turns, tokens, and tool calls per agent.
+
+Note: the CLI only **reads** `agent_sessions` / `agent_turns`. Those tables are written exclusively by the Python backend's scanners in `app/agent/usage/`.
+
 ## Storage
 
-SQLite database at `~/.taskbean/taskbean.db`. All data stays local.
+SQLite database at `~/.taskbean/taskbean.db`. All data stays local. Usage tracking stores only session metadata and aggregate token counts — prompts, responses, and tool outputs are never copied into the database.
 
 ## License
 

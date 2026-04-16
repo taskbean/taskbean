@@ -150,6 +150,7 @@ The desktop app runs entirely on your device using [Microsoft Foundry Local](htt
 - 📎 File extraction (meeting notes → tasks)
 - 🎨 4 themes (Dark, Light, Java Cream, High Contrast)
 - 🤓 Nerd mode with live telemetry
+- 📊 Multi-agent usage tracking — detects Copilot CLI, Claude Code, Codex, and OpenCode sessions on disk and attributes each task to the agent that created it. Only metadata and aggregate token counts are stored; message bodies never leave the agent's own logs. Toggle per-agent from **Settings → Agents**.
 
 ## Storage
 

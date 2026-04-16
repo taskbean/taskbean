@@ -1,6 +1,106 @@
 import { allRows } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 
+const AGENT_DISPLAY = {
+  copilot: 'Copilot',
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  opencode: 'OpenCode',
+};
+const AGENT_ORDER = ['copilot', 'claude-code', 'codex', 'opencode'];
+
+function fmtNum(n) {
+  return Number(n || 0).toLocaleString('en-US');
+}
+
+function collectUsage(since, until) {
+  try {
+    const enabled = allRows(
+      'SELECT agent FROM agent_settings WHERE enabled = 1'
+    ).map(r => r.agent);
+    if (enabled.length === 0) return { byAgent: [], totals: zeroTotals() };
+
+    const placeholders = enabled.map(() => '?').join(',');
+
+    const turnStats = allRows(
+      `SELECT agent,
+              COUNT(*) AS turns,
+              COUNT(DISTINCT session_id) AS sessions_with_turns,
+              COALESCE(SUM(input_tokens), 0) AS inputTokens,
+              COALESCE(SUM(output_tokens), 0) AS outputTokens,
+              COALESCE(SUM(total_tokens), 0) AS totalTokens,
+              COALESCE(SUM(tool_calls), 0) AS toolCalls
+         FROM agent_turns
+        WHERE date(occurred_at) BETWEEN ? AND ?
+          AND agent IN (${placeholders})
+        GROUP BY agent`,
+      [since, until, ...enabled]
+    );
+
+    const sessionStats = allRows(
+      `SELECT agent, COUNT(*) AS sessions
+         FROM agent_sessions
+        WHERE date(started_at) BETWEEN ? AND ?
+          AND agent IN (${placeholders})
+        GROUP BY agent`,
+      [since, until, ...enabled]
+    );
+
+    const byAgent = [];
+    for (const agent of AGENT_ORDER) {
+      if (!enabled.includes(agent)) continue;
+      const t = turnStats.find(r => r.agent === agent);
+      const s = sessionStats.find(r => r.agent === agent);
+      const sessions = s ? Number(s.sessions) : 0;
+      const turns = t ? Number(t.turns) : 0;
+      if (sessions === 0 && turns === 0) continue;
+      byAgent.push({
+        agent,
+        display: AGENT_DISPLAY[agent] || agent,
+        sessions,
+        turns,
+        inputTokens: t ? Number(t.inputTokens) : 0,
+        outputTokens: t ? Number(t.outputTokens) : 0,
+        toolCalls: t ? Number(t.toolCalls) : 0,
+        totalTokens: t ? Number(t.totalTokens) : 0,
+      });
+    }
+
+    const totals = byAgent.reduce((acc, r) => {
+      acc.sessions += r.sessions;
+      acc.turns += r.turns;
+      acc.inputTokens += r.inputTokens;
+      acc.outputTokens += r.outputTokens;
+      acc.toolCalls += r.toolCalls;
+      acc.totalTokens += r.totalTokens;
+      return acc;
+    }, zeroTotals());
+
+    return { byAgent, totals };
+  } catch {
+    return null;
+  }
+}
+
+function zeroTotals() {
+  return { sessions: 0, turns: 0, inputTokens: 0, outputTokens: 0, toolCalls: 0, totalTokens: 0 };
+}
+
+function renderUsageMd(usage) {
+  let md = `## Usage\n`;
+  if (!usage || usage.byAgent.length === 0) {
+    md += `No coding agent activity in this period.\n\n`;
+    return md;
+  }
+  md += `| Agent       | Sessions | Turns | Input tokens | Output tokens | Tool calls |\n`;
+  md += `|-------------|---------:|------:|-------------:|--------------:|-----------:|\n`;
+  for (const r of usage.byAgent) {
+    md += `| ${r.display.padEnd(11)} | ${String(fmtNum(r.sessions)).padStart(8)} | ${String(fmtNum(r.turns)).padStart(5)} | ${String(fmtNum(r.inputTokens)).padStart(12)} | ${String(fmtNum(r.outputTokens)).padStart(13)} | ${String(fmtNum(r.toolCalls)).padStart(10)} |\n`;
+  }
+  md += '\n';
+  return md;
+}
+
 function getDateRange(range) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -43,9 +143,13 @@ export function reportCommand(opts) {
     ORDER BY project, completed, created_at
   `, params);
 
+  const usage = collectUsage(since, until);
+
   // --format json
   if (opts.format === 'json') {
-    console.log(JSON.stringify({ period: label, since, until, tasks }, null, 2));
+    const payload = { period: label, since, until, tasks };
+    if (usage) payload.usage = usage;
+    console.log(JSON.stringify(payload, null, 2));
     return;
   }
 
@@ -103,7 +207,11 @@ export function reportCommand(opts) {
   }
 
   if (tasks.length === 0) {
-    md += `*No tasks found for this period.*\n`;
+    md += `*No tasks found for this period.*\n\n`;
+  }
+
+  if (usage) {
+    md += renderUsageMd(usage);
   }
 
   console.log(md);

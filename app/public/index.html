@@ -637,7 +637,7 @@ header {
 
 /* ── Projects tab ── */
 .project-list-container { padding: 6px 0; overflow-y: auto; }
-.project-card { padding: 12px 14px; margin: 4px 8px; border-radius: 8px; background: var(--surface2); border: 1px solid transparent; cursor: pointer; transition: all .15s; }
+.project-card { padding: 12px 14px; margin: 4px 8px; border-radius: 8px; background: var(--surface2); border: 1px solid transparent; cursor: pointer; transition: background-color .15s, border-color .15s; }
 .project-card:hover { border-color: var(--border); background: var(--surface); }
 .project-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .project-card-name { font-size: 13px; font-weight: 600; flex: 1; }
@@ -655,9 +655,42 @@ header {
 .project-empty p { font-size: 12px; margin-top: 8px; }
 .project-empty code { display: inline-block; margin-top: 8px; padding: 6px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; font-size: 10px; font-family: 'DM Mono', monospace; color: var(--accent); }
 
-/* ── Copilot usage stats ── */
+/* ── Track-a-project help card (sidebar, Projects tab) ── */
+.track-tip { margin: 6px 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); overflow: hidden; }
+.track-tip-header { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: transparent; border: 0; cursor: pointer; color: var(--text); font: inherit; text-align: left; }
+.track-tip-header:hover { background: var(--surface); }
+.track-tip-header:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.track-tip-header .track-tip-title { flex: 1; font-size: 12px; font-weight: 600; min-width: 0; }
+.track-tip-header .track-tip-chevron { transition: transform .2s ease; color: var(--muted); flex-shrink: 0; }
+.track-tip[data-open="true"] .track-tip-header .track-tip-chevron { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .track-tip-header .track-tip-chevron { transition: none; } }
+.track-tip-body { display: none; padding: 4px 12px 12px; font-size: 11px; color: var(--text); }
+.track-tip[data-open="true"] .track-tip-body { display: block; }
+.track-tip-body p { margin: 6px 0; color: var(--muted); line-height: 1.45; }
+.track-tip-body p strong { color: var(--text); font-weight: 600; }
+.track-tip-step-label { display: block; font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--accent); margin: 10px 0 4px; }
+.track-tip-cmd { position: relative; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 36px 8px 10px; font-family: 'DM Mono', monospace; font-size: 10.5px; line-height: 1.55; color: var(--text); white-space: pre; overflow-x: auto; }
+.track-tip-cmd .track-tip-prompt { color: var(--muted); user-select: none; }
+.track-tip-copy { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid transparent; border-radius: 5px; color: var(--muted); cursor: pointer; transition: background-color .15s, color .15s, border-color .15s; }
+.track-tip-copy:hover { background: var(--surface); color: var(--text); border-color: var(--border); }
+.track-tip-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.track-tip-copy.copied { color: var(--green); }
+.track-tip-more { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.track-tip-more summary { cursor: pointer; font-size: 11px; font-weight: 600; color: var(--text); list-style: none; padding: 2px 0; }
+.track-tip-more summary::-webkit-details-marker { display: none; }
+.track-tip-more summary::before { content: '▸'; display: inline-block; width: 12px; color: var(--muted); transition: transform .15s ease; }
+.track-tip-more[open] summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .track-tip-more summary::before { transition: none; } }
+.track-tip-more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.track-tip-cmds { margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 10.5px; }
+.track-tip-cmds dt { font-family: 'DM Mono', monospace; color: var(--accent); white-space: nowrap; margin: 0; }
+.track-tip-cmds dd { color: var(--muted); min-width: 0; margin: 0; }
+.track-tip-note { margin-top: 10px; padding: 8px 10px; background: var(--bg); border-left: 2px solid var(--accent); border-radius: 4px; font-size: 10.5px; color: var(--muted); line-height: 1.5; }
+.track-tip-note strong { color: var(--text); }
+
+/* ── Usage stats (multi-agent) ── */
 .usage-section { margin: 4px 8px; padding: 14px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border); }
-.usage-section-title { font-size: 11px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.usage-section-title { font-size: 11px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 6px; margin-bottom: 10px; text-transform: lowercase; letter-spacing: .2px; }
 .usage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .usage-stat { text-align: center; padding: 8px 4px; border-radius: 6px; background: var(--bg); }
 .usage-stat-value { font-size: 18px; font-weight: 700; font-family: 'DM Mono', monospace; line-height: 1.2; color: var(--text); }
@@ -667,13 +700,113 @@ header {
 .usage-stat.orange .usage-stat-value { color: var(--orange); }
 .usage-stat.purple .usage-stat-value { color: var(--purple); }
 .usage-models { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
-.usage-model-row { display: flex; justify-content: space-between; align-items: center; font-size: 10px; padding: 3px 0; }
-.usage-model-name { color: var(--text); font-family: 'DM Mono', monospace; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; }
-.usage-model-count { color: var(--muted); font-family: 'DM Mono', monospace; }
-.usage-period-btns { display: flex; gap: 4px; margin-bottom: 10px; }
+.usage-model-row { display: flex; justify-content: space-between; align-items: center; font-size: 10px; padding: 3px 0; gap: 6px; }
+.usage-model-name { color: var(--text); font-family: 'DM Mono', monospace; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.usage-model-agent { font-size: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; padding: 1px 5px; border-radius: 3px; background: var(--surface); flex-shrink: 0; }
+.usage-model-provider { font-size: 8px; color: var(--muted); font-style: italic; flex-shrink: 0; }
+.usage-model-count { color: var(--muted); font-family: 'DM Mono', monospace; flex-shrink: 0; }
+.usage-period-btns { display: flex; gap: 4px; margin-bottom: 8px; }
 .usage-period-btn { padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 10px; cursor: pointer; font-family: inherit; transition: all .15s; }
 .usage-period-btn:hover { border-color: var(--muted); color: var(--text); }
 .usage-period-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.usage-agent-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.usage-agent-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 12px;
+  border: 1px solid var(--border); background: none; color: var(--muted); font-size: 10px;
+  cursor: pointer; font-family: inherit; transition: all .15s;
+}
+.usage-agent-chip:hover { border-color: var(--muted); color: var(--text); }
+.usage-agent-chip.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.usage-agent-chip i { width: 11px; height: 11px; }
+.usage-agent-breakdown { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+.usage-agent-row {
+  display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px;
+  font-size: 10px; padding: 4px 6px; border-radius: 5px; background: var(--bg);
+}
+.usage-agent-row-name { display: flex; align-items: center; gap: 5px; color: var(--text); font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usage-agent-row-name i { width: 11px; height: 11px; color: var(--accent); flex-shrink: 0; }
+.usage-agent-row-name .provider-tag { font-size: 9px; color: var(--muted); font-weight: 400; margin-left: 2px; font-style: italic; }
+.usage-agent-row-stat { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 9px; white-space: nowrap; }
+.usage-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px 12px; text-align: center; gap: 8px; color: var(--muted);
+}
+.usage-empty i { width: 28px; height: 28px; opacity: .5; }
+.usage-empty-title { font-size: 12px; color: var(--text); font-weight: 500; }
+.usage-empty-hint { font-size: 10px; line-height: 1.5; max-width: 220px; }
+.usage-empty-link { color: var(--accent); cursor: pointer; background: none; border: none; font: inherit; padding: 0; }
+.usage-empty-link:hover { text-decoration: underline; }
+.usage-seed-hint {
+  margin-top: 8px; padding: 8px 10px; background: var(--bg); border-left: 2px solid var(--accent);
+  border-radius: 4px; font-size: 10px; color: var(--muted); line-height: 1.5;
+}
+.usage-panel-note {
+  margin-top: 6px; padding: 6px 10px; background: var(--surface); border: 1px dashed var(--border);
+  border-radius: 4px; font-size: 10px; color: var(--muted); line-height: 1.5;
+}
+.usage-panel-error {
+  margin: 4px 0; padding: 10px 12px; background: var(--red-soft, var(--surface));
+  border-left: 2px solid var(--red); border-radius: 4px; font-size: 11px; color: var(--text); line-height: 1.5;
+}
+.usage-panel-error .err-hint { color: var(--muted); font-size: 10px; display: block; margin-top: 3px; font-family: 'DM Mono', monospace; }
+/* Agent badge on project task rows */
+.ptask-agent-badge {
+  display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent); font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .4px; margin-left: 6px; flex-shrink: 0;
+  font-family: 'DM Mono', monospace;
+}
+.ptask-agent-badge i { width: 10px; height: 10px; }
+
+/* ── Settings: Agents section ── */
+.agent-settings-row {
+  display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px;
+  padding: 10px 12px; min-height: 48px;
+}
+.agent-settings-row + .agent-settings-row { border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
+.agent-settings-row.disabled { opacity: .6; }
+.agent-settings-row .agent-icon {
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  border-radius: 6px; background: var(--accent-soft); color: var(--accent); flex-shrink: 0;
+}
+.agent-settings-row.disabled .agent-icon { background: var(--surface); color: var(--muted); }
+.agent-settings-meta { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.agent-settings-name { font-size: 12px; color: var(--text); font-weight: 500; }
+.agent-settings-sub { font-size: 10px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.agent-settings-sub .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.agent-settings-sub .dot.ok { background: var(--green); }
+.agent-settings-sub a { color: var(--accent); text-decoration: none; }
+.agent-settings-sub a:hover { text-decoration: underline; }
+.agent-settings-badge {
+  font-size: 9px; padding: 2px 7px; border-radius: 10px; background: var(--surface);
+  color: var(--muted); font-family: 'DM Mono', monospace; white-space: nowrap;
+}
+.agent-settings-badge.active { background: var(--green-soft); color: var(--green); }
+
+/* ── Task detail: Source card ── */
+.task-detail-source {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface2); margin-bottom: 16px;
+}
+.task-detail-source-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.task-detail-source-agent {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px;
+  background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.task-detail-source-agent i { width: 12px; height: 12px; }
+.task-detail-source-title { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; display: flex; align-items: center; gap: 6px; }
+.task-detail-source-fields {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;
+}
+.task-detail-source-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.task-detail-source-field-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+.task-detail-source-field-value { font-size: 11px; color: var(--text); font-family: 'DM Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-detail-source-field-value.accent { color: var(--accent); }
+
 
 /* Disabled template cards (shown when eye toggle is on) */
 .template-card.disabled { opacity: .5; }
@@ -1993,6 +2126,45 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
     </div>
     <!-- Tab: Projects (agent-tracked projects) -->
     <div class="sidebar-tab-content" id="tabContentProjects">
+      <!-- Persistent "Track a project" help card. Auto-opens when the list is empty. -->
+      <section class="track-tip" id="trackTip" data-open="false" aria-labelledby="trackTipTitle">
+        <button type="button" class="track-tip-header" id="trackTipToggle" aria-expanded="false" aria-controls="trackTipBody" onclick="toggleTrackTip()">
+          <i data-lucide="folder-plus" class="icon-sm" style="color:var(--accent)" aria-hidden="true"></i>
+          <span class="track-tip-title" id="trackTipTitle">Track a project</span>
+          <i data-lucide="chevron-down" class="icon-sm track-tip-chevron" aria-hidden="true"></i>
+        </button>
+        <div class="track-tip-body" id="trackTipBody" role="region">
+          <p>Run <code>bean&nbsp;track</code> inside any project folder. The agent skill installs there, and new tasks show up here automatically.</p>
+
+          <span class="track-tip-step-label">Windows (PowerShell)</span>
+          <div class="track-tip-cmd"><span class="track-tip-prompt">PS&gt; </span>cd C:\Users\you\my-project
+<span class="track-tip-prompt">PS&gt; </span>bean track<button type="button" class="track-tip-copy" aria-label="Copy Windows commands" data-cmd="cd C:\Users\you\my-project&#10;bean track" onclick="copyTrackTipCmd(this)"><i data-lucide="clipboard" class="icon-sm" aria-hidden="true"></i></button></div>
+
+          <span class="track-tip-step-label">WSL / Ubuntu</span>
+          <div class="track-tip-cmd"><span class="track-tip-prompt">$ </span>cd ~/my-project
+<span class="track-tip-prompt">$ </span>bean track<button type="button" class="track-tip-copy" aria-label="Copy WSL commands" data-cmd="cd ~/my-project&#10;bean track" onclick="copyTrackTipCmd(this)"><i data-lucide="clipboard" class="icon-sm" aria-hidden="true"></i></button></div>
+
+          <p style="margin-top:10px"><strong>Don't have <code>bean</code> yet?</strong></p>
+          <div class="track-tip-cmd">npm install -g taskbean<button type="button" class="track-tip-copy" aria-label="Copy install command" data-cmd="npm install -g taskbean" onclick="copyTrackTipCmd(this)"><i data-lucide="clipboard" class="icon-sm" aria-hidden="true"></i></button></div>
+
+          <details class="track-tip-more">
+            <summary>&nbsp;Other useful <code>bean</code> commands</summary>
+            <dl class="track-tip-cmds">
+              <dt>bean list</dt><dd>show all tasks</dd>
+              <dt>bean projects</dt><dd>list tracked projects</dd>
+              <dt>bean report</dt><dd>weekly summary</dd>
+              <dt>bean serve</dt><dd>mini CLI dashboard</dd>
+              <dt>bean add "…"</dt><dd>log a task yourself</dd>
+              <dt>bean done &lt;id&gt;</dt><dd>mark a task complete</dd>
+            </dl>
+          </details>
+
+          <div class="track-tip-note">
+            <strong>On WSL?</strong> Taskbean stores data at <code>~/.taskbean/taskbean.db</code>, which resolves to a different path inside WSL than on Windows. To have this app see WSL projects, run <code>bean&nbsp;track</code> from PowerShell using the project's UNC path (for example <code>\\wsl$\Ubuntu\home\you\my-project</code>).
+          </div>
+        </div>
+      </section>
+      <div id="trackTipStatus" class="sr-only" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"></div>
       <div id="projectList" class="project-list-container"></div>
     </div>
   </div>
@@ -2205,6 +2377,11 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-notifications" id="stgTab-notifications" data-panel="notifications" onclick="switchSettingsTab('notifications')">
           <i data-lucide="bell" class="icon-sm"></i>
           <span class="tab-label">Notifications</span>
+          <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
+        </button>
+        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-agents" id="stgTab-agents" data-panel="agents" onclick="switchSettingsTab('agents')">
+          <i data-lucide="bot" class="icon-sm"></i>
+          <span class="tab-label">Agents</span>
           <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
         </button>
         <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-system" id="stgTab-system" data-panel="system" onclick="switchSettingsTab('system')">
@@ -2510,6 +2687,20 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         </div>
 
         <!-- ═══ SYSTEM ═══ -->
+        <!-- ═══ AGENTS ═══ -->
+        <div class="settings-panel" id="stgPanel-agents" role="tabpanel" aria-labelledby="stgTab-agents">
+          <div class="settings-panel-title"><i data-lucide="bot" class="icon-sm"></i> Agents</div>
+          <div class="settings-group" data-search-terms="agent copilot claude codex opencode tracking usage cli">
+            <div class="settings-group-title">Coding agents</div>
+            <div style="padding:4px 0;font-size:11px;color:var(--muted);padding:6px 12px 10px">
+              Track sessions and token usage from CLI coding agents. Detection is automatic — toggle off to exclude an agent from the Usage panel.
+            </div>
+            <div id="agentSettingsList">
+              <div style="font-size:11px;color:var(--muted);text-align:center;padding:14px">Loading…</div>
+            </div>
+          </div>
+        </div>
+
         <div class="settings-panel" id="stgPanel-system" role="tabpanel" aria-labelledby="stgTab-system">
           <div class="settings-panel-title"><i data-lucide="monitor" class="icon-sm"></i> System</div>
 
@@ -3126,6 +3317,40 @@ function copyOverlayCmd(btn) {
     btn.innerHTML = '<i data-lucide="check"></i>';
     lucide.createIcons();
     setTimeout(() => { btn.innerHTML = '<i data-lucide="clipboard"></i>'; lucide.createIcons(); }, 1500);
+}
+
+// ── Track-a-project tip helpers (sidebar, Projects tab) ──
+let _trackTipUserToggled = false;
+function toggleTrackTip() {
+    const tip = document.getElementById('trackTip');
+    const toggle = document.getElementById('trackTipToggle');
+    if (!tip || !toggle) return;
+    const open = tip.dataset.open !== 'true';
+    tip.dataset.open = open ? 'true' : 'false';
+    _trackTipUserToggled = true;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function copyTrackTipCmd(btn) {
+    const cmd = btn.getAttribute('data-cmd') || '';
+    const status = document.getElementById('trackTipStatus');
+    const done = () => {
+        btn.classList.add('copied');
+        btn.innerHTML = '<i data-lucide="check" class="icon-sm" aria-hidden="true"></i>';
+        lucide.createIcons();
+        if (status) status.textContent = 'Command copied to clipboard.';
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.innerHTML = '<i data-lucide="clipboard" class="icon-sm" aria-hidden="true"></i>';
+            lucide.createIcons();
+            if (status) status.textContent = '';
+        }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cmd).then(done).catch(done);
+    } else {
+        done();
+    }
 }
 
 let protocolRegistered = null;
@@ -3879,6 +4104,14 @@ function updateTodoScrollHint() {
 let _projectsCache = [];
 let _expandedProject = null;
 let _usagePeriod = 'today';
+let _usageAgentFilter = 'all';  // 'all' | canonical agent id
+const AGENT_META = {
+    copilot:       { label: 'Copilot',     icon: 'github',   install: 'https://github.com/github/gh-copilot' },
+    'claude-code': { label: 'Claude Code', icon: 'sparkles', install: 'https://github.com/anthropics/claude-code' },
+    codex:         { label: 'Codex',       icon: 'code',     install: 'https://github.com/openai/codex' },
+    opencode:      { label: 'OpenCode',    icon: 'terminal', install: 'https://github.com/sst/opencode' },
+};
+const AGENT_ORDER = ['copilot', 'claude-code', 'codex', 'opencode'];
 
 // Lightweight fetch to populate _projectsCache and badge on startup (no full render)
 async function fetchProjectCount() {
@@ -3899,24 +4132,31 @@ async function renderProjects() {
 
     let html = '';
 
-    // Copilot Usage section (always shown)
+    // Multi-agent Usage section (always shown)
     html += `<div class="usage-section" id="usageSection">
-        <div class="usage-section-title"><i data-lucide="activity" class="icon-sm"></i> copilot usage</div>
+        <div class="usage-section-title"><i data-lucide="activity" class="icon-sm"></i> usage</div>
         <div class="usage-period-btns">
             <button class="usage-period-btn ${_usagePeriod === 'today' ? 'active' : ''}" onclick="event.stopPropagation();switchUsagePeriod('today')">Today</button>
             <button class="usage-period-btn ${_usagePeriod === 'week' ? 'active' : ''}" onclick="event.stopPropagation();switchUsagePeriod('week')">Week</button>
             <button class="usage-period-btn ${_usagePeriod === 'all' ? 'active' : ''}" onclick="event.stopPropagation();switchUsagePeriod('all')">All</button>
         </div>
+        <div id="usageAgentChips" class="usage-agent-chips"></div>
         <div id="usageContent"><div style="font-size:10px;color:var(--muted);text-align:center;padding:12px">Loading…</div></div>
     </div>`;
 
     // Projects
+    const tip = document.getElementById('trackTip');
+    const tipToggle = document.getElementById('trackTipToggle');
     if (_projectsCache.length === 0) {
+        // Auto-open the help card so first-run users see the how-to immediately.
+        if (tip && !_trackTipUserToggled) {
+            tip.dataset.open = 'true';
+            if (tipToggle) tipToggle.setAttribute('aria-expanded', 'true');
+        }
         html += `<div class="project-empty">
-            <i data-lucide="folder-open" class="icon-xl" style="color:var(--muted)"></i>
-            <p>No agent-tracked projects yet.</p>
-            <p style="font-size:10px;margin-top:4px">Install the taskbean agent skill in a project:</p>
-            <code>bean track --path ~/my-project</code>
+            <i data-lucide="folder-open" class="icon-xl" style="color:var(--muted)" aria-hidden="true"></i>
+            <p>No tracked projects yet.</p>
+            <p style="font-size:10px;margin-top:4px">Use the steps above to add your first one.</p>
         </div>`;
     } else {
         html += _projectsCache.map(p => `
@@ -3946,8 +4186,16 @@ async function renderProjects() {
 function switchUsagePeriod(period) {
     _usagePeriod = period;
     loadUsageStats();
-    // Update button states
     document.querySelectorAll('.usage-period-btn').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase() === period));
+}
+
+function switchUsageAgent(agent) {
+    _usageAgentFilter = agent;
+    loadUsageStats();
+}
+
+function openSettingsToAgents() {
+    try { openSettings(); switchSettingsTab('agents'); } catch {}
 }
 
 function formatTokens(n) {
@@ -3958,29 +4206,156 @@ function formatTokens(n) {
 
 async function loadUsageStats() {
     const container = document.getElementById('usageContent');
+    const chipBar = document.getElementById('usageAgentChips');
     if (!container) return;
     try {
-        const res = await fetch('/api/copilot-usage?date=' + _usagePeriod, { cache: 'no-store' });
+        const qs = '?period=' + _usagePeriod;
+        const res = await fetch('/api/agent-usage' + qs, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        if (!data.available) {
-            container.innerHTML = '<div style="font-size:10px;color:var(--muted);text-align:center;padding:8px">Copilot CLI not detected</div>';
+
+        // Enabled agents = those with settings[agent].enabled === 1
+        const settings = data.settings || {};
+        const enabled = AGENT_ORDER.filter(a => (settings[a]?.enabled) === 1);
+
+        // Render chips: hide entirely if no enabled agents
+        if (chipBar) {
+            if (enabled.length === 0) {
+                chipBar.innerHTML = '';
+            } else {
+                const chips = [{id:'all', label:'All', icon:'layers'}]
+                    .concat(enabled.map(a => ({ id: a, label: AGENT_META[a].label, icon: AGENT_META[a].icon })));
+                // Keep filter valid
+                if (_usageAgentFilter !== 'all' && !enabled.includes(_usageAgentFilter)) {
+                    _usageAgentFilter = 'all';
+                }
+                chipBar.innerHTML = chips.map(c =>
+                    `<button class="usage-agent-chip ${_usageAgentFilter === c.id ? 'active' : ''}" onclick="event.stopPropagation();switchUsageAgent('${c.id}')"><i data-lucide="${c.icon}"></i>${esc(c.label)}</button>`
+                ).join('');
+                lucide.createIcons();
+            }
+        }
+
+        // Empty state: no agents enabled AND no session data anywhere (F7)
+        const totalsAll = data.totals || _emptyUsageTotals();
+        const hasAnyData = (totalsAll.turns || 0) > 0 || (totalsAll.sessions || 0) > 0;
+        if (enabled.length === 0) {
+            if (!hasAnyData) {
+                container.innerHTML = `<div class="usage-empty">
+                    <i data-lucide="bot" aria-hidden="true"></i>
+                    <div class="usage-empty-title">No coding agents tracked yet</div>
+                    <div class="usage-empty-hint">Install or enable an agent to start tracking; bean tracks GitHub Copilot, Claude Code, Codex, and OpenCode locally.</div>
+                    <button class="usage-empty-link" onclick="event.stopPropagation();openSettingsToAgents()">Open agent settings →</button>
+                </div>`;
+            } else {
+                container.innerHTML = `<div class="usage-empty">
+                    <i data-lucide="bot" aria-hidden="true"></i>
+                    <div class="usage-empty-title">No coding agents enabled</div>
+                    <div class="usage-empty-hint">Enable an agent to start tracking usage; bean tracks GitHub Copilot, Claude Code, Codex, and OpenCode locally.</div>
+                    <button class="usage-empty-link" onclick="event.stopPropagation();openSettingsToAgents()">Open agent settings →</button>
+                </div>`;
+            }
+            lucide.createIcons();
             return;
         }
-        const modelEntries = Object.entries(data.models || {}).sort((a, b) => b[1] - a[1]);
+
+        // Apply active filter client-side (totals/byAgent/byModel already include all enabled agents).
+        const filter = _usageAgentFilter;
+        const agentsInView = filter === 'all' ? enabled : [filter];
+        const totals = filter === 'all'
+            ? (data.totals || _emptyUsageTotals())
+            : (data.byAgent?.[filter] || _emptyUsageTotals());
+
+        // Empty state: no activity in period
+        if ((totals.turns || 0) === 0 && (totals.sessions || 0) === 0) {
+            container.innerHTML = `<div class="usage-empty">
+                <i data-lucide="moon" aria-hidden="true"></i>
+                <div class="usage-empty-title">No activity ${_usagePeriod === 'today' ? 'today' : _usagePeriod === 'week' ? 'this week' : 'yet'}</div>
+                <div class="usage-empty-hint">Usage will appear here as you chat with your coding agents.</div>
+            </div>`;
+            lucide.createIcons();
+            return;
+        }
+
+        // Data-driven: agents with sessions but 0 turns = "session-only tracking"
+        // (Applies to Claude Code / Codex today; keep it data-driven so any agent behaves the same way.)
+        const sessionOnlyAgents = agentsInView.filter(a => {
+            const s = data.byAgent?.[a];
+            return s && (s.turns || 0) === 0 && (s.sessions || 0) > 0;
+        });
+
+        // Panel-level note when viewing agents that have only session-level tracking.
+        const panelNote = sessionOnlyAgents.length > 0
+            ? `<div class="usage-panel-note">Turn-level usage for ${sessionOnlyAgents.map(a => esc(AGENT_META[a]?.label || a)).join(' and ')} is coming soon; session counts shown below.</div>`
+            : '';
+
+        // Seed hint: sessions exist but no turn-level usage yet (aggregate view).
+        const seedHint = (totals.turns === 0 && totals.sessions > 0 && filter !== 'all')
+            ? `<div class="usage-seed-hint">Session-only tracking — ${totals.sessions} session${totals.sessions > 1 ? 's' : ''} recorded.</div>`
+            : '';
+
+        // Per-agent breakdown (only if filter === 'all' and >1 agent has activity)
+        let breakdown = '';
+        if (filter === 'all' && enabled.length > 1) {
+            const rows = enabled.map(a => {
+                const stats = data.byAgent?.[a] || _emptyUsageTotals();
+                if (!stats.turns && !stats.sessions) return '';
+                const meta = AGENT_META[a];
+                const sessionOnly = (stats.turns || 0) === 0 && (stats.sessions || 0) > 0;
+                const statLine = sessionOnly
+                    ? `<span class="usage-agent-row-stat" style="color:var(--muted);font-style:italic">Session-only tracking · ${stats.sessions} sess</span>`
+                    : `<span class="usage-agent-row-stat">${stats.sessions || 0} sess · ${stats.turns || 0} turns</span><span class="usage-agent-row-stat">${formatTokens(stats.outputTokens || 0)} out</span>`;
+                return `<div class="usage-agent-row">
+                    <span class="usage-agent-row-name"><i data-lucide="${meta.icon}"></i>${esc(meta.label)}</span>
+                    ${statLine}
+                </div>`;
+            }).filter(Boolean).join('');
+            if (rows) breakdown = `<div class="usage-agent-breakdown">${rows}</div>`;
+        }
+
+        // Per-model breakdown (filtered)
+        const modelEntries = (data.byModel || [])
+            .filter(m => agentsInView.includes(m.agent))
+            .slice(0, 6);
+        const modelsHtml = modelEntries.length ? `<div class="usage-models">
+            ${modelEntries.map(m => {
+                const agentLabel = AGENT_META[m.agent]?.label || m.agent;
+                return `<div class="usage-model-row">
+                    <span class="usage-model-agent">${esc(agentLabel)}</span>
+                    <span class="usage-model-name">${esc(m.model || 'unknown')}</span>
+                    <span class="usage-model-count">${m.sessions} sess</span>
+                </div>`;
+            }).join('')}
+        </div>` : '';
+
         container.innerHTML = `
             <div class="usage-grid">
-                <div class="usage-stat accent"><div class="usage-stat-value">${formatTokens(data.totalOutputTokens)}</div><div class="usage-stat-label">Output Tokens</div></div>
-                <div class="usage-stat green"><div class="usage-stat-value">${data.sessions}</div><div class="usage-stat-label">Sessions</div></div>
-                <div class="usage-stat orange"><div class="usage-stat-value">${data.totalMessages}</div><div class="usage-stat-label">Requests</div></div>
-                <div class="usage-stat purple"><div class="usage-stat-value">${data.totalTurns}</div><div class="usage-stat-label">Turns</div></div>
+                <div class="usage-stat accent"><div class="usage-stat-value">${formatTokens(totals.outputTokens || 0)}</div><div class="usage-stat-label">Output Tokens</div></div>
+                <div class="usage-stat green"><div class="usage-stat-value">${totals.sessions || 0}</div><div class="usage-stat-label">Sessions</div></div>
+                <div class="usage-stat orange"><div class="usage-stat-value">${totals.turns || 0}</div><div class="usage-stat-label">Turns</div></div>
+                <div class="usage-stat purple"><div class="usage-stat-value">${totals.toolCalls || 0}</div><div class="usage-stat-label">Tool Calls</div></div>
             </div>
-            ${modelEntries.length ? `<div class="usage-models">
-                ${modelEntries.map(([m, c]) => `<div class="usage-model-row"><span class="usage-model-name">${esc(m)}</span><span class="usage-model-count">${c} session${c > 1 ? 's' : ''}</span></div>`).join('')}
-            </div>` : ''}
+            ${panelNote}
+            ${seedHint}
+            ${breakdown}
+            ${modelsHtml}
         `;
-    } catch {
-        container.innerHTML = '<div style="font-size:10px;color:var(--red);text-align:center;padding:8px">Failed to load usage</div>';
+        lucide.createIcons();
+    } catch (err) {
+        console.error('loadUsageStats failed', err);
+        // F8: distinct backend-down / network error state
+        container.innerHTML = `<div class="usage-panel-error">
+            <i data-lucide="wifi-off" class="icon-sm" style="vertical-align:middle;margin-right:4px"></i>
+            Couldn't reach the taskbean agent. Check that it's running on :2326.
+            <span class="err-hint">${esc(err.message || 'network error')}</span>
+        </div>`;
+        if (chipBar) chipBar.innerHTML = '';
+        lucide.createIcons();
     }
+}
+
+function _emptyUsageTotals() {
+    return { turns: 0, sessions: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningTokens: 0, totalTokens: 0, toolCalls: 0 };
 }
 async function toggleProjectExpand(name) {
     if (_expandedProject === name) {
@@ -4003,13 +4378,20 @@ async function loadProjectTasks(name) {
             return;
         }
         const sorted = [...tasks].sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0) || new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
-        container.innerHTML = sorted.map(t => `
+        container.innerHTML = sorted.map(t => {
+            const agentMeta = t.agent ? (AGENT_META[t.agent] || { label: t.agent, icon: 'bot' }) : null;
+            const agentBadge = agentMeta
+                ? `<span class="ptask-agent-badge" title="Created by ${esc(agentMeta.label)}"><i data-lucide="${agentMeta.icon}"></i>${esc(agentMeta.label)}</span>`
+                : '';
+            return `
             <div class="project-task-item ${t.completed ? 'completed' : ''}" onclick="event.stopPropagation();openTaskDetail('${esc(t.id)}')" style="cursor:pointer" title="Click for details">
                 <i data-lucide="${t.completed ? 'check-circle' : 'circle'}" class="icon-sm ${t.completed ? 'ptask-check' : 'ptask-pending'}"></i>
                 <span>${esc(t.title)}</span>
+                ${agentBadge}
                 <i data-lucide="chevron-right" class="icon-xs" style="color:var(--muted);margin-left:auto;flex-shrink:0;opacity:.5"></i>
             </div>
-        `).join('');
+        `;
+        }).join('');
         container.style.display = 'block';
         lucide.createIcons();
     } catch { container.innerHTML = '<div style="font-size:10px;color:var(--red)">Failed to load</div>'; }
@@ -4018,6 +4400,8 @@ async function loadProjectTasks(name) {
 // ── Task Detail Card ──
 let _taskDetailOpen = false;
 let _taskDetailCache = {};
+let _taskDetailCacheAt = {};
+const TASK_DETAIL_CACHE_MAX_AGE_MS = 30_000;
 let _activeTaskDetailData = null;  // explicitly tracks the currently-open task
 let _askStreamController = null;   // AbortController for in-flight ask requests
 
@@ -4078,6 +4462,14 @@ async function openTaskDetail(taskId) {
     _taskDetailOpen = true;
     _activeTaskDetailData = null;
 
+    // F5: Evict stale cache entries so the Source card reflects fresh session metadata
+    // (e.g. after `bean done` lands in another terminal).
+    const cachedAt = _taskDetailCacheAt[taskId] || 0;
+    if (Date.now() - cachedAt > TASK_DETAIL_CACHE_MAX_AGE_MS) {
+        delete _taskDetailCache[taskId];
+        delete _taskDetailCacheAt[taskId];
+    }
+
     // Abort any in-flight ask
     if (_askStreamController) { _askStreamController.abort(); _askStreamController = null; }
 
@@ -4112,6 +4504,7 @@ async function openTaskDetail(taskId) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         _taskDetailCache[taskId] = data;
+        _taskDetailCacheAt[taskId] = Date.now();
         _activeTaskDetailData = data;
         detailEl.innerHTML = renderTaskDetailCard(data);
         lucide.createIcons();
@@ -4399,6 +4792,50 @@ function renderTaskDetailCard(data) {
         </div>`;
     }
 
+    // Source card (cross-agent) — shown whenever task has agent attribution.
+    const sc = data.sourceCard;
+    let sourceCardHtml = '';
+    if (sc && sc.agent) {
+        const meta = AGENT_META[sc.agent] || { label: sc.agent, icon: 'bot' };
+        const providerDiff = sc.provider && sc.provider !== sc.agent;
+        const cwdShort = sc.cwd ? sc.cwd.replace(/^.*[\\\/]([^\\\/]+[\\\/][^\\\/]+)$/, '…/$1') : '';
+        // F6: data-driven session-only treatment when no turn-level data exists.
+        const sessionOnly = (sc.turns || 0) === 0 && !sc.inputTokens && !sc.outputTokens;
+        const fields = sessionOnly
+            ? [
+                sc.model ? { label: 'Model', value: sc.model, accent: true } : null,
+                providerDiff ? { label: 'Provider', value: sc.provider } : null,
+                sc.startedAt ? { label: 'Started', value: fmtRelativeTime(sc.startedAt) } : null,
+                cwdShort ? { label: 'CWD', value: cwdShort, title: sc.cwd } : null,
+            ].filter(Boolean)
+            : [
+                sc.model ? { label: 'Model', value: sc.model, accent: true } : null,
+                providerDiff ? { label: 'Provider', value: sc.provider } : null,
+                { label: 'Turns', value: String(sc.turns || 0) },
+                { label: 'Input', value: fmtTokens(sc.inputTokens || 0) },
+                { label: 'Output', value: fmtTokens(sc.outputTokens || 0) },
+                sc.startedAt ? { label: 'Started', value: fmtRelativeTime(sc.startedAt) } : null,
+                cwdShort ? { label: 'CWD', value: cwdShort, title: sc.cwd } : null,
+            ].filter(Boolean);
+        const sessionOnlyNote = sessionOnly
+            ? `<div style="font-size:10px;color:var(--muted);font-style:italic;margin-top:-4px">Session-only tracking — turn-level usage for ${esc(meta.label)} is coming soon.</div>`
+            : '';
+        sourceCardHtml = `<div class="task-detail-source">
+            <div class="task-detail-source-head">
+                <span class="task-detail-source-agent"><i data-lucide="${meta.icon}"></i>${esc(meta.label)}</span>
+                <span class="task-detail-source-title">Source</span>
+                ${sc.title ? `<span style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${esc(sc.title)}</span>` : ''}
+            </div>
+            ${sessionOnlyNote}
+            <div class="task-detail-source-fields">
+                ${fields.map(f => `<div class="task-detail-source-field">
+                    <span class="task-detail-source-field-label">${esc(f.label)}</span>
+                    <span class="task-detail-source-field-value${f.accent ? ' accent' : ''}"${f.title ? ` title="${esc(f.title)}"` : ''}>${esc(f.value)}</span>
+                </div>`).join('')}
+            </div>
+        </div>`;
+    }
+
     return `<div class="task-detail-inner">
         <button class="task-detail-back" onclick="closeTaskDetail()">
             <i data-lucide="arrow-left" class="icon-sm"></i> Back to chat
@@ -4414,6 +4851,7 @@ function renderTaskDetailCard(data) {
         </div>
         <div id="taskDetailAnswer" class="task-detail-answer" style="display:none"></div>
         ${hero}
+        ${sourceCardHtml}
         ${metricsHtml}
         ${noSessionHtml}
         ${summaryHtml}
@@ -7260,7 +7698,90 @@ function switchSettingsTab(tabId, animate = true) {
         panel.classList.toggle('active', isActive);
         if (isActive && !animate) panel.style.animation = 'none';
     });
+    if (tabId === 'agents') loadAgentSettings();
     lucide.createIcons();
+}
+
+async function loadAgentSettings() {
+    const host = document.getElementById('agentSettingsList');
+    if (!host) return;
+    try {
+        const res = await fetch('/api/agent-usage/detection', { cache: 'no-store' });
+        const data = await res.json();
+        const rows = AGENT_ORDER.map(agent => {
+            const meta = AGENT_META[agent];
+            const d = data[agent] || { installed: false, enabled: false };
+            const installed = !!d.installed;
+            const enabled = installed && d.enabled !== false;
+            const lastActive = d.lastActiveAt ? fmtRelativeTime(d.lastActiveAt) : null;
+            const statusBits = [];
+            if (installed) {
+                statusBits.push('<span class="dot ok"></span>Installed');
+            } else {
+                statusBits.push(`<span class="dot"></span>Not installed · <a href="${meta.install}" target="_blank" rel="noopener">install docs</a>`);
+            }
+            if (d.dataPath) statusBits.push(`<span title="${esc(d.dataPath)}" style="font-family:'DM Mono',monospace;font-size:9px">${esc(d.dataPath.length > 36 ? '…' + d.dataPath.slice(-34) : d.dataPath)}</span>`);
+            const badge = lastActive
+                ? `<span class="agent-settings-badge ${enabled ? 'active' : ''}">${esc(lastActive)}</span>`
+                : `<span class="agent-settings-badge">—</span>`;
+            const toggle = installed
+                ? `<button class="stg-toggle" role="switch" aria-checked="${enabled}" aria-label="Enable ${esc(meta.label)}" onclick="toggleAgentEnabled('${agent}', this)"></button>`
+                : `<button class="stg-toggle" role="switch" aria-checked="false" aria-label="Enable ${esc(meta.label)}" disabled></button>`;
+            return `<div class="agent-settings-row ${installed ? '' : 'disabled'}" data-agent="${agent}">
+                <div class="agent-icon"><i data-lucide="${meta.icon}" class="icon-sm"></i></div>
+                <div class="agent-settings-meta">
+                    <div class="agent-settings-name">${esc(meta.label)}</div>
+                    <div class="agent-settings-sub">${statusBits.join(' · ')}</div>
+                </div>
+                ${badge}
+                ${toggle}
+            </div>`;
+        }).join('');
+        host.innerHTML = rows;
+        lucide.createIcons();
+    } catch (err) {
+        console.error('loadAgentSettings', err);
+        host.innerHTML = '<div style="font-size:11px;color:var(--red);text-align:center;padding:14px">Failed to load agent detection</div>';
+    }
+}
+
+async function toggleAgentEnabled(agent, btn) {
+    if (!btn) return;
+    const wasEnabled = btn.getAttribute('aria-checked') === 'true';
+    const nextEnabled = !wasEnabled;
+    // Optimistic visual flip
+    btn.setAttribute('aria-checked', String(nextEnabled));
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/agent-usage/settings/' + encodeURIComponent(agent), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: nextEnabled }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // Only refresh the usage panel *after* the POST succeeds
+        loadUsageStats();
+    } catch (err) {
+        console.error('toggleAgentEnabled', err);
+        // Revert visual state
+        btn.setAttribute('aria-checked', String(wasEnabled));
+        // Surface the failure — inline message in the settings row + chat toast as fallback.
+        const row = btn.closest('.agent-settings-row');
+        if (row) {
+            let errEl = row.querySelector('.agent-settings-err');
+            if (!errEl) {
+                errEl = document.createElement('div');
+                errEl.className = 'agent-settings-err';
+                errEl.style.cssText = 'grid-column: 1 / -1; font-size:10px; color:var(--red); padding-top:4px;';
+                row.appendChild(errEl);
+            }
+            errEl.textContent = `Couldn't update ${agent}: ${err.message || 'network error'}`;
+            setTimeout(() => { errEl && errEl.remove(); }, 4000);
+        }
+        try { addChat('error', 'alert-circle', `Failed to toggle ${agent}: ${err.message || 'network error'}`); } catch {}
+    } finally {
+        btn.disabled = false;
+    }
 }
 
 // Keyboard navigation for sidebar tabs
@@ -8092,6 +8613,34 @@ async function initApp() {
     setInterval(refreshTodos, 15_000);
     setInterval(loadTemplates, 30_000);
     setInterval(processReminderNotifications, 30_000);
+
+    // F1/F2: 10s cadence for Projects tab + Usage panel.
+    // `#usageSection` lives inside `#tabContentProjects`, so it's visible exactly when
+    // the Projects tab is active. We poll while visible only, and do an immediate
+    // refresh when the tab/window regains focus.
+    const PROJECTS_USAGE_POLL_MS = 10_000;
+    function projectsTabActive() {
+        const el = document.getElementById('tabContentProjects');
+        return !!(el && el.classList.contains('active'));
+    }
+    async function pollProjectsAndUsage() {
+        if (document.hidden) return;
+        if (!serverReachable) return;
+        if (!projectsTabActive()) return;
+        try {
+            await renderProjects(); // includes loadUsageStats()
+            if (_expandedProject) await loadProjectTasks(_expandedProject);
+        } catch (err) {
+            console.warn('projects/usage poll failed', err);
+        }
+    }
+    setInterval(pollProjectsAndUsage, PROJECTS_USAGE_POLL_MS);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            // Immediate refresh so the tab is fresh the moment the user refocuses.
+            pollProjectsAndUsage();
+        }
+    });
     initNerdMode();
 
     // AI Suggestions — nudge engine + onboarding + overdue reminders
