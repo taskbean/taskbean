@@ -38,9 +38,9 @@ test.describe('Settings Modal — UI Overhaul', () => {
       await expect(page.locator('.settings-content')).toBeVisible();
       await expect(page.locator('.settings-search')).toBeVisible();
 
-      // Verify 7 sidebar tabs exist
+      // Verify 6 sidebar tabs exist (Inference & Voice merged)
       const tabs = page.locator('.settings-sidebar .settings-tab');
-      await expect(tabs).toHaveCount(7);
+      await expect(tabs).toHaveCount(6);
 
       // No console errors
       expect(errors.filter(e => !e.includes('ExperimentalWarning'))).toHaveLength(0);
@@ -86,7 +86,7 @@ test.describe('Settings Modal — UI Overhaul', () => {
       await page.goto('/');
       await openSettings(page);
 
-      const tabIds = ['general', 'ai', 'inference', 'voice', 'schedule', 'notifications', 'system'];
+      const tabIds = ['general', 'ai', 'inference', 'schedule', 'notifications', 'system'];
       for (const id of tabIds) {
         await switchTab(page, id);
         // Previous panel should be hidden
@@ -295,14 +295,18 @@ test.describe('Settings Modal — UI Overhaul', () => {
   // Inference Tab
   // ═══════════════════════════════════════════════════════════════
 
-  test.describe('Inference Tab', () => {
-    test('all inference controls are visible', async ({ page }) => {
+  test.describe('Inference & Voice Tab', () => {
+    test('all inference and voice controls are visible', async ({ page }) => {
       await page.goto('/');
       await openSettings(page);
       await switchTab(page, 'inference');
       await expect(page.locator('#settingsInferenceClient')).toBeVisible();
       await expect(page.locator('#settingsParallelToolCalls')).toBeVisible();
       await expect(page.locator('#settingsShowReasoning')).toBeVisible();
+      // Voice controls in same tab
+      await expect(page.locator('#settingsSpeechEngine')).toBeVisible();
+      await expect(page.locator('#settingsSpeechFallback')).toBeVisible();
+      await expect(page.locator('#settingsMicDevice')).toBeVisible();
     });
 
     test('inference client dropdown persists', async ({ page }) => {
@@ -342,25 +346,7 @@ test.describe('Settings Modal — UI Overhaul', () => {
   // Voice Tab
   // ═══════════════════════════════════════════════════════════════
 
-  test.describe('Voice Tab', () => {
-    test('speech controls are visible', async ({ page }) => {
-      await page.goto('/');
-      await openSettings(page);
-      await switchTab(page, 'voice');
-      await expect(page.locator('#settingsSpeechEngine')).toBeVisible();
-      await expect(page.locator('#settingsSpeechFallback')).toBeVisible();
-      await expect(page.locator('#settingsMicDevice')).toBeVisible();
-    });
-
-    test('speech engine dropdown has correct options', async ({ page }) => {
-      await page.goto('/');
-      await openSettings(page);
-      await switchTab(page, 'voice');
-      const options = await page.locator('#settingsSpeechEngine option').allTextContents();
-      expect(options).toContain('Auto (best available)');
-      expect(options.some(o => o.includes('Whisper'))).toBe(true);
-    });
-  });
+  // Voice controls are now in Inference & Voice tab (tested above)
 
   // ═══════════════════════════════════════════════════════════════
   // Schedule Tab
@@ -617,7 +603,7 @@ test.describe('Settings Modal — UI Overhaul', () => {
         '#settingsAutoIcon',
       ];
       // Visit all tabs to make toggles accessible
-      for (const tabId of ['general', 'ai', 'inference', 'voice', 'schedule', 'notifications', 'system']) {
+      for (const tabId of ['general', 'ai', 'inference', 'schedule', 'notifications', 'system']) {
         await switchTab(page, tabId);
       }
       for (const id of toggleIds) {

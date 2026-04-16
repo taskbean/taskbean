@@ -441,7 +441,9 @@ header {
 .settings-time-input {
   background: var(--surface); border: 1px solid var(--border); color: var(--text);
   padding: 5px 8px; border-radius: 6px; font-size: 12px; width: 100px; font-family: inherit;
+  color-scheme: dark;
 }
+[data-theme="latte"] .settings-time-input { color-scheme: light; }
 .settings-time-input:focus { border-color: var(--accent); outline: none; }
 .settings-mono-input {
   background: var(--surface); border: 1px solid var(--border); color: var(--text);
@@ -478,20 +480,23 @@ header {
 }
 .info-tip:hover, .info-tip:focus-visible { color: var(--accent); }
 .info-tip .tip-text {
-  display: none; position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  display: none; position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
   padding: 8px 12px; font-size: 11px; color: var(--text); font-weight: 400;
-  line-height: 1.5; width: max-content; max-width: 260px; z-index: 10;
+  line-height: 1.5; width: max-content; max-width: 260px; z-index: 100;
   box-shadow: 0 8px 24px rgba(0,0,0,.25); pointer-events: none; white-space: normal; text-align: left;
 }
 .info-tip .tip-text::after {
-  content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-  border: 5px solid transparent; border-top-color: var(--border);
+  content: ''; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+  border: 5px solid transparent; border-bottom-color: var(--border);
 }
 .info-tip:hover .tip-text, .info-tip:focus-visible .tip-text { display: block; }
 
 /* Theme swatch picker */
-.theme-swatches { display: flex; gap: 8px; align-items: center; }
+.theme-swatches { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.theme-swatch-option {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer;
+}
 .theme-swatch-btn {
   width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border);
   cursor: pointer; position: relative; transition: all .15s; padding: 0;
@@ -502,6 +507,11 @@ header {
   content: '✓'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5);
 }
+.theme-swatch-name {
+  font-size: 9px; color: var(--muted); font-weight: 500; white-space: nowrap; transition: color .15s;
+}
+.theme-swatch-option:hover .theme-swatch-name { color: var(--text); }
+.theme-swatch-option.active .theme-swatch-name { color: var(--accent); font-weight: 600; }
 .theme-swatch-btn[data-theme="dark-roast"] { background: #E8863C; }
 .theme-swatch-btn[data-theme="latte"] { background: #C8520A; }
 .theme-swatch-btn[data-theme="espresso"] { background: #F07030; }
@@ -515,6 +525,13 @@ header {
 .hw-info-grid .hw-label { color: var(--muted); display: flex; align-items: center; gap: 4px; font-size: 11px; }
 .hw-info-grid .hw-value-text { color: var(--text); }
 .hw-info-grid .hw-na { color: var(--muted); font-style: italic; }
+
+/* Live clock preview in General tab */
+.settings-clock-preview {
+  font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; font-weight: 600;
+  color: var(--accent); padding: 8px 12px; background: var(--bg); border-radius: 6px;
+  text-align: center; font-variant-numeric: tabular-nums; letter-spacing: .3px;
+}
 
 /* Restart banner */
 .settings-restart-banner {
@@ -2159,12 +2176,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         </button>
         <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-inference" id="stgTab-inference" data-panel="inference" onclick="switchSettingsTab('inference')">
           <i data-lucide="brain" class="icon-sm"></i>
-          <span class="tab-label">Inference</span>
-          <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
-        </button>
-        <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-voice" id="stgTab-voice" data-panel="voice" onclick="switchSettingsTab('voice')">
-          <i data-lucide="mic" class="icon-sm"></i>
-          <span class="tab-label">Voice</span>
+          <span class="tab-label">Inference &amp; Voice</span>
           <span class="tab-offline-dot" title="Some settings unavailable offline"></span>
         </button>
         <button class="settings-tab" role="tab" aria-selected="false" aria-controls="stgPanel-schedule" id="stgTab-schedule" data-panel="schedule" onclick="switchSettingsTab('schedule')">
@@ -2196,16 +2208,29 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
             <div class="settings-row">
               <label>Appearance</label>
               <div class="theme-swatches" id="settingsThemeSwatches">
-                <button class="theme-swatch-btn active" data-theme="dark-roast" onclick="setTheme('dark-roast', true)" title="Dark Roast"></button>
-                <button class="theme-swatch-btn" data-theme="latte" onclick="setTheme('latte', true)" title="Latte"></button>
-                <button class="theme-swatch-btn" data-theme="espresso" onclick="setTheme('espresso', true)" title="Espresso"></button>
-                <button class="theme-swatch-btn" data-theme="black-coffee" onclick="setTheme('black-coffee', true)" title="Black Coffee"></button>
+                <div class="theme-swatch-option active" data-theme="dark-roast" onclick="setTheme('dark-roast', true)">
+                  <button class="theme-swatch-btn active" data-theme="dark-roast" title="Dark Roast" aria-label="Dark Roast theme"></button>
+                  <span class="theme-swatch-name">Dark Roast</span>
+                </div>
+                <div class="theme-swatch-option" data-theme="latte" onclick="setTheme('latte', true)">
+                  <button class="theme-swatch-btn" data-theme="latte" title="Latte" aria-label="Latte theme"></button>
+                  <span class="theme-swatch-name">Latte</span>
+                </div>
+                <div class="theme-swatch-option" data-theme="espresso" onclick="setTheme('espresso', true)">
+                  <button class="theme-swatch-btn" data-theme="espresso" title="Espresso" aria-label="Espresso theme"></button>
+                  <span class="theme-swatch-name">Espresso</span>
+                </div>
+                <div class="theme-swatch-option" data-theme="black-coffee" onclick="setTheme('black-coffee', true)">
+                  <button class="theme-swatch-btn" data-theme="black-coffee" title="Black Coffee" aria-label="Black Coffee theme"></button>
+                  <span class="theme-swatch-name">Black Coffee</span>
+                </div>
               </div>
             </div>
           </div>
 
           <div class="settings-group" data-search-terms="timezone clock time date format custom">
             <div class="settings-group-title">Clock &amp; Time</div>
+            <div id="settingsClockPreview" class="settings-clock-preview" style="margin:6px 12px 2px">—</div>
             <div class="settings-row">
               <label for="settingsTimezone">
                 Timezone
@@ -2291,16 +2316,16 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
           </div>
         </div>
 
-        <!-- ═══ INFERENCE ═══ -->
+        <!-- ═══ INFERENCE & VOICE ═══ -->
         <div class="settings-panel" id="stgPanel-inference" role="tabpanel" aria-labelledby="stgTab-inference">
-          <div class="settings-panel-title"><i data-lucide="brain" class="icon-sm"></i> Inference</div>
+          <div class="settings-panel-title"><i data-lucide="brain" class="icon-sm"></i> Inference &amp; Voice</div>
 
           <div class="settings-group" data-search-terms="inference client parallel tool calls reasoning traces">
             <div class="settings-group-title">Runtime</div>
             <div class="settings-row">
               <label>
                 Inference client
-                <button class="info-tip" tabindex="0" aria-label="Inference client info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">ChatClient uses native FFI for fast local inference. ResponsesClient uses HTTP (useful for debugging).</span></button>
+                <button class="info-tip" tabindex="0" aria-label="Inference client info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">How the AI model runs locally. ChatClient uses native FFI for maximum speed. ResponsesClient uses HTTP, useful for debugging network issues.</span></button>
               </label>
               <select class="settings-select" id="settingsInferenceClient" data-requires="server" onchange="updateSettingsConfig('inferenceClient', this.value)">
                 <option value="auto">Auto (ChatClient FFI)</option>
@@ -2312,7 +2337,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
             <div class="settings-row">
               <label>
                 Parallel tool calls
-                <button class="info-tip" tabindex="0" aria-label="Parallel tool calls info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Auto disables parallel calls for NPU or after failures. Force on/off to override.</span></button>
+                <button class="info-tip" tabindex="0" aria-label="Parallel tool calls info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Let the AI run multiple tools simultaneously. Auto disables this for NPU devices or after failures. Override if you know your hardware handles it.</span></button>
               </label>
               <select class="settings-select" id="settingsParallelToolCalls" data-requires="server" onchange="updateSettingsConfig('parallelToolCalls', this.value)">
                 <option value="auto">Auto</option>
@@ -2322,23 +2347,21 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
               <span class="save-dot"></span>
             </div>
             <div class="settings-row">
-              <label>Show reasoning traces</label>
+              <label>
+                Show reasoning traces
+                <button class="info-tip" tabindex="0" aria-label="Reasoning traces info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Display the AI's internal chain-of-thought reasoning in chat messages. Useful for understanding how the model arrives at answers.</span></button>
+              </label>
               <button class="stg-toggle" id="settingsShowReasoning" data-key="showReasoningTraces" data-store="server" role="switch" aria-checked="false" aria-label="Show reasoning traces"></button>
               <span class="save-dot"></span>
             </div>
           </div>
-        </div>
-
-        <!-- ═══ VOICE ═══ -->
-        <div class="settings-panel" id="stgPanel-voice" role="tabpanel" aria-labelledby="stgTab-voice">
-          <div class="settings-panel-title"><i data-lucide="mic" class="icon-sm"></i> Voice &amp; Speech</div>
 
           <div class="settings-group" data-search-terms="speech engine whisper microphone voice recognition fallback">
             <div class="settings-group-title">Speech Recognition</div>
             <div class="settings-row">
               <label>
                 Speech engine
-                <button class="info-tip" tabindex="0" aria-label="Speech engine info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">"Auto" tries Edge Web Speech first, then falls back to Foundry Whisper on-device.</span></button>
+                <button class="info-tip" tabindex="0" aria-label="Speech engine info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Primary voice-to-text engine. "Auto" tries Edge Web Speech (cloud) first for speed, then falls back to Foundry Whisper running locally on your device.</span></button>
               </label>
               <select class="settings-select" id="settingsSpeechEngine" data-requires="server" onchange="updateSpeechSetting('engine', this.value)">
                 <option value="auto">Auto (best available)</option>
@@ -2350,7 +2373,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
             <div class="settings-row">
               <label>
                 Fallback engine
-                <button class="info-tip" tabindex="0" aria-label="Fallback info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Used when primary engine fails or is unavailable.</span></button>
+                <button class="info-tip" tabindex="0" aria-label="Fallback info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Backup engine used when the primary fails or times out. "No fallback" means voice input stops working if the primary engine is unavailable.</span></button>
               </label>
               <select class="settings-select" id="settingsSpeechFallback" data-requires="server" onchange="updateSpeechSetting('fallback', this.value)">
                 <option value="whisper">Foundry Whisper (on-device)</option>
@@ -2422,11 +2445,17 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
           <div class="settings-group" data-search-terms="suggestion nudge proactive thematic overdue frequency ai auto icon">
             <div class="settings-group-title">AI Suggestions</div>
             <div class="settings-row">
-              <label><i data-lucide="message-circle" class="icon-sm"></i> Proactive suggestions</label>
+              <label>
+                <i data-lucide="message-circle" class="icon-sm"></i> Proactive suggestions
+                <button class="info-tip" tabindex="0" aria-label="Proactive suggestions info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">The AI periodically suggests helpful actions based on your tasks — like breaking down large items, suggesting priorities, or recommending next steps.</span></button>
+              </label>
               <button class="stg-toggle" id="settingsNudgeEnabled" role="switch" aria-checked="true" aria-label="Proactive suggestions" onclick="toggleNudgeSetting('enabled')"></button>
             </div>
             <div class="settings-row">
-              <label>Suggestion frequency</label>
+              <label>
+                Suggestion frequency
+                <button class="info-tip" tabindex="0" aria-label="Frequency info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">How often the AI checks for opportunities to suggest actions. Gentle = every 5 min, Normal = every 3 min, Eager = every 1 min.</span></button>
+              </label>
               <select class="settings-select" id="settingsNudgeFreq" onchange="updateNudgeFrequency(this.value)">
                 <option value="gentle">Gentle (5 min)</option>
                 <option value="normal" selected>Normal (3 min)</option>
@@ -2434,11 +2463,17 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
               </select>
             </div>
             <div class="settings-row">
-              <label><i data-lucide="layers" class="icon-sm"></i> Thematic follow-ups</label>
+              <label>
+                <i data-lucide="layers" class="icon-sm"></i> Thematic follow-ups
+                <button class="info-tip" tabindex="0" aria-label="Thematic follow-ups info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">After you complete a task, the AI suggests related follow-up tasks based on the same topic. E.g., finishing "write API docs" might suggest "add code examples" or "update changelog."</span></button>
+              </label>
               <button class="stg-toggle" id="settingsThematicEnabled" role="switch" aria-checked="true" aria-label="Thematic follow-ups" onclick="toggleNudgeSetting('thematic')"></button>
             </div>
             <div class="settings-row">
-              <label><i data-lucide="bell-ring" class="icon-sm"></i> Overdue reminder cards</label>
+              <label>
+                <i data-lucide="bell-ring" class="icon-sm"></i> Overdue reminder cards
+                <button class="info-tip" tabindex="0" aria-label="Overdue reminders info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Show prominent cards in the chat feed when a recurring reminder is past due. Helps you catch things like "Touch grass" or "Stand up" that you might have missed.</span></button>
+              </label>
               <button class="stg-toggle" id="settingsOverdueEnabled" role="switch" aria-checked="true" aria-label="Overdue reminder cards" onclick="toggleNudgeSetting('overdue')"></button>
             </div>
           </div>
@@ -7172,6 +7207,7 @@ function openSettings() {
     if (saved) switchSettingsTab(saved, false);
     loadSettingsConfig();
     syncThemeSwatches();
+    startSettingsClockPreview();
     trapFocus(overlay.querySelector('.settings-modal'));
 }
 
@@ -7179,6 +7215,7 @@ function closeSettings() {
     const overlay = document.getElementById('settingsModalOverlay');
     releaseFocus(overlay.querySelector('.settings-modal'));
     overlay.classList.remove('open');
+    stopSettingsClockPreview();
     // Clear search
     const search = document.getElementById('settingsSearch');
     if (search) { search.value = ''; filterSettings(''); }
@@ -7259,6 +7296,28 @@ function syncThemeSwatches() {
     document.querySelectorAll('.theme-swatch-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.theme === current);
     });
+    document.querySelectorAll('.theme-swatch-option').forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.theme === current);
+    });
+}
+
+// ── Live clock preview in settings ──────────────────────────────
+
+let _settingsClockInterval = null;
+function startSettingsClockPreview() {
+    updateSettingsClockPreview();
+    _settingsClockInterval = setInterval(updateSettingsClockPreview, 1000);
+}
+function stopSettingsClockPreview() {
+    if (_settingsClockInterval) { clearInterval(_settingsClockInterval); _settingsClockInterval = null; }
+}
+function updateSettingsClockPreview() {
+    const el = document.getElementById('settingsClockPreview');
+    if (!el) return;
+    const now = new Date();
+    el.textContent = typeof _fmtClock === 'function' && typeof _getActiveFmt === 'function'
+        ? _fmtClock(_getActiveFmt(), now, _clockTimezone)
+        : now.toLocaleTimeString();
 }
 
 // ── Unified toggle handler ──────────────────────────────────────
@@ -7555,6 +7614,10 @@ async function savePortSetting() {
 
 async function updateSettingsConfig(key, value) {
     if (!serverReachable) { addChat('error','wifi-off','Server offline — cannot save settings.'); return false; }
+    // Find the triggering control's row for save-dot animation
+    const activeEl = document.activeElement;
+    const row = activeEl?.closest('.settings-row');
+    if (row) { row.classList.remove('saved', 'save-error'); row.classList.add('saving'); }
     try {
         const res = await fetch('/api/config', {
             method: 'POST',
@@ -7563,13 +7626,20 @@ async function updateSettingsConfig(key, value) {
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
+            if (row) { row.classList.remove('saving'); row.classList.add('save-error'); }
             showSettingsStatus(err.detail || 'Save failed', true);
             return false;
         }
         const updated = await res.json();
         settingsConfig = updated;
+        if (row) {
+            row.classList.remove('saving');
+            row.classList.add('saved');
+            setTimeout(() => row.classList.remove('saved'), 2000);
+        }
         return true;
     } catch {
+        if (row) { row.classList.remove('saving'); row.classList.add('save-error'); }
         showSettingsStatus('Save failed — server unreachable', true);
         return false;
     }
@@ -7776,20 +7846,25 @@ updateHardwareChips();
 function populateHardwareInfoCard(hw) {
     const el = document.getElementById('settingsHardwareInfo');
     if (!el || !hw) return;
-    const gpuText = hw.gpu ? `${hw.gpu.name} · ${hw.gpu.vramGb} GB VRAM` : 'Not detected';
+    // Handle both /api/hardware shape (has hw.ram) and /api/config.hardware shape (ram nested in cpu)
+    const gpuText = hw.gpu ? `${hw.gpu.name}${hw.gpu.vramGb ? ' · ' + hw.gpu.vramGb + ' GB VRAM' : ''}` : 'Not detected';
     const npuText = hw.npu ? hw.npu.name : 'Not detected';
-    const cpuText = hw.cpu ? `${esc(hw.cpu.model)} · ${hw.cpu.cores} cores` : 'Detecting…';
-    const ramText = hw.ram ? `${hw.ram.totalGb} GB` : 'Detecting…';
+    const cpuText = hw.cpu ? `${esc(hw.cpu.model || 'Unknown CPU')} · ${hw.cpu.cores} cores` : 'Detecting…';
+    const ramText = hw.ram ? `${hw.ram.totalGb} GB` : (hw.cpu?.ramGb ? `${hw.cpu.ramGb} GB` : 'Detecting…');
     el.innerHTML = `
         <span class="hw-label"><i data-lucide="cpu" style="width:11px;height:11px"></i> CPU</span>
         <span class="hw-value-text">${cpuText}</span>
         <span class="hw-label"><i data-lucide="memory-stick" style="width:11px;height:11px"></i> RAM</span>
-        <span class="hw-value-text">${ramText}</span>
+        <span class="${ramText === 'Detecting…' ? 'hw-na' : 'hw-value-text'}">${ramText}</span>
         <span class="hw-label"><i data-lucide="monitor" style="width:11px;height:11px"></i> GPU</span>
         <span class="${hw.gpu ? 'hw-value-text' : 'hw-na'}">${esc(gpuText)}</span>
         <span class="hw-label"><i data-lucide="zap" style="width:11px;height:11px"></i> NPU</span>
         <span class="${hw.npu ? 'hw-value-text' : 'hw-na'}">${esc(npuText)}</span>`;
     lucide.createIcons({ nodes: [el] });
+    // Also try fetching richer data from /api/hardware for more detail
+    fetch('/api/hardware', { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? r.json() : null).then(fullHw => {
+        if (fullHw) populateHardwareInfoCard(fullHw);
+    }).catch(() => {});
 }
 
 // Legacy toggle function wrappers (referenced by old code paths)
