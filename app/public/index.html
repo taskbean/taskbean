@@ -171,6 +171,30 @@ header {
   &.show { display: flex; align-items: center; gap: 6px; }
 }
 
+/* Update-available state on the Install nav button — uses accent color + a
+   small pulsing dot to draw the eye without being intrusive. Respects
+   prefers-reduced-motion (no pulse when reduced motion is on). */
+.nav-item.update-available {
+  color: var(--accent);
+  background: var(--accent-soft);
+  position: relative;
+}
+.nav-item.update-available::after {
+  content: ''; position: absolute; top: 6px; right: 8px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent);
+  animation: update-dot-pulse 2s ease-out infinite;
+}
+@keyframes update-dot-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 60%, transparent); }
+  70%  { box-shadow: 0 0 0 6px color-mix(in oklch, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-item.update-available::after { animation: none; }
+}
+
 /* Offline startup overlay — shown when PWA launches without a reachable server */
 .offline-overlay { display: none; position: fixed; inset: 0; z-index: 2000; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; gap: 0; text-align: center; padding: 24px; transition: opacity .3s; overscroll-behavior: contain; }
 .offline-overlay.show { display: flex; }
@@ -385,6 +409,18 @@ header {
   padding: 8px 12px 4px; display: flex; align-items: center; gap: 4px;
 }
 
+/* Read-only value in a settings row (version info etc.). Tabular-nums aligns
+   numeric segments when rows stack; user-select lets people copy the SHA. */
+.settings-value {
+  font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  user-select: text;
+  text-align: right;
+  max-width: 60%;
+  overflow-wrap: anywhere;
+}
+
 /* Settings row (inside groups) */
 .settings-row {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -395,16 +431,6 @@ header {
 .settings-row + .settings-row { border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
 .settings-row label { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 12px; flex: 1; min-width: 0; }
 .settings-row label i { color: var(--muted); flex-shrink: 0; }
-
-/* Read-only value shown on the right side of a settings row (About panel etc). */
-.settings-value {
-  font-size: 12px; color: var(--text);
-  font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  text-align: right; user-select: text;
-  overflow-wrap: anywhere; max-width: 60%;
-}
-.settings-value.muted { color: var(--muted); }
 
 /* Save status dot per row */
 .settings-row .save-dot {
@@ -2191,13 +2217,13 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
     </button>
   </div>
   <div class="nav-rail-bottom">
+    <button class="nav-item" id="installBtn" onclick="installBtnClick()" hidden title="Install app">
+      <i data-lucide="download"></i>
+      <span class="nav-label">Install</span>
+    </button>
     <button class="nav-item" onclick="openSettings()" title="Settings">
       <i data-lucide="settings"></i>
       <span class="nav-label">Settings</span>
-    </button>
-    <button class="nav-item" id="installBtn" onclick="installApp()" hidden title="Install app">
-      <i data-lucide="download"></i>
-      <span class="nav-label">Install</span>
     </button>
   </div>
 </nav>
@@ -2879,9 +2905,9 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
             <div class="settings-row">
               <label for="settingsPort">
                 Port
-                <button class="info-tip" tabindex="0" aria-label="Port info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Default: 2326 (B-E-A-N). Override with env var: taskbean_PORT=9999</span></button>
+                <button class="info-tip" tabindex="0" aria-label="Port info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Default: 8275 (T-A-S-K). Override with env var: taskbean_PORT=9999</span></button>
               </label>
-              <input type="number" class="settings-select" id="settingsPort" min="1024" max="65535" style="width:90px" value="2326" data-requires="server" onblur="savePortSetting()" onkeydown="if(event.key==='Enter'){savePortSetting();event.preventDefault()}">
+              <input type="number" class="settings-select" id="settingsPort" min="1024" max="65535" style="width:90px" value="8275" data-requires="server" onblur="savePortSetting()" onkeydown="if(event.key==='Enter'){savePortSetting();event.preventDefault()}">
               <span class="save-dot"></span>
             </div>
             <div class="settings-row">
@@ -2904,27 +2930,27 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
             </div>
           </div>
 
-          <div class="settings-group" data-search-terms="about version build commit cache service worker server uptime">
+          <div class="settings-group" data-search-terms="about version build commit sha release">
             <div class="settings-group-title">About</div>
             <div class="settings-row">
-              <label><i data-lucide="package" class="icon-sm"></i> App</label>
-              <span class="settings-value" id="aboutAppVersion" aria-live="polite">—</span>
+              <label>App</label>
+              <span class="settings-value" id="aboutApp" aria-live="polite">—</span>
             </div>
             <div class="settings-row">
-              <label><i data-lucide="database" class="icon-sm"></i> PWA cache</label>
-              <span class="settings-value" id="aboutPwaCache" aria-live="polite">—</span>
+              <label>PWA cache</label>
+              <span class="settings-value" id="aboutCache" aria-live="polite">—</span>
             </div>
             <div class="settings-row">
-              <label><i data-lucide="terminal" class="icon-sm"></i> CLI</label>
-              <span class="settings-value" id="aboutCliVersion" aria-live="polite">—</span>
+              <label>CLI</label>
+              <span class="settings-value" id="aboutCli" aria-live="polite">—</span>
             </div>
             <div class="settings-row">
-              <label><i data-lucide="git-commit" class="icon-sm"></i> Commit</label>
+              <label>Commit</label>
               <span class="settings-value" id="aboutCommit" aria-live="polite">—</span>
             </div>
             <div class="settings-row">
-              <label><i data-lucide="clock" class="icon-sm"></i> Server started</label>
-              <span class="settings-value" id="aboutServerStarted" aria-live="polite">—</span>
+              <label>Server started</label>
+              <time class="settings-value" id="aboutStartedAt" datetime="">—</time>
             </div>
           </div>
         </div>
@@ -2938,7 +2964,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       </div>
       <a class="coffee-btn" href="https://buymeacoffee.com/nicholasdbrady" target="_blank" rel="noopener"><span class="coffee-emoji">☕</span> Buy Nick a Coffee</a>
       <div class="settings-footer-right">
-        <span style="font-size:10px;color:var(--muted)" id="settingsFooterVersion" aria-live="polite">taskbean&nbsp;v0.5</span>
+        <span id="settingsFooterVersion" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums">taskbean</span>
       </div>
     </div>
   </div>
@@ -3615,10 +3641,28 @@ function isStandalone() {
 
 function syncInstallButton() {
     const btn = document.getElementById('installBtn');
+    if (!btn) return;
+    // Highest-priority state: an update is pending. Show this regardless of
+    // install state — even an installed PWA needs a way to apply updates.
+    if (_updatePending) {
+        btn.hidden = false;
+        btn.disabled = false;
+        btn.classList.remove('muted-btn');
+        btn.classList.add('update-available');
+        const vSuffix = _latestKnownUpdateVersion ? ' v' + _latestKnownUpdateVersion : '';
+        btn.title = 'Update available' + vSuffix + ' — click to reload';
+        btn.setAttribute('aria-label', 'Update available' + vSuffix + '. Click to reload and apply.');
+        btn.innerHTML = '<i data-lucide="refresh-cw" class="icon-sm"></i> <span class="nav-label">Update available</span>';
+        lucide.createIcons();
+        return;
+    }
+    btn.classList.remove('update-available');
+    btn.removeAttribute('aria-label');
     if (isStandalone()) {
         btn.hidden = false;
         btn.disabled = true;
         btn.classList.add('muted-btn');
+        btn.title = 'App installed';
         btn.innerHTML = '<i data-lucide="check" class="icon-sm"></i> <span class="nav-label">Installed</span>';
         lucide.createIcons();
         return;
@@ -3626,8 +3670,15 @@ function syncInstallButton() {
     btn.disabled = !deferredInstallPrompt;
     btn.hidden = !deferredInstallPrompt;
     btn.classList.remove('muted-btn');
+    btn.title = 'Install app';
     btn.innerHTML = '<i data-lucide="download" class="icon-sm"></i> <span class="nav-label">Install</span>';
     lucide.createIcons();
+}
+
+// Routes the Install nav button click depending on its current state.
+function installBtnClick() {
+    if (_updatePending) { applyPendingUpdate(); return; }
+    installApp();
 }
 
 async function installApp() {
@@ -3921,6 +3972,7 @@ async function undoDelete(cardId, todoJson) {
 
 function addChat(type, icon, html) {
     const feed = document.getElementById('chatFeed');
+    if (!feed) { console.warn('addChat: chatFeed not ready'); return; }
     removeTypingIndicator(); // clear any typing indicator before adding a real message
     const div = document.createElement('div');
     div.className = `chat-msg ${type}`;
@@ -3962,6 +4014,144 @@ function copyMessageText(btn) {
 }
 
 function clearChat() { newChat(); }
+
+// ─── Update availability ────────────────────────────────────────────────────
+// Triggered when (a) a new service worker has installed and is waiting, or
+// (b) /api/version reports a different app version or newer started_at than
+// the one we captured on load.
+//
+// UX: instead of a separate toast, we transform the existing Install nav
+// button into "Update available" (with a subtle pulsing dot). The button
+// lives at the bottom of the nav rail above Settings — so it's always
+// reachable but never interrupts. A11y label spells out the action and the
+// pending version. Respects prefers-reduced-motion (no pulse animation).
+let _updatePending = false;
+let _latestKnownUpdateVersion = null;
+window._startupVersion = null;
+
+function showUpdateAvailableToast(source, version) {
+    if (version) _latestKnownUpdateVersion = version;
+    if (_updatePending) return;
+    _updatePending = true;
+    syncInstallButton();
+}
+
+function applyPendingUpdate() {
+    try {
+        if (swRegistration?.waiting) {
+            // SW path — activating the waiting worker fires `controllerchange`
+            // which triggers location.reload() via the listener in initApp.
+            swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            return;
+        }
+    } catch {}
+    // Backend-only change (no waiting SW) — reload to pick up the new bundle.
+    location.reload();
+}
+
+async function checkBackendVersion() {
+    let data;
+    try {
+        const res = await fetch('/api/version', { cache: 'no-store' });
+        if (!res.ok) return;
+        data = await res.json();
+    } catch {
+        return; // network errors (offline etc.) are non-fatal
+    }
+    if (!window._startupVersion) {
+        window._startupVersion = data;
+        populateAboutPanel();
+        return;
+    }
+    const prev = window._startupVersion;
+    const appChanged = data.app && prev.app && data.app !== prev.app;
+    const restarted = data.started_at && prev.started_at && data.started_at > prev.started_at;
+    if (appChanged || restarted) {
+        window._startupVersion = data;
+        populateAboutPanel();
+        showUpdateAvailableToast('backend', data.app);
+    }
+}
+
+// Ask the active service worker for its CACHE_NAME. Returns the cache string
+// (e.g. "taskbean-v20") or null if no controller / timeout / not supported.
+async function getServiceWorkerCacheName() {
+    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return null;
+    return new Promise((resolve) => {
+        const channel = new MessageChannel();
+        const timer = setTimeout(() => resolve(null), 1500);
+        channel.port1.onmessage = (event) => {
+            clearTimeout(timer);
+            resolve(event.data?.cache || null);
+        };
+        try {
+            navigator.serviceWorker.controller.postMessage({ type: 'GET_VERSION' }, [channel.port2]);
+        } catch {
+            clearTimeout(timer);
+            resolve(null);
+        }
+    });
+}
+
+// Populates the About group in Settings → System and the footer version label.
+// Safe to call repeatedly; values overwrite previous text. Non-blocking — the
+// SW cache query is fired-and-forget.
+async function populateAboutPanel() {
+    const v = window._startupVersion || {};
+    const app = v.app || null;
+    const cli = v.cli || null;
+    const sha = v.git_sha ? String(v.git_sha).slice(0, 7) : null;
+
+    const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    // Unicode em-dash for unknown values, matches typography guideline (no ascii ...)
+    setText('aboutApp', app ? 'v' + app : '—');
+    setText('aboutCli', cli ? 'v' + cli : 'ΓÇö');
+    setText('aboutCommit', sha || '—');
+
+    const footer = document.getElementById('settingsFooterVersion');
+    if (footer) {
+        // Non-breaking space between brand and version per typography guideline.
+        footer.innerHTML = app ? 'taskbean&nbsp;v' + esc(app) : 'taskbean';
+    }
+
+    const startedEl = document.getElementById('aboutStartedAt');
+    if (startedEl) {
+        if (v.started_at) {
+            // started_at is an ISO8601 string from both backends (server.js
+            // uses toISOString(); Python uses datetime.isoformat()). Do NOT
+            // Number()+*1000 it — that parses as NaN and renders "—".
+            const d = new Date(v.started_at);
+            if (!isNaN(d.getTime())) {
+                startedEl.setAttribute('datetime', d.toISOString());
+                try {
+                    startedEl.textContent = new Intl.DateTimeFormat(undefined, {
+                        dateStyle: 'medium', timeStyle: 'short'
+                    }).format(d);
+                } catch {
+                    startedEl.textContent = d.toLocaleString();
+                }
+                startedEl.title = d.toISOString();
+            } else {
+                startedEl.textContent = '—';
+            }
+        } else {
+            startedEl.textContent = '—';
+        }
+    }
+
+    // PWA cache version (async, from service worker). Render "Loading…" (with
+    // ellipsis char per typography guideline) until it resolves.
+    const cacheEl = document.getElementById('aboutCache');
+    if (cacheEl) {
+        cacheEl.textContent = 'Loading…';
+        try {
+            const cache = await getServiceWorkerCacheName();
+            cacheEl.textContent = cache || 'n/a';
+        } catch {
+            cacheEl.textContent = 'n/a';
+        }
+    }
+}
 function newChat() {
     document.getElementById('chatFeed').innerHTML = '';
     conversationHistory = [];
@@ -4434,8 +4624,8 @@ async function loadUsageStats() {
             // Tag the error so the catch block can distinguish HTTP failures
             // (server reachable, returned 5xx/4xx) from true network failures
             // (fetch itself threw — agent not running). Showing the generic
-            // ":2326 not running" hint on HTTP 500 is misleading, since the
-            // PWA itself is served by the agent on :2326.
+            // ":8275 not running" hint on HTTP 500 is misleading, since the
+            // PWA itself is served by the agent on :8275.
             const e = new Error(`HTTP ${res.status}`);
             e.httpStatus = res.status;
             throw e;
@@ -4583,7 +4773,7 @@ async function loadUsageStats() {
         console.error('loadUsageStats failed', err);
         // Distinguish HTTP error (server reachable, replied with an error)
         // from network failure (fetch threw — agent genuinely unreachable).
-        // The old "Check that it's running on :2326" hint was nonsensical
+        // The old "Check that it's running on :8275" hint was nonsensical
         // when the PWA itself was just served by that same agent.
         if (err && typeof err.httpStatus === 'number') {
             container.innerHTML = `<div class="usage-panel-error">
@@ -4594,7 +4784,7 @@ async function loadUsageStats() {
         } else {
             container.innerHTML = `<div class="usage-panel-error">
                 <i data-lucide="wifi-off" class="icon-sm" style="vertical-align:middle;margin-right:4px"></i>
-                Couldn't reach the taskbean agent. Check that it's running on :2326.
+                Couldn't reach the taskbean agent. Check that it's running on :8275.
                 <span class="err-hint">${esc(err.message || 'network error')}</span>
             </div>`;
         }
@@ -8162,83 +8352,6 @@ function openSettings() {
     trapFocus(overlay.querySelector('.settings-modal'));
 }
 
-// Ask the active service worker for its CACHE_NAME. Resolves to `null`
-// if there is no controller or the SW does not respond within 1s.
-function getServiceWorkerCacheName() {
-    return new Promise((resolve) => {
-        const sw = navigator.serviceWorker && navigator.serviceWorker.controller;
-        if (!sw) { resolve(null); return; }
-        const channel = new MessageChannel();
-        const timer = setTimeout(() => resolve(null), 1000);
-        channel.port1.onmessage = (e) => {
-            clearTimeout(timer);
-            resolve((e.data && e.data.cache) || null);
-        };
-        try {
-            sw.postMessage({ type: 'GET_VERSION' }, [channel.port2]);
-        } catch {
-            clearTimeout(timer);
-            resolve(null);
-        }
-    });
-}
-
-// Populate the About panel in Settings → System, plus the footer version label.
-// Pulls from /api/version for app/cli/commit/started_at and queries the active
-// service worker for its cache name. Safe to call while offline — missing
-// values fall back to an em-dash.
-async function populateAboutPanel() {
-    const dash = '—';
-    const set = (id, value, opts) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.textContent = value || dash;
-        if (opts && opts.title) el.title = opts.title;
-    };
-
-    let version = null;
-    try {
-        const r = await fetch('/api/version', { cache: 'no-store' });
-        if (r.ok) version = await r.json();
-    } catch { /* offline — render dashes */ }
-
-    const app = version && version.app ? version.app : null;
-    const cli = version && version.cli ? version.cli : null;
-    const sha = version && version.git_sha ? version.git_sha : null;
-    const started = version && version.started_at ? version.started_at : null;
-
-    set('aboutAppVersion', app ? `v${app}` : dash);
-    set('aboutCliVersion', cli ? `v${cli}` : dash);
-    set('aboutCommit', sha ? sha.slice(0, 7) : dash, { title: sha || '' });
-
-    if (started) {
-        const d = new Date(started);
-        const row = document.getElementById('aboutServerStarted');
-        if (row && !Number.isNaN(d.getTime())) {
-            const fmt = new Intl.DateTimeFormat(undefined, {
-                dateStyle: 'medium', timeStyle: 'short'
-            }).format(d);
-            row.innerHTML = '';
-            const t = document.createElement('time');
-            t.setAttribute('datetime', d.toISOString());
-            t.textContent = fmt;
-            row.appendChild(t);
-        } else {
-            set('aboutServerStarted', dash);
-        }
-    } else {
-        set('aboutServerStarted', dash);
-    }
-
-    const cache = await getServiceWorkerCacheName();
-    set('aboutPwaCache', cache || dash);
-
-    const footer = document.getElementById('settingsFooterVersion');
-    if (footer) {
-        footer.textContent = app ? `taskbean\u00A0v${app}` : 'taskbean';
-    }
-}
-
 function closeSettings() {
     const overlay = document.getElementById('settingsModalOverlay');
     releaseFocus(overlay.querySelector('.settings-modal'));
@@ -9125,6 +9238,25 @@ async function initApp() {
             swRegistration = await navigator.serviceWorker.register('/sw.js');
             // Check for SW updates on load — ensures new code is picked up after server restart
             swRegistration.update();
+
+            // Defensive: if a new SW is already waiting from a prior session
+            // (e.g. the user closed the tab before the update toast fired),
+            // activate it now. `controllerchange` below handles the reload.
+            if (swRegistration.waiting && navigator.serviceWorker.controller) {
+                swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+
+            // Prompt the user when a new SW has installed and is waiting.
+            swRegistration.addEventListener('updatefound', () => {
+                const newWorker = swRegistration.installing;
+                if (!newWorker) return;
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        // There's an old SW controlling — this is an update, not first install.
+                        showUpdateAvailableToast('sw');
+                    }
+                });
+            });
         } catch (err) {
             console.error('Service worker registration failed:', err);
         }
@@ -9136,6 +9268,29 @@ async function initApp() {
             location.reload();
         });
     }
+
+    // Throttled update checks: on tab focus / visibility change, ask the SW
+    // to check for updates AND poll /api/version to detect backend restarts
+    // from a `git pull && launch.ps1` cycle. Both share a 60s throttle.
+    let _lastUpdateCheck = 0;
+    const _updateCheckInterval = 60_000;
+    async function _maybeCheckForUpdates() {
+        const now = Date.now();
+        if (now - _lastUpdateCheck < _updateCheckInterval) return;
+        _lastUpdateCheck = now;
+        try { await swRegistration?.update(); } catch {}
+        try { await checkBackendVersion(); } catch {}
+    }
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') _maybeCheckForUpdates();
+    });
+    window.addEventListener('focus', _maybeCheckForUpdates);
+
+    // Initial backend version fetch (captures startup fingerprint). Stamp
+    // _lastUpdateCheck so the 60s focus-throttle is measured from page load,
+    // not from epoch 0.
+    _lastUpdateCheck = Date.now();
+    checkBackendVersion().catch(() => {});
 
     // Handle launches via web+taskbean:// protocol or Launch Handler API
     if ('launchQueue' in window) {
