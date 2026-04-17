@@ -3116,7 +3116,11 @@ let isProcessing = false;
 // ── ConnectionManager: centralized server health & reconnection ─────────────
 const ConnectionManager = (() => {
     let _reachable = true;
-    let _lastSuccessAt = 0;
+    // Initialize to page-load time so the GRACE_PERIOD below is meaningful on
+    // the first call. With `0`, `Date.now() - _lastSuccessAt > GRACE_PERIOD`
+    // is always true, so a single transient /api/health failure during cold
+    // start would immediately flip the UI to offline.
+    let _lastSuccessAt = Date.now();
     let _pollTimer = null;
     let _pollingStopped = false;
     let _backoff = 3000;        // current backoff (ms)
