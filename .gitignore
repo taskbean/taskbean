@@ -46,3 +46,6 @@ test-results/
 
 # Package lock (keep package-lock.json, ignore pip)
 *.pyc
+
+# Stray shell-output files that have been accidentally committed before
+datetime
