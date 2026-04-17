@@ -1,0 +1,7 @@
+# Root manifest for taskbean.taskbean
+# https://github.com/microsoft/winget-cli/blob/master/doc/ManifestSpecv1.6.0.md
+PackageIdentifier: taskbean.taskbean
+PackageVersion: <VERSION>
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

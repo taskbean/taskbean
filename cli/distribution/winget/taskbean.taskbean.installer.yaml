@@ -1,0 +1,19 @@
+# Installer manifest for taskbean.taskbean
+# Values wrapped in <ANGLE_BRACKETS> are substituted by the release workflow.
+PackageIdentifier: taskbean.taskbean
+PackageVersion: <VERSION>
+InstallerType: portable
+Commands:
+  - bean
+  - taskbean
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/taskbean/taskbean/releases/download/v<VERSION>/bean-windows-x64.exe
+    InstallerSha256: <SHA256>
+    InstallerType: portable
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: bean-windows-x64.exe
+        PortableCommandAlias: bean
+ManifestType: installer
+ManifestVersion: 1.6.0
