@@ -4,6 +4,8 @@ process.removeAllListeners('warning');
 process.on('warning', (w) => { if (w.name !== 'ExperimentalWarning') console.warn(w); });
 
 import { program } from 'commander';
+import { VERSION } from '../src/version.js';
+import { checkForUpdates, maybePrintUpgradeNotice } from '../src/lib/update-notifier.js';
 import { addCommand } from '../src/commands/add.js';
 import { doneCommand } from '../src/commands/done.js';
 import { listCommand } from '../src/commands/list.js';
@@ -13,11 +15,17 @@ import { installCommand } from '../src/commands/install.js';
 import { projectsCommand } from '../src/commands/projects.js';
 import { serveCommand } from '../src/commands/serve.js';
 import { packageCommand } from '../src/commands/package.js';
+import { upgradeCommand } from '../src/commands/upgrade.js';
+
+// Fire-and-forget update check. Internally throttled to once per 24h, silent
+// in CI / non-TTY / when TASKBEAN_NO_UPGRADE_NOTICE=1.
+checkForUpdates();
+process.on('exit', maybePrintUpgradeNotice);
 
 program
   .name('bean')
   .description('🫘 Task management CLI for AI coding agents')
-  .version('0.5.0');
+  .version(VERSION);
 
 // === Agent Contract (3 commands) ===
 
@@ -109,5 +117,15 @@ program
   .description('Start the taskbean PWA server')
   .option('--port <port>', 'Port to listen on', '3000')
   .action(serveCommand);
+
+program
+  .command('upgrade')
+  .description('Upgrade taskbean to the latest release')
+  .option('--check', 'Report status only, do not install')
+  .option('-y, --yes', 'Skip confirmation prompt')
+  .option('--dry-run', 'Print the planned action and exit without changes')
+  .option('--json', 'Output as JSON')
+  .option('--force', 'Re-download even if already up to date')
+  .action(upgradeCommand);
 
 program.parse();
