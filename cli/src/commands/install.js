@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { homedir } from 'os';
+import { homedir, platform } from 'os';
+import { delimiter } from 'path';
 
 // Absolute path (forward-slash form) to ~/.taskbean. TOML accepts forward
 // slashes on Windows so we avoid backslash escaping.
@@ -201,33 +202,39 @@ const SKILL_MD = [
   '',
 ].join('\n');
 
-export function installCommand(opts) {
-  const isGlobal = opts.global;
-  const force = opts.force || false;
-  const agent = opts.agent;
-  const base = isGlobal ? homedir() : process.cwd();
+// Scan process.env.PATH for an executable matching `name` (with Windows
+// .exe/.cmd/.bat suffix fallback). Returns true if any PATH entry contains
+// a file that exists with that name.
+export function isOnPath(name, env = process.env) {
+  const path = env.PATH || env.Path || '';
+  if (!path) return false;
+  const entries = path.split(delimiter).filter(Boolean);
+  const isWin = platform() === 'win32';
+  // On Windows, include '' so unsuffixed shims (e.g. npm bash shims) resolve,
+  // and include .PS1 — a common extension for PowerShell CLIs on PATHEXT.
+  const exts = isWin
+    ? ['', ...((env.PATHEXT || '.COM;.EXE;.BAT;.CMD;.PS1').split(';').map((e) => e.toLowerCase()))]
+    : [''];
+  for (const entry of entries) {
+    for (const ext of exts) {
+      const candidate = join(entry, name + ext);
+      try { if (existsSync(candidate)) return true; } catch { /* ignore */ }
+    }
+  }
+  return false;
+}
 
-  // Determine which skill directories to install into.
-  //
-  // Default (no --agent flag): .agents/skills/ only — the cross-client interop
-  // location from the open Agent Skills spec. Copilot CLI, OpenCode, and
-  // OpenAI Codex all scan this path.
-  //
-  // --agent claude: adds .claude/skills/ (Claude Code is the only agent that
-  // does NOT read .agents/skills/).
-  //
-  // --agent copilot: adds .github/skills/ (legacy Copilot discovery path) in
-  // addition to .agents/skills/.
-  //
-  // --agent codex / --agent opencode: same as default — .agents/skills/. Per
-  // Codex docs (developers.openai.com/codex/skills), Codex reads only from
-  // .agents/skills (REPO/USER), /etc/codex/skills (ADMIN), and SYSTEM bundled.
-  // It does NOT scan ~/.codex/skills for user skills (that path is reserved
-  // for OpenAI-bundled .system skills).
-  //
-  // --agent all: union of everything above.
+// Agent binary names to probe for `--agent auto`.
+const AUTO_AGENTS = ['copilot', 'claude', 'codex', 'opencode'];
+
+export function detectAgents(env = process.env) {
+  return AUTO_AGENTS.filter((name) => isOnPath(name, env));
+}
+
+// Map an --agent value to the set of skill directories we should write into.
+// Keep in sync with the block comment in installCommand() below.
+function skillTargetsFor(agent, base) {
   const targets = [];
-  // Everyone except --agent claude benefits from .agents/skills/.
   if (!agent || agent === 'copilot' || agent === 'codex' || agent === 'opencode' || agent === 'all') {
     targets.push(join(base, '.agents', 'skills', 'taskbean'));
   }
@@ -237,7 +244,70 @@ export function installCommand(opts) {
   if (agent === 'claude' || agent === 'all') {
     targets.push(join(base, '.claude', 'skills', 'taskbean'));
   }
-  const uniqueTargets = [...new Set(targets)];
+  return [...new Set(targets)];
+}
+
+function installSkillForAgent(agent, base, force) {
+  const targets = skillTargetsFor(agent, base);
+  const results = [];
+  for (const targetDir of targets) {
+    const targetFile = join(targetDir, 'SKILL.md');
+    const already = existsSync(targetFile);
+    if (already && !force) {
+      results.push({ status: 'already_installed', path: targetFile });
+      continue;
+    }
+    mkdirSync(targetDir, { recursive: true });
+    writeFileSync(targetFile, SKILL_MD);
+    results.push({ status: already ? 'updated' : 'installed', path: targetFile });
+  }
+  return results;
+}
+
+export function installCommand(opts) {
+  const isGlobal = opts.global;
+  const force = opts.force || false;
+  let agent = opts.agent;
+  const base = isGlobal ? homedir() : process.cwd();
+
+  // --agent auto: probe PATH and install into every detected agent.
+  if (agent === 'auto') {
+    const detected = detectAgents();
+    if (detected.length === 0) {
+      const msg = 'No supported agent CLIs found on PATH. Install one of: copilot, claude, codex, opencode.';
+      if (opts.json) {
+        console.error(JSON.stringify({ error: 'no_agents_detected', message: msg }));
+      } else {
+        console.error(`❌ ${msg}`);
+      }
+      process.exitCode = 2;
+      return;
+    }
+    const allResults = [];
+    for (const detectedAgent of detected) {
+      const perAgentResults = installSkillForAgent(detectedAgent, base, force);
+      for (const r of perAgentResults) allResults.push({ ...r, agent: detectedAgent });
+    }
+    if (opts.codexSandbox && detected.includes('codex')) {
+      allResults.push({ ...ensureCodexSandboxConfig(), agent: 'codex' });
+    }
+    if (opts.json) {
+      console.log(JSON.stringify({ detected, results: allResults }));
+    } else {
+      console.log(`🔍 Detected agents on PATH: ${detected.join(', ')}`);
+      for (const r of allResults) {
+        const icon =
+          r.status === 'already_installed' || r.status === 'already_configured' ? '✅'
+          : r.status === 'updated' ? '🔄'
+          : r.status === 'configured' ? '🔧'
+          : '📋';
+        console.log(`${icon} [${r.agent}] ${r.status}: ${r.path}`);
+      }
+    }
+    return;
+  }
+
+  const uniqueTargets = skillTargetsFor(agent, base);
 
   const results = [];
   for (const targetDir of uniqueTargets) {

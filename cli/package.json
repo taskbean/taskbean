@@ -11,7 +11,8 @@
     "node": ">=22.5.0"
   },
   "scripts": {
-    "test": "node --test src/**/*.test.js"
+    "test": "node --test src/**/*.test.js",
+    "postinstall": "node scripts/postinstall.js"
   },
   "keywords": ["cli", "task-management", "copilot", "agent-skill", "ai"],
   "author": "Nicholas Brady",
