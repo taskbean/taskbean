@@ -396,6 +396,16 @@ header {
 .settings-row label { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 12px; flex: 1; min-width: 0; }
 .settings-row label i { color: var(--muted); flex-shrink: 0; }
 
+/* Read-only value shown on the right side of a settings row (About panel etc). */
+.settings-value {
+  font-size: 12px; color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-align: right; user-select: text;
+  overflow-wrap: anywhere; max-width: 60%;
+}
+.settings-value.muted { color: var(--muted); }
+
 /* Save status dot per row */
 .settings-row .save-dot {
   width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
@@ -2893,6 +2903,30 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
               <button class="settings-action-btn" onclick="exportTodos()"><i data-lucide="download" class="icon-sm"></i> Export Todos (JSON)</button>
             </div>
           </div>
+
+          <div class="settings-group" data-search-terms="about version build commit cache service worker server uptime">
+            <div class="settings-group-title">About</div>
+            <div class="settings-row">
+              <label><i data-lucide="package" class="icon-sm"></i> App</label>
+              <span class="settings-value" id="aboutAppVersion" aria-live="polite">—</span>
+            </div>
+            <div class="settings-row">
+              <label><i data-lucide="database" class="icon-sm"></i> PWA cache</label>
+              <span class="settings-value" id="aboutPwaCache" aria-live="polite">—</span>
+            </div>
+            <div class="settings-row">
+              <label><i data-lucide="terminal" class="icon-sm"></i> CLI</label>
+              <span class="settings-value" id="aboutCliVersion" aria-live="polite">—</span>
+            </div>
+            <div class="settings-row">
+              <label><i data-lucide="git-commit" class="icon-sm"></i> Commit</label>
+              <span class="settings-value" id="aboutCommit" aria-live="polite">—</span>
+            </div>
+            <div class="settings-row">
+              <label><i data-lucide="clock" class="icon-sm"></i> Server started</label>
+              <span class="settings-value" id="aboutServerStarted" aria-live="polite">—</span>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -2904,7 +2938,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       </div>
       <a class="coffee-btn" href="https://buymeacoffee.com/nicholasdbrady" target="_blank" rel="noopener"><span class="coffee-emoji">☕</span> Buy Nick a Coffee</a>
       <div class="settings-footer-right">
-        <span style="font-size:10px;color:var(--muted)">taskbean v0.5</span>
+        <span style="font-size:10px;color:var(--muted)" id="settingsFooterVersion" aria-live="polite">taskbean&nbsp;v0.5</span>
       </div>
     </div>
   </div>
@@ -8120,7 +8154,85 @@ function openSettings() {
     loadSettingsConfig();
     syncThemeSwatches();
     startSettingsClockPreview();
+    populateAboutPanel();
     trapFocus(overlay.querySelector('.settings-modal'));
+}
+
+// Ask the active service worker for its CACHE_NAME. Resolves to `null`
+// if there is no controller or the SW does not respond within 1s.
+function getServiceWorkerCacheName() {
+    return new Promise((resolve) => {
+        const sw = navigator.serviceWorker && navigator.serviceWorker.controller;
+        if (!sw) { resolve(null); return; }
+        const channel = new MessageChannel();
+        const timer = setTimeout(() => resolve(null), 1000);
+        channel.port1.onmessage = (e) => {
+            clearTimeout(timer);
+            resolve((e.data && e.data.cache) || null);
+        };
+        try {
+            sw.postMessage({ type: 'GET_VERSION' }, [channel.port2]);
+        } catch {
+            clearTimeout(timer);
+            resolve(null);
+        }
+    });
+}
+
+// Populate the About panel in Settings → System, plus the footer version label.
+// Pulls from /api/version for app/cli/commit/started_at and queries the active
+// service worker for its cache name. Safe to call while offline — missing
+// values fall back to an em-dash.
+async function populateAboutPanel() {
+    const dash = '—';
+    const set = (id, value, opts) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = value || dash;
+        if (opts && opts.title) el.title = opts.title;
+    };
+
+    let version = null;
+    try {
+        const r = await fetch('/api/version', { cache: 'no-store' });
+        if (r.ok) version = await r.json();
+    } catch { /* offline — render dashes */ }
+
+    const app = version && version.app ? version.app : null;
+    const cli = version && version.cli ? version.cli : null;
+    const sha = version && version.git_sha ? version.git_sha : null;
+    const started = version && version.started_at ? version.started_at : null;
+
+    set('aboutAppVersion', app ? `v${app}` : dash);
+    set('aboutCliVersion', cli ? `v${cli}` : dash);
+    set('aboutCommit', sha ? sha.slice(0, 7) : dash, { title: sha || '' });
+
+    if (started) {
+        const d = new Date(started);
+        const row = document.getElementById('aboutServerStarted');
+        if (row && !Number.isNaN(d.getTime())) {
+            const fmt = new Intl.DateTimeFormat(undefined, {
+                dateStyle: 'medium', timeStyle: 'short'
+            }).format(d);
+            row.innerHTML = '';
+            const t = document.createElement('time');
+            t.setAttribute('datetime', d.toISOString());
+            t.textContent = fmt;
+            row.appendChild(t);
+        } else {
+            set('aboutServerStarted', dash);
+        }
+    } else {
+        set('aboutServerStarted', dash);
+    }
+
+    const cache = await getServiceWorkerCacheName();
+    set('aboutPwaCache', cache || dash);
+
+    const footer = document.getElementById('settingsFooterVersion');
+    if (footer) {
+        footer.textContent = app ? `taskbean\u00A0v${app}` : 'taskbean';
+    }
 }
 
 function closeSettings() {

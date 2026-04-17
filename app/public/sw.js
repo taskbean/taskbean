@@ -127,6 +127,16 @@ self.addEventListener('fetch', (e) => {
   );
 });
 
+// Respond to version queries from the page (used by the About panel).
+// Replies via MessageChannel so the page can await a single response.
+self.addEventListener('message', (e) => {
+  if (!e.data || typeof e.data !== 'object') return;
+  if (e.data.type === 'GET_VERSION') {
+    const port = e.ports && e.ports[0];
+    if (port) port.postMessage({ type: 'VERSION', cache: CACHE_NAME });
+  }
+});
+
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   e.waitUntil((async () => {
