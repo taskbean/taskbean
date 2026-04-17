@@ -8,7 +8,7 @@ export default defineConfig({
   reporter: [['html', { open: 'never' }], ['list']],
   
   use: {
-    baseURL: 'http://localhost:2326',
+    baseURL: 'http://localhost:8275',
     headless: false,
     channel: 'msedge',
     screenshot: 'only-on-failure',

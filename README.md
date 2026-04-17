@@ -59,9 +59,12 @@ flowchart LR
 # Install globally
 npm install -g taskbean
 
-# Or via platform binary
-curl -fsSL https://taskbean.ai/install | bash          # macOS / Linux
+# Or via platform binary (checksum-verified against SHA256SUMS on the release)
+curl -fsSL https://taskbean.ai/install | bash          # macOS / Linux (x64 + arm64)
 iwr -useb https://taskbean.ai/install.ps1 | iex        # Windows PowerShell
+
+# Or via winget (Windows)
+winget install taskbean.taskbean
 
 # Use it
 bean add "fix auth bug before standup"
@@ -69,6 +72,20 @@ bean done 1
 bean list
 bean report
 ```
+
+### Updating taskbean
+
+```bash
+bean upgrade              # channel-aware: re-runs npm i -g or re-downloads the binary
+bean upgrade --check      # print latest vs. current, exit without touching anything
+bean upgrade --json       # machine-readable
+```
+
+`bean` prints a one-line notice on stderr (at most once every 24 hours) when a new release is available. It stays silent in CI, non-TTY, and when `TASKBEAN_NO_UPGRADE_NOTICE=1` is set. Cached at `~/.taskbean/.upgrade-check.json`.
+
+Pick **one** install channel and stick with it. If you install via both `npm` and the platform binary, you end up with two `bean`s on `PATH` and `bean upgrade` only refreshes the one it was launched from. The install scripts write `~/.taskbean/.install-channel` so `bean upgrade` knows which path to take.
+
+**Recovering from a double install.** `which bean` (POSIX) / `where bean` (Windows) lists every `bean` on `PATH` when you have more than one. Remove whichever you don't want — `npm uninstall -g taskbean` for the npm path, or `rm "$(command -v bean)"` for the standalone binary — then re-run `bean upgrade` to bring the remaining one up to date.
 
 ### Desktop app
 
@@ -83,7 +100,7 @@ python agent/main.py
 npm install
 npm start
 
-# Open http://localhost:2326
+# Open http://localhost:8275
 ```
 
 ## Project structure
@@ -121,6 +138,7 @@ taskbean ships as an [Agent Skill](https://agentskills.io). Drop it in the right
 
 ```bash
 bean install              # .agents/skills/  (Copilot CLI, OpenCode, Codex)
+bean install --agent auto # detect installed agent CLIs on PATH and install into each
 bean install --global     # same, but in ~/  so every project sees it
 bean install --agent claude                  # .claude/skills/  (Claude Code needs its own folder)
 bean install --agent codex --codex-sandbox   # also whitelists ~/.taskbean in ~/.codex/config.toml
@@ -139,7 +157,7 @@ bean install --agent all                     # install everywhere
 
 ### The CLI is the robot
 
-17 commands (`add`, `start`, `done`, `list`, `edit`, `remove`, `remind`, `block`, `track`, `projects`, `report`, `export`, `serve`, and a few more). The agent picks up the skill, notices a task is underway, and calls `bean add`. It closes with `bean done`. You never type any of this. You open the dashboard at the end of the day and there it is: a receipt of what got built.
+12 commands (`add`, `done`, `list`, `report`, `track`, `untrack`, `projects`, `install`, `init`, `package`, `serve`, `upgrade`). The agent picks up the skill, notices a task is underway, and calls `bean add`. It closes with `bean done`. You never type any of this. You open the dashboard at the end of the day and there it is: a receipt of what got built.
 
 ### The app is the human side
 
@@ -160,6 +178,10 @@ What's in the box:
 - Multi-agent usage tracking that watches Copilot CLI, Claude Code, Codex, and OpenCode session files on disk and attributes each task to the session that spawned it 📊
 
 On that last one: only metadata and aggregate token counts are stored. Prompts, tool outputs, and code blocks stay in the agent's own logs where you left them. Toggle agents on and off under **Settings → Agents**.
+
+### How updates work
+
+Back the PWA is a service worker. When a new version is deployed, the SW enters a waiting state and the app shows a **"A new version of taskbean is available"** toast with **Reload** / **Dismiss**. Reload activates the new SW; Dismiss snoozes the toast until the next update. Long-lived tabs also poll `/api/version` on focus so a backend restart (from `git pull` + `launch.ps1`) triggers the same toast even if the service worker didn't change.
 
 ### How the two halves stay honest
 

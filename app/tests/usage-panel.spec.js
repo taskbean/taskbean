@@ -86,7 +86,7 @@ test.describe('Usage panel — empty state (C3)', () => {
 });
 
 test.describe('Usage panel — offline banner (C4)', () => {
-  test('shows "Couldn\'t reach the taskbean agent" + :2326 on abort', async ({ page }) => {
+  test('shows "Couldn\'t reach the taskbean agent" + :8275 on abort', async ({ page }) => {
     await page.route('**/api/agent-usage**', (route) => {
       if (route.request().url().includes('/detection')) return route.continue();
       return route.abort();
@@ -96,6 +96,6 @@ test.describe('Usage panel — offline banner (C4)', () => {
     const errBox = page.locator('.usage-panel-error');
     await expect(errBox).toBeVisible({ timeout: 5000 });
     await expect(errBox).toContainText(/Couldn.?t reach the taskbean agent/i);
-    await expect(errBox).toContainText(/:2326/);
+    await expect(errBox).toContainText(/:8275/);
   });
 });

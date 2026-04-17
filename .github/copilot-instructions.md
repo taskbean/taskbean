@@ -14,11 +14,23 @@ Both share `~/.taskbean/taskbean.db`. The CLI writes tasks; the app displays and
 ## CLI (`cli/`)
 
 - Entry point: `cli/bin/taskbean.js` (aliased as `bean`)
-- 17 commands in `cli/src/commands/`
-- SQLite access in `cli/src/data/store.js`
-- Tests: `node --test cli/src/**/*.test.js`
+- 17 commands in `cli/src/commands/` (add, block, count, done, edit, export, init, install, list, package, projects, remind, remove, report, serve, start, track)
+- SQLite access in `cli/src/data/store.js`; attribution logic in `cli/src/data/attribution.js`
+- `cli/pwa/` — minimal standalone dashboard served by `bean serve` (separate from `app/public/`)
+- `cli/evals/` — agent-skill evaluation scenarios (not a normal test suite)
+- Tests: `npm test` from `cli/` runs `node --test src/**/*.test.js` (integration-style, hits SQLite)
 - Install scripts: `cli/scripts/install.sh`, `cli/scripts/install.ps1`
 - npm package name: `taskbean`
+
+### Agent skill installation
+
+The CLI ships as an [Agent Skill](https://agentskills.io) via `.agents/skills/taskbean/SKILL.md`. `bean install` places the skill in the right folder for each agent:
+
+- `.agents/skills/` → Copilot CLI, Codex, OpenCode (default)
+- `.claude/skills/` → Claude Code (needs `--agent claude`; it does NOT scan `.agents/skills/`)
+- `--agent codex --codex-sandbox` also whitelists `~/.taskbean` in `~/.codex/config.toml`
+
+Skill wrappers set `TASKBEAN_AGENT` + `TASKBEAN_NATIVE_SESSION_ID` env vars so `bean add` gets accurate attribution (tier 2 of the 4-tier precedence — see below).
 
 ## Desktop App (`app/`)
 
@@ -101,7 +113,7 @@ Chat submission uses `handleSend()` triggered by Enter key on `#chatInput` texta
 ```bash
 cd app/agent
 pip install -r requirements.txt
-python main.py                    # starts on :2326, auto-starts Jaeger
+python main.py                    # starts on :8275, auto-starts Jaeger
 ```
 
 ### Node.js backend (legacy)
@@ -109,7 +121,7 @@ python main.py                    # starts on :2326, auto-starts Jaeger
 ```bash
 cd app
 npm install
-node server.js                    # starts on :2326, auto-starts Jaeger
+node server.js                    # starts on :8275, auto-starts Jaeger
 ```
 
 ### One-click launch
@@ -149,7 +161,7 @@ npx playwright test -g "page loads"                    # single test by title
 npx playwright test --project=smoke                    # smoke project only
 ```
 
-Requires the server running on `:2326`. Config uses 3 projects with dependencies: `smoke` runs first, then `features` and `model-tests` run after smoke passes. Runs in Edge (`channel: 'msedge'`), records trace/video on failure.
+Requires the server running on `:8275`. Config uses 3 projects with dependencies: `smoke` runs first, then `features` and `model-tests` run after smoke passes. Runs in Edge (`channel: 'msedge'`), records trace/video on failure.
 
 Note: `npm test` runs `node test.js` (legacy Node test), not Playwright.
 

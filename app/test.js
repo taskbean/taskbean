@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Smoke test for taskbean — exercises all endpoints
-// Run: node test.js (server must be running on :2326)
+// Run: node test.js (server must be running on :8275)
 
-const BASE = process.env.BASE_URL || 'http://localhost:2326';
+const BASE = process.env.BASE_URL || 'http://localhost:8275';
 let passed = 0, failed = 0;
 
 async function test(name, fn) {
