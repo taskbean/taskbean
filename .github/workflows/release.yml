@@ -15,6 +15,9 @@ jobs:
           - os: ubuntu-latest
             target: linux-x64
             artifact: bean-linux-x64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+            artifact: bean-linux-arm64
           - os: macos-latest
             target: darwin-x64
             artifact: bean-darwin-x64
@@ -36,9 +39,22 @@ jobs:
         working-directory: cli
         run: bun install
 
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          # Tags are `vX.Y.Z`; the runtime VERSION constant is `X.Y.Z`.
+          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
       - name: Compile binary
         working-directory: cli
-        run: bun build bin/taskbean.js --compile --target=bun-${{ matrix.target }} --outfile=../dist/${{ matrix.artifact }}
+        shell: bash
+        run: |
+          bun build bin/taskbean.js \
+            --compile \
+            --target=bun-${{ matrix.target }} \
+            --define 'globalThis.TASKBEAN_VERSION="${{ steps.version.outputs.value }}"' \
+            --outfile=../dist/${{ matrix.artifact }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -48,6 +64,10 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      tag: ${{ github.ref_name }}
+      windows_sha256: ${{ steps.sha256sums.outputs.windows_sha256 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -56,9 +76,85 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Compute SHA256SUMS
+        id: sha256sums
+        shell: bash
+        run: |
+          cd dist
+          # Canonical sha256sum-compatible format: "<hash>  <filename>".
+          sha256sum bean-* > SHA256SUMS
+          cat SHA256SUMS
+          # Export the Windows hash for the winget step downstream.
+          win_hash=$(awk '/bean-windows-x64.exe$/{print $1}' SHA256SUMS)
+          echo "windows_sha256=${win_hash}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute version
+        id: version
+        shell: bash
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
           draft: false
+
+  winget:
+    # Submits a PR to microsoft/winget-pkgs. Gated on the repo secret
+    # WINGET_TOKEN being set — create a classic PAT with `public_repo` scope
+    # and add it as a repo secret named WINGET_TOKEN. Without it this job
+    # skips gracefully so normal releases aren't blocked.
+    needs: release
+    runs-on: windows-latest
+    if: ${{ !contains(github.ref_name, '-') }}
+    steps:
+      - name: Check for WINGET_TOKEN
+        id: gate
+        shell: bash
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if [ -z "${WINGET_TOKEN:-}" ]; then
+            echo "WINGET_TOKEN secret not set — skipping winget submission."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip == 'false'
+
+      - name: Render winget manifests
+        if: steps.gate.outputs.skip == 'false'
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+          WIN_SHA: ${{ needs.release.outputs.windows_sha256 }}
+        run: |
+          # Substitute <VERSION> / <SHA256> placeholders in the committed
+          # manifest templates under cli/distribution/winget/. The rendered
+          # files are uploaded as a workflow artifact for auditing and act as
+          # the reference manifests; winget-releaser (below) regenerates its
+          # own manifests from the release assets.
+          cd cli/distribution/winget
+          for f in *.yaml; do
+            sed -i "s|<VERSION>|${VERSION}|g; s|<SHA256>|${WIN_SHA}|g" "$f"
+            echo "── $f ──"
+            cat "$f"
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: steps.gate.outputs.skip == 'false'
+        with:
+          name: winget-manifests
+          path: cli/distribution/winget/*.yaml
+
+      - name: Submit to winget-pkgs
+        if: steps.gate.outputs.skip == 'false'
+        uses: vedantmgoyal2009/winget-releaser@main
+        with:
+          identifier: taskbean.taskbean
+          version: ${{ needs.release.outputs.version }}
+          installers-regex: '^bean-windows-x64\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}

@@ -1,0 +1,26 @@
+# Default-locale manifest for taskbean.taskbean
+PackageIdentifier: taskbean.taskbean
+PackageVersion: <VERSION>
+PackageLocale: en-US
+Publisher: Nicholas Brady
+PublisherUrl: https://taskbean.ai
+PublisherSupportUrl: https://github.com/taskbean/taskbean/issues
+PackageName: taskbean
+PackageUrl: https://taskbean.ai
+License: MIT
+LicenseUrl: https://github.com/taskbean/taskbean/blob/main/LICENSE
+ShortDescription: Task management CLI for AI coding agents.
+Description: |
+  taskbean is a local-first task manager for developers whose day job involves
+  a coding agent (Copilot, Claude, Codex, OpenCode). The `bean` CLI logs tasks
+  as the agent works; a companion PWA provides the dashboard. Nothing leaves
+  the machine.
+Moniker: taskbean
+Tags:
+  - cli
+  - task-management
+  - agent-skill
+  - copilot
+  - productivity
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
