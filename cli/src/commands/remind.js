@@ -1,7 +1,12 @@
-import { nanoid } from 'nanoid';
+import { randomBytes } from 'crypto';
 import { getDb, saveDb, ensureProject, getRow } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { parseDate } from '../data/parse-date.js';
+
+function shortId() {
+  // Match the previous nanoid(8) shape with URL-safe base64.
+  return randomBytes(6).toString('base64url').slice(0, 8);
+}
 
 export async function remindCommand(title, when, opts) {
   const db = await getDb();
@@ -19,7 +24,7 @@ export async function remindCommand(title, when, opts) {
     return;
   }
 
-  const id = 't_' + nanoid(8);
+  const id = 't_' + shortId();
   db.run(
     `INSERT INTO tasks (id, title, status, project_id, due_at) VALUES (?, ?, 'pending', ?, ?)`,
     [id, title, projectId, dueAt]
