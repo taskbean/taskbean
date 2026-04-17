@@ -1,4 +1,7 @@
-const CACHE_NAME = 'taskbean-v16';
+// NOTE: Bump CACHE_NAME on every deploy that touches user-visible assets so
+// old caches are invalidated on activate. Consider deriving this from a
+// build-time constant in the future.
+const CACHE_NAME = 'taskbean-v20';
 const SHELL_ASSETS = [
   '/manifest.json',
   '/icons/icon-192.png',
@@ -21,7 +24,28 @@ self.addEventListener('install', (e) => {
       })
     )
   );
+  // Auto-activate on install. The paired `controllerchange` listener on the
+  // page triggers a single location.reload() so the user gets fresh HTML
+  // without a manual prompt. A broken update shouldn't ever strand clients
+  // on an old SW again (see offline-mode regression, v19→v20).
   self.skipWaiting();
+});
+
+// Kept for clients that want to trigger activation explicitly (e.g. a future
+// "update available — reload" UI). Harmless when skipWaiting() already ran.
+// Respond to VERSION queries from the page. The page uses a MessageChannel
+// reply port so it doesn't have to listen for broadcasts.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
+  if (event.data && event.data.type === 'GET_VERSION') {
+    const port = event.ports && event.ports[0];
+    const payload = { type: 'VERSION', cache: CACHE_NAME };
+    if (port) port.postMessage(payload);
+    else event.source?.postMessage(payload);
+  }
 });
 
 // Activate: clean old caches, enable navigation preload
@@ -88,8 +112,41 @@ self.addEventListener('fetch', (e) => {
       } catch {
         // Offline: fall back to cached index.html
         const cached = await caches.match('/index.html');
-        return cached || new Response('Offline — no cached page available', {
-          status: 503, headers: { 'Content-Type': 'text/plain' }
+        if (cached) return cached;
+        // Last-resort fallback. UTF-8 charset is required (em-dash is multi-byte)
+        // and the page gives the user a way to retry without typing the URL.
+        const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>taskbean — offline</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100dvh; display:flex; flex-direction:column;
+         align-items:center; justify-content:center; gap:16px; padding:24px;
+         font:14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         background:#fafaf7; color:#2c1810; text-align:center; }
+  @media (prefers-color-scheme: dark) {
+    body { background:#1a1410; color:#e8ddd0; }
+  }
+  h1 { margin:0; font-size:18px; font-weight:600; }
+  p  { margin:0; max-width:48ch; opacity:.75; }
+  button { font:inherit; font-weight:600; padding:8px 16px; border-radius:6px;
+           border:1px solid currentColor; background:transparent; color:inherit;
+           cursor:pointer; }
+  button:hover { background:rgba(232,134,60,.12); border-color:#e8863c; color:#e8863c; }
+</style>
+</head>
+<body>
+<h1>taskbean is offline</h1>
+<p>The local server isn't reachable. Start it with <code>launch.cmd</code> and retry.</p>
+<button type="button" onclick="location.reload()">Retry</button>
+</body>
+</html>`;
+        return new Response(html, {
+          status: 503,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' }
         });
       }
     })());
@@ -125,16 +182,6 @@ self.addEventListener('fetch', (e) => {
       return response;
     }).catch(() => caches.match(e.request))
   );
-});
-
-// Respond to version queries from the page (used by the About panel).
-// Replies via MessageChannel so the page can await a single response.
-self.addEventListener('message', (e) => {
-  if (!e.data || typeof e.data !== 'object') return;
-  if (e.data.type === 'GET_VERSION') {
-    const port = e.ports && e.ports[0];
-    if (port) port.postMessage({ type: 'VERSION', cache: CACHE_NAME });
-  }
 });
 
 self.addEventListener('notificationclick', (e) => {
