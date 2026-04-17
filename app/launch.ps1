@@ -6,7 +6,7 @@
 
 param([string]$ProtocolUrl = "")
 
-$Port = 2326
+$Port = 8275
 $AgentDir = Join-Path $PSScriptRoot "agent"
 $SkipBrowser = $ProtocolUrl -like "taskbean://*"
 

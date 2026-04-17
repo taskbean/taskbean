@@ -97,7 +97,7 @@ def _is_in_reminder_hours() -> bool:
 # ── Notifications ─────────────────────────────────────────────────────────────
 
 def _base_url() -> str:
-    port = app_config.get("port") or 2326
+    port = app_config.get("port") or 8275
     return f"http://localhost:{port}"
 
 

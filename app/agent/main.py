@@ -57,7 +57,9 @@ import telemetry as telem
 import state as state_mod
 import app_config
 import hardware as hw_mod
+import shutil
 import recommender
+from __version__ import __version__ as APP_VERSION
 from agent import (
     MODEL_ID, SERVICE_BASE_URL, MODEL_CONTEXT,
     foundry_ready, model_ready, startup_error,
@@ -392,6 +394,74 @@ def _hardware_snapshot() -> dict[str, Any]:
 @app.get("/api/health")
 async def health() -> dict:
     return _health_data()
+
+
+# ── Version / build info ──────────────────────────────────────────────────────
+
+_STARTED_AT = datetime.now(timezone.utc).isoformat()
+
+
+# Memoized: the CLI binary and git SHA don't change during the server's
+# lifetime. Sentinel object identity is used to distinguish "not yet resolved"
+# from "resolved to None".
+_UNSET = object()
+_CLI_VERSION_CACHE: object = _UNSET
+_GIT_SHA_CACHE: object = _UNSET
+
+
+def _resolve_cli_version() -> str | None:
+    """Try to read the installed `bean` CLI version; return None on any failure."""
+    global _CLI_VERSION_CACHE
+    if _CLI_VERSION_CACHE is not _UNSET:
+        return _CLI_VERSION_CACHE  # type: ignore[return-value]
+    try:
+        exe = shutil.which("bean") or shutil.which("taskbean")
+        if not exe:
+            _CLI_VERSION_CACHE = None
+            return None
+        result = subprocess.run(
+            [exe, "--version"],
+            capture_output=True, text=True, timeout=3, check=False,
+        )
+        out = (result.stdout or result.stderr or "").strip()
+        _CLI_VERSION_CACHE = out or None
+        return _CLI_VERSION_CACHE  # type: ignore[return-value]
+    except Exception:
+        _CLI_VERSION_CACHE = None
+        return None
+
+
+def _resolve_git_sha() -> str | None:
+    global _GIT_SHA_CACHE
+    if _GIT_SHA_CACHE is not _UNSET:
+        return _GIT_SHA_CACHE  # type: ignore[return-value]
+    env_sha = os.environ.get("GIT_SHA")
+    if env_sha:
+        _GIT_SHA_CACHE = env_sha.strip()
+        return _GIT_SHA_CACHE  # type: ignore[return-value]
+    try:
+        repo_root = Path(__file__).resolve().parents[2]
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(repo_root),
+            capture_output=True, text=True, timeout=2, check=False,
+        )
+        sha = (result.stdout or "").strip()
+        _GIT_SHA_CACHE = sha or None
+        return _GIT_SHA_CACHE  # type: ignore[return-value]
+    except Exception:
+        _GIT_SHA_CACHE = None
+        return None
+
+
+@app.get("/api/version")
+async def version() -> dict:
+    return {
+        "app": APP_VERSION,
+        "cli": _resolve_cli_version(),
+        "git_sha": _resolve_git_sha(),
+        "started_at": _STARTED_AT,
+    }
 
 
 @app.get("/api/hardware")
@@ -2505,4 +2575,4 @@ async def _foundry_complete(system: str, user: str) -> str:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=2326, reload=False)
+    uvicorn.run("main:app", host="127.0.0.1", port=8275, reload=False)

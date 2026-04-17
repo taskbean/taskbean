@@ -7,6 +7,7 @@ import {
 } from './telemetry.js';
 import { trace } from '@opentelemetry/api';
 
+import { spawnSync } from 'child_process';
 import express from 'express';
 import helmet from 'helmet';
 import path from 'path';
@@ -32,8 +33,9 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let MODEL_ID = 'phi-4-mini-instruct-vitis-npu:2';
-// Port 2326 — spell B-E-A-N on a rotary phone
-const DEFAULT_PORT = 2326;
+// Port 8275 — spell T-A-S-K on a rotary phone (avoids conflicts with common
+// dev ports like 3000/5000/8000/8080).
+const DEFAULT_PORT = 8275;
 let EXPRESS_PORT = process.env.taskbean_PORT ? parseInt(process.env.taskbean_PORT, 10) : DEFAULT_PORT;
 let TZ = 'America/Los_Angeles';
 
@@ -1502,6 +1504,56 @@ app.get('/api/health', (_req, res) => {
             parallelToolCallFailures: _parallelToolCallFailures,
             modelCapabilities: getModelCapabilities(),
         }
+    });
+});
+
+// ─── Version / build info ───────────────────────────────────────────────────
+const _STARTED_AT = new Date().toISOString();
+let _APP_VERSION = '0.0.0';
+try {
+    const pkgPath = path.join(__dirname, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    _APP_VERSION = pkg.version || _APP_VERSION;
+} catch {}
+
+// Memoized: the CLI binary and git SHA don't change during the server's
+// lifetime. Sentinel `undefined` = not yet resolved; null/string = resolved
+// (null means "lookup failed, don't retry").
+let _CLI_VERSION_CACHE;
+let _GIT_SHA_CACHE;
+
+function _resolveCliVersion() {
+    if (_CLI_VERSION_CACHE !== undefined) return _CLI_VERSION_CACHE;
+    try {
+        const out = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['bean'], { encoding: 'utf8' });
+        if (out.status !== 0) { _CLI_VERSION_CACHE = null; return null; }
+        const exe = (out.stdout || '').split(/\r?\n/)[0].trim();
+        if (!exe) { _CLI_VERSION_CACHE = null; return null; }
+        const ver = spawnSync(exe, ['--version'], { encoding: 'utf8', timeout: 3000 });
+        const text = ((ver.stdout || '') + (ver.stderr || '')).trim();
+        _CLI_VERSION_CACHE = text || null;
+        return _CLI_VERSION_CACHE;
+    } catch { _CLI_VERSION_CACHE = null; return null; }
+}
+
+function _resolveGitSha() {
+    if (_GIT_SHA_CACHE !== undefined) return _GIT_SHA_CACHE;
+    if (process.env.GIT_SHA) { _GIT_SHA_CACHE = process.env.GIT_SHA.trim(); return _GIT_SHA_CACHE; }
+    try {
+        const repoRoot = path.resolve(__dirname, '..');
+        const out = spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: repoRoot, encoding: 'utf8', timeout: 2000 });
+        const sha = (out.stdout || '').trim();
+        _GIT_SHA_CACHE = sha || null;
+        return _GIT_SHA_CACHE;
+    } catch { _GIT_SHA_CACHE = null; return null; }
+}
+
+app.get('/api/version', (_req, res) => {
+    res.json({
+        app: _APP_VERSION,
+        cli: _resolveCliVersion(),
+        git_sha: _resolveGitSha(),
+        started_at: _STARTED_AT,
     });
 });
 

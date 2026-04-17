@@ -528,7 +528,7 @@ test.describe('Settings Modal — UI Overhaul', () => {
       const saveBtns = page.locator('button', { hasText: /^Save$/ });
       await expect(saveBtns).toHaveCount(0);
       // Fill and blur to trigger auto-save
-      await portInput.fill('2326');
+      await portInput.fill('8275');
       await portInput.blur();
     });
 

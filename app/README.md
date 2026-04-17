@@ -116,7 +116,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Open [http://localhost:2326](http://localhost:2326) in your browser.
+Open [http://localhost:8275](http://localhost:8275) in your browser.
 
 ### Option 2: One-Click Launch
 
@@ -134,7 +134,7 @@ After cloning, double-click **`launch.cmd`** (or run `launch.ps1` in PowerShell)
 
 ### Option 5: Install as PWA
 
-1. Open [http://localhost:2326](http://localhost:2326) in Edge or Chrome
+1. Open [http://localhost:8275](http://localhost:8275) in Edge or Chrome
 2. Click the install icon (⊕) in the address bar
 3. The app installs as a standalone window with offline support
 
@@ -160,7 +160,7 @@ pip install -r requirements.txt
 python main.py
 
 # 3. Open in browser
-# → http://localhost:2326
+# → http://localhost:8275
 ```
 
 **First launch:** The app will download and load a default model (Phi-4 Mini). This takes a few minutes the first time. The status bar at the bottom shows progress.
@@ -245,12 +245,12 @@ foundry model download phi-4-mini-instruct
 
 NPU acceleration requires compatible hardware (e.g., Intel Core Ultra, Qualcomm Snapdragon X). taskbean gracefully falls back to GPU → CPU if NPU isn't available. Check your hardware in nerd mode (click the **✨ Nerd** button).
 
-### Port 2326 already in use
+### Port 8275 already in use
 
-Another process is using Port 2326. Find and stop it:
+Another process is using Port 8275. Find and stop it:
 
 ```powershell
-Get-NetTCPConnection -LocalPort 2326 | Select-Object OwningProcess
+Get-NetTCPConnection -LocalPort 8275 | Select-Object OwningProcess
 Stop-Process -Id <PID>
 ```
 
@@ -338,7 +338,7 @@ See [`.github/copilot-instructions.md`](.github/copilot-instructions.md) for det
 # Run Python integration tests (requires Foundry Local)
 cd agent && pytest test_integration.py -v
 
-# Run E2E tests (requires server on :2326)
+# Run E2E tests (requires server on :8275)
 npx playwright test
 ```
 

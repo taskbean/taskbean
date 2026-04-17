@@ -7,7 +7,7 @@ test.describe('taskbean — AG-UI Action Cards', () => {
       await page.goto('/');
       await page.waitForTimeout(1000);
       await page.evaluate(() => {
-        routeTelemetryEvent({ type: 'port.conflict', requested: 2326, actual: 2327 }, true);
+        routeTelemetryEvent({ type: 'port.conflict', requested: 8275, actual: 8276 }, true);
       });
       await page.waitForTimeout(500);
       const btns = await page.evaluate(() => {
@@ -23,7 +23,7 @@ test.describe('taskbean — AG-UI Action Cards', () => {
       await page.goto('/');
       await page.waitForTimeout(1000);
       await page.evaluate(() => {
-        routeTelemetryEvent({ type: 'port.conflict', requested: 2326, actual: 2327 }, true);
+        routeTelemetryEvent({ type: 'port.conflict', requested: 8275, actual: 8276 }, true);
       });
       await page.waitForTimeout(500);
       await page.evaluate(() => {
@@ -38,7 +38,7 @@ test.describe('taskbean — AG-UI Action Cards', () => {
       });
       expect(hasConfirmation).toBe(true);
       // Reset port
-      await page.evaluate(() => fetch('/api/port', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ port: 2326 }) }));
+      await page.evaluate(() => fetch('/api/port', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ port: 8275 }) }));
     });
 
     test('port conflict Dismiss button hides card', async ({ page }) => {
@@ -46,7 +46,7 @@ test.describe('taskbean — AG-UI Action Cards', () => {
       await page.waitForTimeout(1000);
       await page.evaluate(() => {
         window._portConflictShown = false;
-        routeTelemetryEvent({ type: 'port.conflict', requested: 2326, actual: 2327 }, true);
+        routeTelemetryEvent({ type: 'port.conflict', requested: 8275, actual: 8276 }, true);
       });
       await page.waitForTimeout(500);
       await page.evaluate(() => {
