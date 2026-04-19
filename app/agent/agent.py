@@ -109,8 +109,48 @@ async def initialize_foundry(
 
         # Download and register hardware execution providers (VITIS/QNN for NPU,
         # CUDA/TensorRT for GPU, etc.). This is a no-op when already registered.
+        #
+        # The underlying native call is flaky on cold start — individual EP
+        # downloads can fail transiently because the Foundry native service
+        # isn't fully ready yet. Failures are returned in `failed_eps` rather
+        # than raised, so we must check the result and retry with exponential
+        # backoff instead of assuming success.
         logger.info("Registering execution providers…")
-        await asyncio.to_thread(manager.download_and_register_eps)
+        ep_result = None
+        backoffs = [2, 4, 8, 16, 30]  # seconds; ~60s total if every attempt fails
+        for attempt, sleep_s in enumerate(backoffs, start=1):
+            try:
+                ep_result = await asyncio.to_thread(manager.download_and_register_eps)
+            except Exception as e:
+                logger.warning("EP registration attempt %d raised: %s", attempt, e)
+                ep_result = None
+                if attempt < len(backoffs):
+                    await asyncio.sleep(sleep_s)
+                continue
+            failed = list(getattr(ep_result, "failed_eps", []) or [])
+            registered = list(getattr(ep_result, "registered_eps", []) or [])
+            if not failed:
+                logger.info("EPs registered: %s", registered or "(none new)")
+                break
+            if attempt < len(backoffs):
+                logger.warning(
+                    "EP registration attempt %d: registered=%s, failed=%s — retrying in %ds",
+                    attempt, registered, failed, sleep_s,
+                )
+                await asyncio.sleep(sleep_s)
+            else:
+                failed_list = ", ".join(failed)
+                logger.error(
+                    "EP registration failed after %d attempts: registered=%s, failed=%s. "
+                    "Models requiring these EPs will not load.",
+                    attempt, registered, failed,
+                )
+                # In-process retry cannot recover from a wedged native service;
+                # surface an actionable message so the UI can offer a restart.
+                startup_error = (
+                    f"Hardware execution providers failed to register: {failed_list}. "
+                    "This is a known Foundry Local cold-start issue — restart taskbean to retry."
+                )
         foundry_ready = True
         logger.info("Foundry Local SDK initialized")
 
@@ -138,15 +178,68 @@ async def initialize_foundry(
                         app_config.set("preferredModel", None)
                 except Exception:
                     pass
+            else:
+                # Reject voice/speech preference — those belong to speech.model, not preferredModel.
+                _info = getattr(model, "info", None)
+                _task = (getattr(_info, "task", "") or "").lower() if _info else ""
+                _in_mods = getattr(_info, "input_modalities", "") if _info else ""
+                if isinstance(_in_mods, (list, tuple)):
+                    _in_mods_str = " ".join(str(x) for x in _in_mods).lower()
+                else:
+                    _in_mods_str = str(_in_mods).lower()
+                _alias_lower = (getattr(model, "alias", "") or "").lower()
+                if (
+                    "speech" in _task
+                    or "audio" in _task
+                    or "audio" in _in_mods_str
+                    or "whisper" in _alias_lower
+                ):
+                    logger.warning(
+                        "Preferred model '%s' is a voice model — clearing preference and "
+                        "falling back to auto-select. Voice models belong to speech.model.",
+                        startup_model,
+                    )
+                    try:
+                        import app_config
+                        if app_config.preferred_model() == startup_model:
+                            app_config.set("preferredModel", None)
+                    except Exception:
+                        pass
+                    model = None
 
         if model is None:
-            # No explicit preference — pick the best cached (downloaded) model.
+            # No explicit preference — pick the best cached (downloaded) chat model.
+            # Speech models (whisper, etc.) must not be auto-selected as the
+            # chat agent — they're set via the Voice tab.
             cached = await asyncio.to_thread(
                 lambda: list(manager.catalog.get_cached_models())
             )
-            if cached:
-                model = cached[0]
+            def _is_speech(cached_model) -> bool:
+                info = getattr(cached_model, "info", None)
+                task = (getattr(info, "task", "") or "").lower() if info else ""
+                in_mods = getattr(info, "input_modalities", "") if info else ""
+                if isinstance(in_mods, (list, tuple)):
+                    in_mods_str = " ".join(str(x) for x in in_mods).lower()
+                else:
+                    in_mods_str = str(in_mods).lower()
+                alias = (getattr(cached_model, "alias", "") or "").lower()
+                return (
+                    "speech" in task
+                    or "audio" in task
+                    or "audio" in in_mods_str
+                    or "whisper" in alias
+                )
+            chat_cached = [m for m in cached if not _is_speech(m)]
+            if chat_cached:
+                model = chat_cached[0]
                 logger.info("Auto-selected cached model: %s", model.alias)
+            elif cached:
+                # Only voice models are cached — can't run chat agent.
+                aliases = ", ".join(m.alias for m in cached)
+                raise RuntimeError(
+                    f"Only voice/speech models are cached ({aliases}). "
+                    "Download a chat model first: foundry model download <alias>"
+                )
             else:
                 raise RuntimeError(
                     "No cached models available. Download a model first: "
@@ -187,7 +280,11 @@ async def initialize_foundry(
         build_agent()
 
     except Exception as e:
-        startup_error = str(e)
+        # Preserve the earlier EP-registration message if present — it's
+        # more actionable ("restart taskbean") than the downstream model-load
+        # failure it caused.
+        if not startup_error:
+            startup_error = str(e)
         logger.warning("Foundry startup incomplete: %s", e)
 
 

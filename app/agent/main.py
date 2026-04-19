@@ -396,6 +396,29 @@ async def health() -> dict:
     return _health_data()
 
 
+@app.post("/api/shutdown")
+async def shutdown_server() -> dict:
+    """Exit the Python process cleanly so the launch supervisor can respawn it.
+
+    Intended for the Frontend's "Restart engine" action when the Foundry
+    native service wedges on cold start (see agent.py EP-registration retry
+    comments). The process exits via `os._exit(0)` after the response is
+    flushed; `launch.ps1` wraps the Python invocation in a while-true loop
+    that will start a fresh process.
+    """
+    import os
+    import threading
+
+    def _exit_soon():
+        # Give FastAPI ~150ms to finish writing the response before we die.
+        import time
+        time.sleep(0.15)
+        os._exit(0)
+
+    threading.Thread(target=_exit_soon, daemon=True).start()
+    return {"ok": True, "shuttingDown": True}
+
+
 # ── Version / build info ──────────────────────────────────────────────────────
 
 _STARTED_AT = datetime.now(timezone.utc).isoformat()
