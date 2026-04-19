@@ -2303,8 +2303,70 @@ header {
 ::view-transition-new(root) { animation-duration: 0.25s; }
 
 /* ═══════════════════════════════════════════════════════════════════
-   AI CHAT UX — typing indicator
+   AI CHAT UX — thinking indicator
+   A single, information-rich pill that replaces the old 3-dot bouncer.
+   Sits in the chat feed (where users look while waiting), shows an
+   inline spinner + a rotating coffee-themed phrase + live elapsed time.
    ═══════════════════════════════════════════════════════════════════ */
+.ai-thinking {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 9px 14px;
+  border-radius: 16px;
+  background: color-mix(in oklch, var(--accent) 8%, var(--surface));
+  border: 1px solid color-mix(in oklch, var(--accent) 20%, var(--border));
+  font-size: 13px; color: var(--text);
+  max-width: 85%;
+  /* A slow, breathing wash underneath — subtle, latte-warm. */
+  position: relative; overflow: hidden;
+  animation: ai-thinking-in .24s ease-out both;
+}
+.ai-thinking::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    color-mix(in oklch, var(--accent) 12%, transparent) 50%,
+    transparent 100%);
+  transform: translateX(-100%);
+  animation: ai-thinking-sheen 3.6s ease-in-out infinite;
+  pointer-events: none;
+}
+.ai-thinking-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; flex-shrink: 0; color: var(--accent);
+  position: relative; z-index: 1;
+}
+.ai-thinking-label {
+  position: relative; z-index: 1;
+  color: var(--text); font-weight: 500; letter-spacing: .1px;
+  /* Fade between phrases (see JS: swaps textContent inside a CSS transition). */
+  transition: opacity .25s ease;
+}
+.ai-thinking-elapsed {
+  position: relative; z-index: 1;
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 999px;
+  background: color-mix(in oklch, var(--accent) 18%, transparent);
+  color: var(--text);
+  font-size: 11px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 28px; justify-content: center;
+}
+@keyframes ai-thinking-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes ai-thinking-sheen {
+  0%       { transform: translateX(-100%); }
+  60%, 100%{ transform: translateX(100%);  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-thinking { animation: none; }
+  .ai-thinking::before { animation: none; display: none; }
+  .ai-thinking-label { transition: none; }
+}
+
+/* Legacy typing-dots selectors kept for backward compat but unused. */
 .ai-typing { align-self: flex-start; padding: 10px 16px; display: flex; gap: 4px; }
 .ai-typing .dot {
   width: 7px; height: 7px; border-radius: 50%; background: var(--muted);
@@ -4265,18 +4327,77 @@ function addChat(type, icon, html) {
     if (icon) lucide.createIcons();
 }
 
-function showTypingIndicator() {
+// In-feed "thinking" indicator — the single surface that tells the user the
+// agent is working. Shows a spinner, a rotating coffee phrase, and a live
+// elapsed counter. Replaces the old bouncing-dots typing indicator AND the
+// redundant panel-header chatActivity chip during busy state.
+let _thinkingStart = null;
+let _thinkingTimer = null;
+let _thinkingPhraseTimer = null;
+
+function showTypingIndicator(initialLabel) {
     const feed = document.getElementById('chatFeed');
-    if (feed.querySelector('.ai-typing')) return;
-    const el = document.createElement('div');
-    el.className = 'ai-typing';
-    el.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+    if (!feed) return;
+    let el = feed.querySelector('.ai-thinking');
+    if (el) {
+        // Already present — just update the label if one was provided.
+        if (initialLabel) {
+            const lab = el.querySelector('.ai-thinking-label');
+            if (lab) lab.textContent = initialLabel;
+        }
+        return;
+    }
+    const label = initialLabel || _pick(COFFEE_BUSY);
+    el = document.createElement('div');
+    el.className = 'ai-thinking';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.setAttribute('aria-label', label);
+    el.innerHTML = `
+        <span class="ai-thinking-icon" aria-hidden="true">
+            <i data-lucide="loader" class="icon-sm spin" style="width:14px;height:14px"></i>
+        </span>
+        <span class="ai-thinking-label" aria-hidden="true">${esc(label)}</span>
+        <span class="ai-thinking-elapsed" aria-hidden="true">0s</span>`;
     feed.appendChild(el);
+    if (window.lucide) lucide.createIcons({ nodes: [el] });
     feed.scrollTop = feed.scrollHeight;
+
+    _thinkingStart = Date.now();
+    clearInterval(_thinkingTimer);
+    _thinkingTimer = setInterval(() => {
+        const pill = el.querySelector('.ai-thinking-elapsed');
+        if (!pill) return;
+        const s = Math.floor((Date.now() - _thinkingStart) / 1000);
+        pill.textContent = s >= 60 ? `${Math.floor(s/60)}m ${s%60}s` : `${s}s`;
+    }, 1000);
+
+    // Rotate phrases every ~6s. Fades the label via opacity then swaps text.
+    // Skip the fade under reduced-motion — the CSS transition is disabled there,
+    // so a 250ms blank gap would otherwise appear on every swap.
+    clearInterval(_thinkingPhraseTimer);
+    const _reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    _thinkingPhraseTimer = setInterval(() => {
+        const lab = el.querySelector('.ai-thinking-label');
+        if (!lab) return;
+        const next = _pick(COFFEE_BUSY);
+        if (_reduceMotion) {
+            lab.textContent = next;
+            return;
+        }
+        lab.style.opacity = '0';
+        setTimeout(() => {
+            lab.textContent = next;
+            lab.style.opacity = '1';
+        }, 250);
+    }, 6000);
 }
 
 function removeTypingIndicator() {
-    document.querySelectorAll('.ai-typing').forEach(el => el.remove());
+    document.querySelectorAll('.ai-thinking, .ai-typing').forEach(el => el.remove());
+    if (_thinkingTimer) { clearInterval(_thinkingTimer); _thinkingTimer = null; }
+    if (_thinkingPhraseTimer) { clearInterval(_thinkingPhraseTimer); _thinkingPhraseTimer = null; }
+    _thinkingStart = null;
 }
 
 function copyMessageText(btn) {
@@ -7390,18 +7511,20 @@ function setStatus(icon, text, state = 'idle') {
     textEl.innerHTML = `<i data-lucide="${icon}" class="icon-sm${spinClass}"></i> ${text}`;
     lucide.createIcons();
 
-    // Elapsed timer
+    // Elapsed timer (only used by the header chip; the in-feed indicator
+    // maintains its own timer).
     clearInterval(_statusBusyTimer);
     if (_statusDoneReset) { clearTimeout(_statusDoneReset); _statusDoneReset = null; }
 
     if (state === 'busy') {
-        _statusBusyStart = Date.now();
-        timerEl.className = 'status-timer on';
-        timerEl.textContent = '0s';
-        _statusBusyTimer = setInterval(() => {
-            const s = Math.floor((Date.now() - _statusBusyStart) / 1000);
-            timerEl.textContent = `${s}s`;
-        }, 1000);
+        // Keep the label flowing into the in-feed indicator so both surfaces
+        // stay semantically in sync (in case something else reads the chip).
+        if (typeof showTypingIndicator === 'function' && text) {
+            showTypingIndicator(text);
+        }
+        _statusBusyTimer = null;
+        timerEl.className = 'status-timer';
+        timerEl.textContent = '';
     } else {
         _statusBusyTimer = null;
         timerEl.className = 'status-timer';
