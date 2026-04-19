@@ -171,6 +171,80 @@ header {
   &.show { display: flex; align-items: center; gap: 6px; }
 }
 
+/* ─── Engine health banner ─────────────────────────────────────────────────
+   Surfaces serious engine errors that the "Reconnect" SSE retry can't fix
+   (e.g. wedged Foundry EP registration). Red-toned to separate from the
+   orange offline banner, with a single unambiguous CTA: "Restart engine".
+   Stays in sync with the status-bar chip via updateStatusBarHealth(). */
+.engine-banner {
+  display: none;
+  align-items: stretch; gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid color-mix(in oklch, var(--red) 30%, var(--border));
+  background:
+    linear-gradient(90deg,
+      color-mix(in oklch, var(--red) 14%, transparent) 0%,
+      color-mix(in oklch, var(--red) 6%, transparent) 40%,
+      color-mix(in oklch, var(--red) 10%, transparent) 100%);
+  color: var(--text);
+  font-size: 12px;
+  position: relative;
+  overflow: hidden;
+}
+.engine-banner.show { display: flex; }
+/* Subtle sheen that draws the eye without being aggressive. */
+.engine-banner::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(120deg,
+    transparent 0%, transparent 38%,
+    color-mix(in oklch, var(--red) 8%, transparent) 50%,
+    transparent 62%, transparent 100%);
+  background-size: 220% 100%;
+  animation: engine-banner-sheen 5.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes engine-banner-sheen {
+  0%   { background-position: 110% 0; }
+  60%  { background-position: -10% 0; }
+  100% { background-position: -10% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .engine-banner::before { animation: none; display: none; }
+}
+.engine-banner-icon {
+  flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px;
+  background: color-mix(in oklch, var(--red) 16%, var(--surface));
+  color: var(--red);
+  display: inline-flex; align-items: center; justify-content: center;
+  align-self: center;
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--red) 30%, transparent) inset;
+}
+.engine-banner-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; align-self: center; }
+.engine-banner-title { font-weight: 700; letter-spacing: .1px; color: var(--text); font-size: 12px; }
+.engine-banner-msg   { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.engine-banner-btn {
+  min-height: 32px;
+  flex-shrink: 0; align-self: center;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 8px; font-size: 11.5px; font-weight: 600;
+  background: var(--red); color: #fff; border: 1px solid var(--red);
+  cursor: pointer; transition: filter .15s, transform .1s;
+}
+.engine-banner-btn:hover { filter: brightness(1.08); }
+.engine-banner-btn:active { transform: translateY(1px); }
+.engine-banner-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.engine-banner-btn[disabled] { opacity: .7; cursor: wait; }
+.engine-banner-btn .engine-spin { width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+.engine-banner-dismiss {
+  flex-shrink: 0; align-self: center;
+  width: 32px; height: 32px; border-radius: 6px; padding: 0;
+  background: transparent; color: var(--muted); border: 1px solid transparent;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  transition: background .15s, color .15s;
+}
+.engine-banner-dismiss:hover { background: color-mix(in oklch, var(--red) 12%, transparent); color: var(--text); }
+.engine-banner-dismiss:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+
 /* Update-available state on the Install nav button — uses accent color + a
    small pulsing dot to draw the eye without being intrusive. Respects
    prefers-reduced-motion (no pulse when reduced motion is on). */
@@ -1568,11 +1642,96 @@ header {
 }
 .spin { animation: icon-spin 1s linear infinite; }
 
+/* ─── Engine status chip (status bar, bottom-left) ────────────────────────
+   When healthy: small green dot + "Engine" label — calm and unobtrusive.
+   When warming up: amber pulsing dot + "Warming up…" label.
+   When errored: red triangle-alert icon (replacing the dot) + "Engine needs
+   attention" label + gentle pulsing ring on the chip to draw the eye. */
+#chipFoundry.engine-error {
+  background: color-mix(in oklch, var(--red) 14%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--red) 35%, transparent);
+  animation: engine-chip-pulse 2.4s ease-in-out infinite;
+}
+#chipFoundry.engine-error:hover {
+  background: color-mix(in oklch, var(--red) 22%, transparent);
+}
+#chipFoundry.engine-error #foundryLabel { color: var(--red); font-weight: 600; }
+.engine-alert-icon { color: var(--red); }
+@keyframes engine-chip-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px color-mix(in oklch, var(--red) 35%, transparent); }
+  50%      { box-shadow: 0 0 0 3px color-mix(in oklch, var(--red) 15%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #chipFoundry.engine-error { animation: none; }
+}
+
+/* ─── Engine popover (opens from the status chip) ─────────────────────── */
+.engine-popover {
+  display: none;
+  left: 0; transform: none;
+  width: 320px;
+  padding: 14px 14px 12px;
+}
+.engine-popover.open { display: block; }
+.engine-pop-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.engine-pop-state-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--muted);
+}
+.engine-pop-state-dot.ok   { background: var(--green); }
+.engine-pop-state-dot.warn { background: var(--orange); }
+.engine-pop-state-dot.err  { background: var(--red); }
+.engine-pop-title { font-size: 13px; font-weight: 700; color: var(--text); letter-spacing: .1px; }
+.engine-pop-body {
+  font-size: 12px; color: var(--text); line-height: 1.5; margin-bottom: 10px;
+}
+.engine-pop-body .engine-pop-hint { display: block; color: var(--muted); margin-top: 4px; font-size: 11px; }
+.engine-pop-details {
+  margin-bottom: 10px; border-top: 1px solid var(--border); padding-top: 8px;
+}
+.engine-pop-details summary {
+  cursor: pointer; color: var(--muted); font-size: 11px; font-weight: 500;
+  list-style: none; user-select: none;
+}
+.engine-pop-details summary::-webkit-details-marker { display: none; }
+.engine-pop-details summary::before {
+  content: '▸ '; display: inline-block; font-size: 9px;
+  transform: translateY(-1px); margin-right: 2px; transition: transform .15s;
+}
+.engine-pop-details[open] summary::before { transform: rotate(90deg) translateX(-1px); }
+.engine-pop-details summary:hover { color: var(--text); }
+.engine-pop-pre {
+  margin: 6px 0 0; padding: 8px 10px; background: var(--bg);
+  border-radius: 6px; font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10.5px; line-height: 1.45; color: var(--muted);
+  white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto;
+}
+.engine-pop-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.engine-pop-btn {
+  flex: 1; min-width: 0;
+  padding: 7px 10px; border-radius: 7px; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  transition: filter .15s, background .15s, color .15s, border-color .15s;
+}
+.engine-pop-btn.primary {
+  background: var(--red); color: #fff; border: 1px solid var(--red);
+}
+.engine-pop-btn.primary:hover { filter: brightness(1.08); }
+.engine-pop-btn.primary:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.engine-pop-btn.ghost {
+  background: transparent; color: var(--text); border: 1px solid var(--border);
+}
+.engine-pop-btn.ghost:hover { background: var(--surface2); border-color: var(--muted); }
+.engine-pop-btn[disabled] { opacity: .7; cursor: wait; }
+
 /* Reduced-motion: kill the infinite pulses + spinners. */
 @media (prefers-reduced-motion: reduce) {
   .status-act-dot.busy,
   .status-svc-dot.warn { animation: none; }
-  .spin { animation: none; }
+  .spin,
+  .engine-spin { animation: none; }
 }
 
 /* ───── Status-bar responsive collapse (container queries) ─────
@@ -2247,6 +2406,25 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
   Offline mode — showing last synced data.
   <span id="offlineQueueBadge" style="display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px"></span>
   <button onclick="retryFromBanner()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:inherit;padding:1px 8px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;margin-left:auto;flex-shrink:0">Reconnect</button>
+</div>
+
+<!-- Engine-health banner: surfaces foundry/model errors (e.g. wedged EP
+     registration on cold start) with a concrete action the user can take. -->
+<div id="engineBanner" class="engine-banner" aria-live="polite" aria-atomic="true">
+  <span class="engine-banner-icon" aria-hidden="true">
+    <i data-lucide="triangle-alert" class="icon-sm"></i>
+  </span>
+  <div class="engine-banner-body">
+    <div class="engine-banner-title" id="engineBannerTitle">Engine needs attention</div>
+    <div class="engine-banner-msg" id="engineBannerMsg">The AI engine didn't start cleanly.</div>
+  </div>
+  <button type="button" class="engine-banner-btn" id="engineBannerRestart" onclick="restartEngine()">
+    <i data-lucide="refresh-cw" class="icon-sm" aria-hidden="true"></i>
+    <span>Restart engine</span>
+  </button>
+  <button type="button" class="engine-banner-dismiss" onclick="dismissEngineBanner()" aria-label="Dismiss">
+    <i data-lucide="x" class="icon-sm" aria-hidden="true"></i>
+  </button>
 </div>
 
 <div class="app-row">
@@ -3048,9 +3226,32 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 <div class="status-bar" role="status" aria-label="Application status bar" id="statusBar">
   <!-- LEFT: service, hardware, model -->
   <div class="status-left">
-    <span class="status-chip" id="chipFoundry" aria-label="Foundry service status">
+    <span class="status-chip status-chip-interactive" id="chipFoundry"
+          role="button" tabindex="0"
+          aria-label="Engine status"
+          aria-expanded="false"
+          onclick="toggleEnginePopover()"
+          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleEnginePopover();}">
       <span class="status-svc-dot" id="foundryDot" aria-hidden="true"></span>
-      <span id="foundryLabel" class="sb-label">Foundry</span>
+      <i data-lucide="triangle-alert" class="icon-sm engine-alert-icon" id="foundryAlertIcon" aria-hidden="true" style="display:none;width:10px;height:10px"></i>
+      <span id="foundryLabel" class="sb-label">Engine</span>
+
+      <!-- Popover anchored above the chip. A disclosure popover — not a modal
+           dialog — so we use role=group + aria-labelledby and skip a focus trap. -->
+      <div class="clock-popover engine-popover" id="enginePopover" role="group" aria-labelledby="enginePopoverTitle" onclick="event.stopPropagation()">
+        <div class="engine-pop-header">
+          <span class="engine-pop-state-dot" id="enginePopDot" aria-hidden="true"></span>
+          <span class="engine-pop-title" id="enginePopoverTitle">Engine</span>
+        </div>
+        <div class="engine-pop-body" id="enginePopBody">
+          The AI engine powers chat and task-extraction on-device.
+        </div>
+        <details class="engine-pop-details" id="enginePopDetailsWrap" style="display:none">
+          <summary>Show technical details</summary>
+          <pre class="engine-pop-pre" id="enginePopPre"></pre>
+        </details>
+        <div class="engine-pop-actions" id="enginePopActions"></div>
+      </div>
     </span>
     <span class="status-chip-sep" aria-hidden="true"></span>
     <span class="status-chip hw-chip" id="chipCpu" title="CPU usage" aria-label="CPU usage">
@@ -3521,13 +3722,18 @@ function updateReachabilityUI() {
     // Update Foundry chip to reflect server connectivity
     const dot   = document.getElementById('foundryDot');
     const label = document.getElementById('foundryLabel');
+    const alertIcon = document.getElementById('foundryAlertIcon');
     if (dot && label) {
         if (!serverReachable) {
             dot.className = 'status-svc-dot warn';
+            dot.style.display = '';
+            if (alertIcon) alertIcon.style.display = 'none';
             label.textContent = 'Offline';
         } else {
             dot.className = 'status-svc-dot ok';
-            label.textContent = 'Foundry';
+            dot.style.display = '';
+            if (alertIcon) alertIcon.style.display = 'none';
+            label.textContent = 'Engine';
         }
     }
     if (!serverReachable) {
@@ -7400,21 +7606,37 @@ document.addEventListener('click', (e) => {
 });
 
 function updateStatusBarHealth(ev) {
+    const chip  = document.getElementById('chipFoundry');
     const dot   = document.getElementById('foundryDot');
+    const alertIcon = document.getElementById('foundryAlertIcon');
     const label = document.getElementById('foundryLabel');
     if (!dot || !label) return;
 
+    const isError = !!ev.startupError && !(ev.foundryReady && ev.modelReady);
+    const isReady = ev.foundryReady && ev.modelReady;
+
     dot.className = 'status-svc-dot';
-    if (ev.foundryReady && ev.modelReady) {
+    if (chip) chip.classList.toggle('engine-error', isError);
+
+    if (isReady) {
         dot.classList.add('ok');
-        label.textContent = 'Foundry';
-    } else if (ev.startupError) {
-        dot.classList.add('err');
-        label.textContent = 'Foundry: error';
+        dot.style.display = '';
+        if (alertIcon) alertIcon.style.display = 'none';
+        label.textContent = 'Engine';
+    } else if (isError) {
+        dot.style.display = 'none';
+        if (alertIcon) alertIcon.style.display = 'inline-block';
+        label.textContent = 'Engine needs attention';
     } else {
         dot.classList.add('warn');
-        label.textContent = 'Foundry: init';
+        dot.style.display = '';
+        if (alertIcon) alertIcon.style.display = 'none';
+        label.textContent = 'Warming up…';
     }
+
+    // Keep popover contents + top banner in sync with the chip state.
+    _syncEnginePopover(ev, { isReady, isError });
+    _syncEngineBanner(ev, { isReady, isError });
 
     if (ev.modelAlias || ev.model) {
         const modelEl = document.getElementById('modelLabel');
@@ -7422,6 +7644,211 @@ function updateStatusBarHealth(ev) {
         if (modelEl) modelEl.textContent = ev.modelAlias || ev.model;
         if (chipEl)  { chipEl.style.removeProperty('display'); }
         _updateModelDeviceIcon(ev.model || '');
+    }
+}
+
+// ─── Engine popover + banner ────────────────────────────────────────────────
+// Latest health event, captured so the "Restart engine" button can read the
+// current error text without round-tripping to /api/health.
+let _lastHealthEv = null;
+let _engineBannerDismissed = false;
+let _engineRestartInFlight = false;
+
+// Translate known engine-error patterns into plain-English copy. Returns an
+// object with { title, body, hint }. The hint is an optional extra line.
+function _engineCopyForError(startupError) {
+    const raw = String(startupError || '');
+    // Known pattern #1: Foundry EP registration failed on cold start.
+    // The backend now emits a message containing this exact phrase.
+    if (/execution provider/i.test(raw) || /register/i.test(raw) && /EP/i.test(raw) || /cold-start/i.test(raw)) {
+        return {
+            title: "Engine couldn't start",
+            body:  "Your hardware's AI drivers didn't register during startup. This is a known Foundry Local cold-start issue — restarting the engine usually fixes it on the next try.",
+            hint:  null,
+        };
+    }
+    // Known pattern #2: model load failure (EP present but the model itself failed).
+    if (/Failed to load model/i.test(raw) || /Cannot load model/i.test(raw)) {
+        return {
+            title: "Model couldn't load",
+            body:  "The selected model didn't load. You can restart the engine or pick a different model from the model picker.",
+            hint:  null,
+        };
+    }
+    // Fallback — generic but still human.
+    return {
+        title: "Engine needs attention",
+        body:  "The AI engine hit an error during startup. Restarting usually fixes transient issues.",
+        hint:  null,
+    };
+}
+
+function _syncEnginePopover(ev, state) {
+    const popTitle = document.getElementById('enginePopoverTitle');
+    const popDot   = document.getElementById('enginePopDot');
+    const popBody  = document.getElementById('enginePopBody');
+    const detWrap  = document.getElementById('enginePopDetailsWrap');
+    const popPre   = document.getElementById('enginePopPre');
+    const popActs  = document.getElementById('enginePopActions');
+    if (!popTitle) return;
+
+    _lastHealthEv = ev;
+
+    popDot.className = 'engine-pop-state-dot';
+    if (state.isReady) {
+        popDot.classList.add('ok');
+        popTitle.textContent = 'Engine ready';
+        popBody.innerHTML = `The AI engine is running on-device and ready to use.<span class="engine-pop-hint">${esc(ev.modelAlias || ev.model || '')}</span>`;
+        if (detWrap) detWrap.style.display = 'none';
+        popActs.innerHTML = '';
+    } else if (state.isError) {
+        popDot.classList.add('err');
+        const copy = _engineCopyForError(ev.startupError);
+        popTitle.textContent = copy.title;
+        popBody.innerHTML = esc(copy.body) + (copy.hint ? `<span class="engine-pop-hint">${esc(copy.hint)}</span>` : '');
+        if (detWrap) {
+            detWrap.style.display = '';
+            if (popPre) popPre.textContent = String(ev.startupError || '').slice(0, 2000);
+        }
+        popActs.innerHTML = `
+            <button type="button" class="engine-pop-btn primary" id="enginePopRestart" onclick="restartEngine()">
+                <i data-lucide="refresh-cw" style="width:12px;height:12px" aria-hidden="true"></i>
+                Restart engine
+            </button>`;
+        if (window.lucide) lucide.createIcons({ nodes: [popActs] });
+    } else {
+        popDot.classList.add('warn');
+        popTitle.textContent = 'Warming up…';
+        popBody.innerHTML = 'The AI engine is starting on-device. This usually takes 30–90 seconds on cold start.<span class="engine-pop-hint">Models load from local disk — no network required.</span>';
+        if (detWrap) detWrap.style.display = 'none';
+        popActs.innerHTML = '';
+    }
+}
+
+function _syncEngineBanner(ev, state) {
+    const banner = document.getElementById('engineBanner');
+    if (!banner) return;
+    if (!state.isError || _engineBannerDismissed) {
+        banner.classList.remove('show');
+        // Clear the dismissed flag when the error goes away, so a new error
+        // after recovery shows the banner again.
+        if (!state.isError) _engineBannerDismissed = false;
+        return;
+    }
+    const copy = _engineCopyForError(ev.startupError);
+    const title = document.getElementById('engineBannerTitle');
+    const msg   = document.getElementById('engineBannerMsg');
+    if (title) title.textContent = copy.title;
+    if (msg)   msg.textContent   = copy.body;
+    banner.classList.add('show');
+    if (window.lucide) lucide.createIcons({ nodes: [banner] });
+}
+
+function dismissEngineBanner() {
+    _engineBannerDismissed = true;
+    const banner = document.getElementById('engineBanner');
+    if (banner) banner.classList.remove('show');
+}
+
+let _enginePopoverOpen = false;
+function toggleEnginePopover() {
+    const pop = document.getElementById('enginePopover');
+    const chip = document.getElementById('chipFoundry');
+    if (!pop) return;
+    _enginePopoverOpen = !_enginePopoverOpen;
+    pop.classList.toggle('open', _enginePopoverOpen);
+    if (chip) chip.setAttribute('aria-expanded', String(_enginePopoverOpen));
+    if (_enginePopoverOpen && window.lucide) lucide.createIcons({ nodes: [pop] });
+}
+function closeEnginePopover() {
+    _enginePopoverOpen = false;
+    const pop = document.getElementById('enginePopover');
+    const chip = document.getElementById('chipFoundry');
+    if (pop) pop.classList.remove('open');
+    if (chip) chip.setAttribute('aria-expanded', 'false');
+}
+// Close on outside click (pattern matches the clock popover).
+document.addEventListener('click', (e) => {
+    if (_enginePopoverOpen && !e.target.closest('#enginePopover') && !e.target.closest('#chipFoundry')) {
+        closeEnginePopover();
+    }
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _enginePopoverOpen) closeEnginePopover();
+});
+
+async function restartEngine() {
+    if (_engineRestartInFlight) return;
+    _engineRestartInFlight = true;
+
+    const bannerBtn = document.getElementById('engineBannerRestart');
+    const popBtn    = document.getElementById('enginePopRestart');
+    const setLoading = (btn) => {
+        if (!btn) return;
+        btn.setAttribute('disabled', 'true');
+        btn.innerHTML = '<span class="engine-spin" aria-hidden="true"></span><span>Restarting…</span>';
+    };
+    setLoading(bannerBtn);
+    setLoading(popBtn);
+
+    // Kick the backend. It replies 200 and os._exit()s ~150ms later;
+    // launch.ps1's supervisor loop respawns the Python process.
+    try {
+        await fetch('/api/shutdown', { method: 'POST' });
+    } catch (_) {
+        // Expected — the connection may be torn down as the server exits.
+    }
+
+    // Poll /api/health until the new process is ready (or give up after 2 min).
+    const deadline = Date.now() + 120_000;
+    let ready = false;
+    while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 1500));
+        try {
+            const r = await fetch('/api/health', { cache: 'no-store' });
+            if (r.ok) {
+                const h = await r.json();
+                if (h.foundryReady && h.modelReady && !h.startupError) {
+                    ready = true;
+                    break;
+                }
+            }
+        } catch (_) { /* still restarting */ }
+    }
+
+    _engineRestartInFlight = false;
+    if (ready) {
+        // Let the ordinary health-polling loop refresh the UI; nothing more to do.
+        dismissEngineBanner();
+    } else {
+        // Restart didn't recover. Surface clear feedback on BOTH surfaces and
+        // auto-open the technical details — otherwise the user is left staring
+        // at the original error with no indication the attempt even ran.
+        const title = document.getElementById('engineBannerTitle');
+        const msg   = document.getElementById('engineBannerMsg');
+        if (title) title.textContent = "Restart didn't recover the engine";
+        if (msg)   msg.textContent   = 'Try restarting again, or open technical details below to share with support.';
+
+        const popTitle = document.getElementById('enginePopoverTitle');
+        const popBody  = document.getElementById('enginePopBody');
+        const detWrap  = document.getElementById('enginePopDetailsWrap');
+        if (popTitle) popTitle.textContent = "Restart didn't recover";
+        if (popBody)  popBody.innerHTML  = 'The engine is still not responding after a restart. You can try again, or expand technical details below.';
+        if (detWrap)  { detWrap.style.display = ''; detWrap.setAttribute('open', ''); }
+
+        if (typeof setStatus === 'function') {
+            setStatus('triangle-alert', "Restart didn't recover the engine — try again", 'err');
+        }
+
+        if (bannerBtn) {
+            bannerBtn.removeAttribute('disabled');
+            bannerBtn.innerHTML = '<i data-lucide="refresh-cw" class="icon-sm" aria-hidden="true"></i><span>Try again</span>';
+        }
+        if (popBtn) {
+            popBtn.removeAttribute('disabled');
+            popBtn.innerHTML = '<i data-lucide="refresh-cw" style="width:12px;height:12px" aria-hidden="true"></i>Try again';
+        }
+        if (window.lucide) lucide.createIcons();
     }
 }
 
