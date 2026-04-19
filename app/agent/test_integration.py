@@ -43,6 +43,21 @@ async def test_models_list(client: httpx.AsyncClient) -> None:
     assert len(active_ids) == 1, f"Expected exactly one active model, got: {active_ids}"
 
 
+async def test_delete_cache_rejects_active_model(client: httpx.AsyncClient) -> None:
+    """Deleting the currently active model's cache must fail with 409."""
+    r = await client.get("/api/models")
+    active = r.json()["active"]
+    assert active, "no active model to test against"
+    d = await client.delete(f"/api/models/cache/{active}")
+    assert d.status_code == 409, f"expected 409, got {d.status_code}: {d.text}"
+
+
+async def test_delete_cache_unknown_model(client: httpx.AsyncClient) -> None:
+    """Deleting an unknown model returns 404."""
+    r = await client.delete("/api/models/cache/this-model-does-not-exist:0")
+    assert r.status_code == 404
+
+
 # ── 3–6. Todo CRUD ────────────────────────────────────────────────────────────
 
 async def test_todos_empty_after_clear(client: httpx.AsyncClient, clean_state, monkeypatch) -> None:
@@ -503,7 +518,84 @@ async def test_speech_config_update_mic(client: httpx.AsyncClient) -> None:
     assert r.status_code == 200
     assert r.json()["speech"]["micDevice"] is None
 
-    cfg.set("speech", {"engine": "auto", "fallback": "whisper", "micDevice": None})
+    cfg.set("speech", {"engine": "auto", "fallback": "whisper", "micDevice": None, "model": None})
+
+
+async def test_speech_config_rejects_non_speech_model(client: httpx.AsyncClient) -> None:
+    """PATCH /api/config with a non-speech model id for speech.model must 400."""
+    import app_config as cfg
+
+    r = await client.get("/api/models")
+    assert r.status_code == 200
+    models = r.json()["models"]
+    chat_model = next((m for m in models if m.get("kind") == "chat"), None)
+    assert chat_model, "No chat model in catalog to test against"
+
+    r = await client.post("/api/config", json={
+        "speech": {"model": chat_model["modelId"]}
+    })
+    assert r.status_code == 400, f"Expected 400, got {r.status_code}: {r.text}"
+    assert "speech" in r.text.lower()
+
+    # Config should be untouched.
+    r = await client.get("/api/config")
+    assert r.json()["speech"].get("model") in (None, ""), "speech.model leaked into config"
+    cfg.set("speech", {"engine": "auto", "fallback": "whisper", "micDevice": None, "model": None})
+
+
+async def test_speech_config_accepts_speech_model(client: httpx.AsyncClient) -> None:
+    """PATCH with a speech-kind model id persists it; empty string clears."""
+    import app_config as cfg
+
+    r = await client.get("/api/models")
+    models = r.json()["models"]
+    speech_model = next((m for m in models if m.get("kind") == "speech"), None)
+    if not speech_model:
+        pytest.skip("No speech model in catalog")
+
+    r = await client.post("/api/config", json={
+        "speech": {"model": speech_model["modelId"]}
+    })
+    assert r.status_code == 200, f"Got {r.status_code}: {r.text}"
+    assert r.json()["speech"]["model"] == speech_model["modelId"]
+
+    r = await client.post("/api/config", json={"speech": {"model": ""}})
+    assert r.status_code == 200
+    assert r.json()["speech"]["model"] is None
+    cfg.set("speech", {"engine": "auto", "fallback": "whisper", "micDevice": None, "model": None})
+
+
+async def test_switch_rejects_speech_model(client: httpx.AsyncClient) -> None:
+    """POST /api/models/switch with a speech model id must be rejected (400)."""
+    r = await client.get("/api/models")
+    models = r.json()["models"]
+    speech_model = next((m for m in models if m.get("kind") == "speech"), None)
+    if not speech_model:
+        pytest.skip("No speech model in catalog")
+
+    r = await client.post("/api/models/switch", json={"modelId": speech_model["modelId"]})
+    assert r.status_code == 400, f"Expected 400, got {r.status_code}: {r.text}"
+    assert "voice" in r.text.lower() or "speech" in r.text.lower()
+
+
+async def test_delete_rejects_configured_voice_model(client: httpx.AsyncClient) -> None:
+    """DELETE /api/models/cache/<id> must refuse the configured default voice model."""
+    import app_config as cfg
+
+    r = await client.get("/api/models")
+    models = r.json()["models"]
+    voice = next((m for m in models if m.get("kind") == "speech" and m.get("cached")), None)
+    if not voice:
+        pytest.skip("No cached speech model to test against")
+
+    try:
+        r = await client.post("/api/config", json={"speech": {"model": voice["modelId"]}})
+        assert r.status_code == 200
+
+        r = await client.delete(f"/api/models/cache/{voice['modelId']}")
+        assert r.status_code == 409, f"Expected 409, got {r.status_code}: {r.text}"
+    finally:
+        cfg.set("speech", {"engine": "auto", "fallback": "whisper", "micDevice": None, "model": None})
 
 
 # ── Transcribe ────────────────────────────────────────────────────────────────

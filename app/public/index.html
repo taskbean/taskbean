@@ -289,6 +289,38 @@ header {
 .inline-action-btn:hover { background: var(--accent); color: #000; }
 .model-use-btn.download-btn { background: var(--orange-soft); color: var(--orange); border-color: color-mix(in oklch, var(--orange) 35%, transparent); }
 .model-use-btn.download-btn:hover:not(:disabled) { background: var(--orange); color: var(--bg); border-color: var(--orange); }
+.model-card-action { display: flex; align-items: center; gap: 6px; }
+.model-delete-btn {
+  width: 26px; height: 26px; padding: 0; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--border); cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s, width .2s;
+}
+.model-delete-btn:hover:not(:disabled) {
+  background: var(--red-soft); color: var(--red);
+  border-color: color-mix(in oklch, var(--red) 35%, transparent);
+}
+.model-delete-btn:focus-visible {
+  outline: none;
+  border-color: var(--red);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--red) 30%, transparent);
+}
+.model-delete-btn.confirm {
+  width: auto; padding: 0 10px; gap: 4px; font-size: 11px; font-weight: 600;
+  background: var(--red-soft); color: var(--red);
+  border-color: color-mix(in oklch, var(--red) 40%, transparent);
+}
+.model-delete-btn.confirm:hover:not(:disabled) {
+  background: var(--red); color: var(--bg); border-color: var(--red);
+}
+.model-delete-btn:disabled { opacity: .5; cursor: not-allowed; }
+/* Active-model trash: shown but locked. Hover reveals red intent without enabling deletion. */
+.model-delete-btn.active-locked { color: var(--muted); cursor: help; }
+.model-delete-btn.active-locked:hover { background: var(--surface2); color: var(--text); border-color: color-mix(in oklch, var(--muted) 60%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .model-delete-btn { transition: none; }
+}
 .model-progress { margin-top: 6px; display: none; }
 .model-progress.show { display: block; }
 .model-progress-label { display: flex; align-items: center; justify-content: space-between; font-size: 9px; font-weight: 600; color: var(--accent); margin-bottom: 3px; gap: 6px; }
@@ -309,6 +341,17 @@ header {
 
 /* Filter bar */
 .model-filters { padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; background: var(--surface); }
+
+.model-kind-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+.model-kind-tab { background: transparent; border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; color: var(--muted); cursor: pointer; padding: 7px 14px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; margin-bottom: -1px; transition: color .15s, background .15s, border-color .15s; }
+.model-kind-tab:hover { color: var(--text); background: var(--surface2); }
+.model-kind-tab[aria-selected="true"] { color: var(--accent); background: var(--surface); border-color: var(--border); border-bottom-color: var(--surface); }
+.model-kind-tab[aria-selected="true"]::after { content: ''; position: absolute; }
+.model-kind-tab .kind-count { font-size: 9px; color: var(--muted); background: var(--surface2); padding: 1px 5px; border-radius: 99px; font-weight: 500; }
+.model-kind-tab[aria-selected="true"] .kind-count { background: var(--accent-soft); color: var(--accent); }
+.model-use-btn.default-indicator { background: var(--green-soft); color: var(--green); border-color: color-mix(in oklch, var(--green) 40%, transparent); cursor: default; }
+.model-use-btn.set-default-btn { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in oklch, var(--accent) 35%, transparent); }
+.model-use-btn.set-default-btn:hover:not(:disabled) { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .filter-group { display: flex; align-items: center; gap: 3px; }
 .filter-group-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; padding-right: 3px; white-space: nowrap; }
 .filter-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); font-size: 10px; cursor: pointer; transition: all .15s; white-space: nowrap; user-select: none; }
@@ -318,6 +361,9 @@ header {
 .filter-chip.on.npu   { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .filter-chip.on.gpu   { background: var(--purple-soft); border-color: var(--purple); color: var(--purple); }
 .filter-chip.on.cpu   { background: var(--orange-soft);  border-color: var(--orange); color: var(--orange); }
+/* Neutral state for "all devices included" — semantically no filter, visually distinct from both on/off. */
+.filter-chip.all-on { background: var(--surface2); border-color: var(--border); color: var(--muted); font-weight: 500; opacity: .85; }
+.filter-chip.all-on:hover { background: var(--surface); color: var(--text); border-color: color-mix(in oklch, var(--text) 35%, transparent); opacity: 1; }
 .filter-sep { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; margin: 0 2px; }
 .filter-count { font-size: 9px; color: var(--muted); padding: 0 6px; white-space: nowrap; align-self: center; }
 
@@ -1372,8 +1418,16 @@ header {
 .composer-icon-btn:hover { background: var(--surface2); color: var(--text); }
 .composer-icon-btn.recording { background: var(--red); color: #fff; animation: pulse 1s infinite; border-radius: 50%; }
 @keyframes pulse { 50% { opacity: .7; } }
-.composer-model-pill { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 11px; font-family: inherit; transition: all .15s; white-space: nowrap; }
+.composer-model-pill { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 11px; font-family: inherit; transition: all .15s; white-space: nowrap; max-width: 280px; }
 .composer-model-pill:hover { background: var(--surface2); color: var(--text); border-color: var(--text); }
+.composer-model-pill #composerModelLabel { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.composer-model-pill.is-switching { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); animation: composer-pill-pulse 1.6s ease-in-out infinite; }
+.composer-model-pill.is-switching:hover { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+.composer-model-pill .pill-spin { width: 11px; height: 11px; animation: spin .9s linear infinite; }
+@keyframes composer-pill-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
 .textarea-wrap { position: relative; }
 .textarea-wrap .drop-hint { display: none; position: absolute; inset: 0; background: var(--green-soft); border: 2px dashed var(--green); border-radius: 10px; pointer-events: none; align-items: center; justify-content: center; font-size: 12px; color: var(--green); }
 .textarea-wrap.dragging .drop-hint { display: flex; }
@@ -1412,6 +1466,13 @@ header {
 .quick-model-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; font-size: 12px; cursor: pointer; transition: background .1s; }
 .quick-model-item:hover { background: var(--surface2); }
 .quick-model-item.active { color: var(--accent); font-weight: 600; }
+.quick-model-item.switching { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); cursor: progress; }
+.quick-model-item.disabled { cursor: not-allowed; opacity: .5; pointer-events: none; }
+.quick-model-item .quick-model-spin { width: 12px; height: 12px; animation: spin .9s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .composer-model-pill.is-switching { animation: none; }
+  .pill-spin, .quick-model-spin { animation: none; }
+}
 .quick-model-check { width: 16px; flex-shrink: 0; color: var(--accent); }
 .quick-model-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .quick-model-device { font-size: 9px; color: var(--muted); background: var(--surface2); padding: 1px 5px; border-radius: 4px; margin-left: 6px; flex-shrink: 0; }
@@ -2376,9 +2437,9 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
             <input type="file" id="fileInput" />
           </div>
           <div class="input-bar-right">
-            <button class="composer-model-pill" id="composerModelPill" onclick="toggleQuickModelPicker()" title="Switch model">
+            <button class="composer-model-pill" id="composerModelPill" onclick="toggleQuickModelPicker()" title="Switch model" aria-live="polite">
               <span id="composerModelLabel">Model</span>
-              <i data-lucide="chevron-up" class="icon-sm" style="opacity:.4;width:10px;height:10px"></i>
+              <i id="composerModelPillIcon" data-lucide="chevron-up" class="icon-sm" style="opacity:.4;width:10px;height:10px"></i>
             </button>
             <div style="display:flex;align-items:center;position:relative">
               <button class="composer-icon-btn" id="micBtn" onclick="toggleVoice()" title="Voice input"><i data-lucide="mic"></i></button>
@@ -2490,7 +2551,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 <div class="model-modal-overlay" id="modelModalOverlay" onclick="onModelOverlayClick(event)">
   <div class="model-modal" role="dialog" aria-modal="true" aria-label="Model Selector" style="overscroll-behavior:contain">
     <div class="model-modal-header">
-      <h2><i data-lucide="cpu" aria-hidden="true"></i> Select AI Model</h2>
+      <h2><i data-lucide="cpu" aria-hidden="true"></i> <span id="modelModalTitle">Select Model</span></h2>
       <div style="display:flex;align-items:center;gap:6px">
         <button class="model-compat-btn" id="modelToolCallBtn" onclick="toggleToolCallFilter()" title="Only show models with tool calling support" aria-pressed="false">
           <i data-lucide="wrench" style="width:12px;height:12px" aria-hidden="true"></i> <span id="modelToolCallLabel">Tools</span>
@@ -2503,6 +2564,20 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         </button>
         <button class="model-modal-close" onclick="closeModelPicker()" aria-label="Close" title="Close"><i data-lucide="x" aria-hidden="true"></i></button>
       </div>
+    </div>
+
+    <!-- Kind tabs: AI Model (chat) vs Voice (speech) -->
+    <div class="model-kind-tabs" role="tablist" aria-label="Model kind">
+      <button class="model-kind-tab" role="tab" id="modelKindTabChat" aria-selected="true" aria-controls="modelList" onclick="setModelKindTab('chat')">
+        <i data-lucide="bot" style="width:13px;height:13px" aria-hidden="true"></i>
+        <span>AI Model</span>
+        <span class="kind-count" id="modelKindCountChat">0</span>
+      </button>
+      <button class="model-kind-tab" role="tab" id="modelKindTabSpeech" aria-selected="false" aria-controls="modelList" onclick="setModelKindTab('speech')">
+        <i data-lucide="mic" style="width:13px;height:13px" aria-hidden="true"></i>
+        <span>Voice</span>
+        <span class="kind-count" id="modelKindCountSpeech">0</span>
+      </button>
     </div>
 
     <!-- Filter bar — chips built dynamically by JS -->
@@ -6812,7 +6887,7 @@ async function openQuickModelPicker() {
         const { models } = await res.json();
         _allModels = models;
 
-        const cached = models.filter(m => m.cached);
+        const cached = models.filter(m => m.cached && (m.kind || 'chat') === 'chat');
         if (cached.length === 0) {
             list.innerHTML = '<div style="padding:12px;text-align:center;font-size:11px;color:var(--muted)">No cached models</div>';
             lucide.createIcons();
@@ -6820,10 +6895,20 @@ async function openQuickModelPicker() {
         }
 
         list.innerHTML = cached.map(m => {
-            return `<div class="quick-model-item ${m.active ? 'active' : ''}" onclick="quickSwitchModel('${esc(m.modelId)}')">
-                <span class="quick-model-check">${m.active ? '✓' : ''}</span>
+            const switching = _switchingModelId === m.modelId;
+            const otherSwitching = _switchingModelId && !switching;
+            const cls = switching ? 'switching' : (m.active ? 'active' : '') + (otherSwitching ? ' disabled' : '');
+            const onclick = (switching || otherSwitching) ? '' : `onclick="quickSwitchModel('${esc(m.modelId)}')"`;
+            const leading = switching
+                ? `<i data-lucide="loader-2" class="quick-model-spin"></i>`
+                : `<span class="quick-model-check">${m.active ? '✓' : ''}</span>`;
+            const device = switching
+                ? `<span class="quick-model-device">Loading…</span>`
+                : `<span class="quick-model-device">${esc(m.device || 'CPU')}</span>`;
+            return `<div class="quick-model-item ${cls.trim()}" ${onclick} aria-busy="${switching}" aria-disabled="${otherSwitching}">
+                ${leading}
                 <span class="quick-model-name">${esc(m.alias)}</span>
-                <span class="quick-model-device">${esc(m.device || 'CPU')}</span>
+                ${device}
             </div>`;
         }).join('');
     } catch {
@@ -6850,6 +6935,9 @@ document.addEventListener('click', (e) => {
 
 // Sync composer model label with status bar model label
 function syncComposerModelLabel() {
+    // Don't overwrite the "Loading …" label while a switch is in progress —
+    // the label should reflect the in-flight target until the switch settles.
+    if (_switchingModelId) return;
     const statusLabel = document.getElementById('modelLabel');
     const composerLabel = document.getElementById('composerModelLabel');
     if (statusLabel && composerLabel) {
@@ -6862,6 +6950,46 @@ setInterval(syncComposerModelLabel, 2000);
 const _modelLabelEl = document.getElementById('modelLabel');
 if (_modelLabelEl) {
     new MutationObserver(syncComposerModelLabel).observe(_modelLabelEl, { childList: true, characterData: true, subtree: true });
+}
+
+// ── Composer switching state ───────────────────────────────────────
+// Surfaces an in-progress model switch on the composer pill (and any open
+// quick-picker item) so users know a cached-model load is still underway
+// after they dismiss the main model modal.
+function _setComposerSwitchingState(alias) {
+    const pill = document.getElementById('composerModelPill');
+    const label = document.getElementById('composerModelLabel');
+    const icon = document.getElementById('composerModelPillIcon');
+    if (!pill || !label || !icon) return;
+    pill.classList.add('is-switching');
+    pill.setAttribute('aria-busy', 'true');
+    pill.setAttribute('title', `Loading ${alias}…`);
+    label.textContent = `Loading ${alias}…`;
+    // Swap chevron for a spinning loader glyph.
+    icon.setAttribute('data-lucide', 'loader-2');
+    icon.classList.add('pill-spin');
+    icon.style.opacity = '1';
+    try { lucide.createIcons(); } catch {}
+}
+
+function _clearComposerSwitchingState() {
+    const pill = document.getElementById('composerModelPill');
+    const icon = document.getElementById('composerModelPillIcon');
+    if (!pill || !icon) return;
+    pill.classList.remove('is-switching');
+    pill.removeAttribute('aria-busy');
+    pill.setAttribute('title', 'Switch model');
+    icon.setAttribute('data-lucide', 'chevron-up');
+    icon.classList.remove('pill-spin');
+    icon.style.opacity = '.4';
+    try { lucide.createIcons(); } catch {}
+    // Re-sync label from the status bar now that switching is done.
+    syncComposerModelLabel();
+}
+
+function _aliasForModelId(modelId) {
+    const hit = (_allModels || []).find(m => m.modelId === modelId);
+    return hit?.alias || modelId;
 }
 
 async function processSpeechToTasks(transcript) {
@@ -7024,10 +7152,10 @@ let _statusBusyTimer = null;
 let _statusBusyStart = null;
 let _statusDoneReset = null;
 
-const COFFEE_BUSY = ['Grinding the beans...', 'Roasting...', 'Steeping...', 'Brewing...', 'Tamping the grounds...', 'Pulling a shot...', 'Frothing the milk...', 'Dripping...', 'Percolating...', 'Blooming...', 'Making latte art...', 'Steaming the milk...', 'Warming your cup...', 'Dialing in the grind...', 'Checking the crema...'];
-const COFFEE_EXTRACT = ['Extracting the good stuff...', 'Cold brewing tasks...', 'Filtering the grounds...', 'Pressing the plunger...', 'Running the espresso...', 'Sifting through the beans...'];
+const COFFEE_BUSY = ['Grinding the beans…', 'Roasting…', 'Steeping…', 'Brewing…', 'Tamping the grounds…', 'Pulling a shot…', 'Frothing the milk…', 'Dripping…', 'Percolating…', 'Blooming…', 'Making latte art…', 'Steaming the milk…', 'Warming your cup…', 'Dialing in the grind…', 'Checking the crema…'];
+const COFFEE_EXTRACT = ['Extracting the good stuff…', 'Cold brewing tasks…', 'Filtering the grounds…', 'Pressing the plunger…', 'Running the espresso…', 'Sifting through the beans…'];
 const COFFEE_DONE = ['Fresh pour ☕', 'Order up ☕', 'Served hot ☕', 'Piping hot ☕', 'Your brew is ready ☕', 'Enjoy your cup ☕', 'Barista special ☕'];
-const COFFEE_TRANSCRIBE = ['Listening over latte...', 'Taking your order...', 'Steaming your words...', 'Writing on the cup...'];
+const COFFEE_TRANSCRIBE = ['Listening over latte…', 'Taking your order…', 'Steaming your words…', 'Writing on the cup…'];
 function _pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function setStatus(icon, text, state = 'idle') {
@@ -7036,8 +7164,14 @@ function setStatus(icon, text, state = 'idle') {
     const textEl  = document.getElementById('statusText');
     const timerEl = document.getElementById('statusTimer');
 
-    // Show activity only when not idle
-    if (activity) activity.style.display = (state === 'idle') ? 'none' : 'flex';
+    // Busy state is represented by the in-feed thinking indicator, not the
+    // header chip — that way the "AI is working" signal lives where users
+    // naturally look (next to the conversation) without being duplicated.
+    // Other states (done/error/warn) still need the header chip because
+    // there may be no pending AI bubble to attach them to.
+    if (activity) {
+        activity.style.display = (state === 'idle' || state === 'busy') ? 'none' : 'flex';
+    }
 
     // Dot state
     dot.className = 'status-act-dot';
@@ -9446,17 +9580,28 @@ initApp();
 // ═══════════════════════════════════════════════════════════════════
 
 const MODEL_FILTER_KEY = 'foundry-model-filters';
+const MODEL_KIND_TAB_KEY = 'foundry-model-kind-tab';
 
-// Filter state — devices persisted, others reset per session
+// Active tab: 'chat' (AI models) | 'speech' (voice models).
+let _modelKindTab = (() => {
+    try {
+        const saved = localStorage.getItem(MODEL_KIND_TAB_KEY);
+        return saved === 'speech' ? 'speech' : 'chat';
+    } catch { return 'chat'; }
+})();
+
+// Filter state — devices persisted, others reset per session.
+// Empty `devices` array means "no device filter" (show all); a populated array
+// means the user explicitly narrowed to that subset.
 let _modelFilters = (() => {
     try {
         const saved = JSON.parse(localStorage.getItem(MODEL_FILTER_KEY) || '{}');
         return {
-            devices:  Array.isArray(saved.devices) ? saved.devices : [],  // empty = show all (resolved on first load)
+            devices:  Array.isArray(saved.devices) ? saved.devices : [],
             tools:    false,
-            sizeKey:  null,   // null | '<1' | '1-3' | '3-6' | '6+'
-            ctxKey:   null,   // null | '<8k' | '8-32k' | '32k+'
-            family:   null    // null | 'Qwen' | 'Phi' | ...
+            sizeKey:  null,
+            ctxKey:   null,
+            family:   null
         };
     } catch { return { devices: [], tools: false, sizeKey: null, ctxKey: null, family: null }; }
 })();
@@ -9488,6 +9633,9 @@ const DEVICE_META = {
 
 let _modelPickerOpen  = false;
 let _switchingModelId = null;
+// Downloads are independent of switches — users can kick off multiple
+// parallel downloads and keep chatting with the current model while they run.
+const _downloadingModelIds = new Set();
 let _allModels        = [];   // full catalog from last fetch
 let _compatFilterOn   = false; // local override while modal is open
 let _toolCallFilterOn = false; // local override while modal is open
@@ -9504,8 +9652,41 @@ function openModelPicker() {
 }
 function closeModelPicker() {
     _modelPickerOpen = false;
+    if (typeof _cancelPendingDeletes === 'function') _cancelPendingDeletes();
     releaseFocus(document.querySelector('.model-modal'));
     document.getElementById('modelModalOverlay').classList.remove('open');
+}
+
+// ── Kind tab switch ─────────────────────────────────────────────────
+function _modelsForKind(kind) {
+    return _allModels.filter(m => (m.kind || 'chat') === kind);
+}
+
+function setModelKindTab(kind) {
+    if (kind !== 'chat' && kind !== 'speech') return;
+    _modelKindTab = kind;
+    try { localStorage.setItem(MODEL_KIND_TAB_KEY, kind); } catch {}
+    const chatBtn = document.getElementById('modelKindTabChat');
+    const spBtn = document.getElementById('modelKindTabSpeech');
+    if (chatBtn) chatBtn.setAttribute('aria-selected', kind === 'chat');
+    if (spBtn) spBtn.setAttribute('aria-selected', kind === 'speech');
+    // Hide the Tools compat filter on voice tab (irrelevant for STT).
+    const toolsBtn = document.getElementById('modelToolCallBtn');
+    if (toolsBtn) toolsBtn.style.display = kind === 'speech' ? 'none' : '';
+    // Reset devices to "no filter" for the new tab so the filter bar isn't stale.
+    _modelFilters.devices = [];
+    buildFilterBar(_allModels);
+    _syncHeaderFilterButtons();
+    applyFiltersAndRender();
+}
+
+function _syncKindTabCounts() {
+    const chatCount = _modelsForKind('chat').length;
+    const spCount = _modelsForKind('speech').length;
+    const cc = document.getElementById('modelKindCountChat');
+    const sc = document.getElementById('modelKindCountSpeech');
+    if (cc) cc.textContent = chatCount;
+    if (sc) sc.textContent = spCount;
 }
 function onModelOverlayClick(e) {
     if (e.target === document.getElementById('modelModalOverlay')) closeModelPicker();
@@ -9540,9 +9721,14 @@ function _syncHeaderFilterButtons() {
         toolBtn.setAttribute('aria-pressed', _toolCallFilterOn);
     }
 
-    // Show clear button when any filter (header or bar) is active
+    // Show clear button when any filter (header or bar) is active.
+    // Scope to active tab: devices filter is "default" only if it matches the tab's device set.
+    const availableDevices = [...new Set(_modelsForKind(_modelKindTab).map(m => m.device).filter(Boolean))];
+    const deviceFilterActive = _modelFilters.devices.length > 0
+        && availableDevices.length > 0
+        && !availableDevices.every(d => _modelFilters.devices.includes(d));
     const hasBarFilters = _modelFilters.sizeKey || _modelFilters.ctxKey || _modelFilters.family
-        || _modelFilters.devices.length < 3; // less than all devices selected
+        || deviceFilterActive;
     const hasAnyFilter = _compatFilterOn || _toolCallFilterOn || hasBarFilters;
     const clearBtn = document.getElementById('modelClearFiltersBtn');
     if (clearBtn) clearBtn.style.display = hasAnyFilter ? '' : 'none';
@@ -9553,7 +9739,7 @@ function _syncHeaderFilterButtons() {
 function clearAllModelFilters() {
     _compatFilterOn = false;
     _toolCallFilterOn = false;
-    _modelFilters.devices = [...new Set(_allModels.map(m => m.device).filter(Boolean))];
+    _modelFilters.devices = [];
     _modelFilters.tools = false;
     _modelFilters.sizeKey = null;
     _modelFilters.ctxKey = null;
@@ -9581,10 +9767,17 @@ async function loadModelList() {
         if (!res.ok) throw new Error(await res.text());
         const { models } = await res.json();
         _allModels = models;
-        // Initialize device filter to all devices on first load (empty = never saved)
-        if (_modelFilters.devices.length === 0) {
-            _modelFilters.devices = [...new Set(models.map(m => m.device).filter(Boolean))];
-        }
+        _syncKindTabCounts();
+        // Sync tab-selection UI (restores persisted selection) + Tools-button visibility.
+        const chatBtn = document.getElementById('modelKindTabChat');
+        const spBtn = document.getElementById('modelKindTabSpeech');
+        if (chatBtn) chatBtn.setAttribute('aria-selected', _modelKindTab === 'chat');
+        if (spBtn) spBtn.setAttribute('aria-selected', _modelKindTab === 'speech');
+        const toolsBtn = document.getElementById('modelToolCallBtn');
+        if (toolsBtn) toolsBtn.style.display = _modelKindTab === 'speech' ? 'none' : '';
+        // Initialize device filter on first load: leave empty (= show all)
+        // so users don't see a "pre-selected" CPU pill when they haven't set
+        // any preference. Only populated via explicit toggleDeviceFilter.
         buildFilterBar(models);
         applyFiltersAndRender();
     } catch (err) {
@@ -9597,18 +9790,42 @@ async function loadModelList() {
 function buildFilterBar(models) {
     const bar = document.getElementById('modelFilters');
 
+    // Scope filter-bar contents to the active kind tab so family/device chips
+    // reflect only relevant models for the current tab.
+    const tabModels = models.filter(m => (m.kind || 'chat') === _modelKindTab);
+
     // Derive unique values from catalog
-    const devices  = [...new Set(models.map(m => m.device).filter(Boolean))].sort();
-    const families = [...new Set(models.map(m => m.family).filter(f => f && f !== 'Other'))].sort();
-    const hasTools = models.some(m => m.tasks.includes('tools'));
+    const devices  = [...new Set(tabModels.map(m => m.device).filter(Boolean))].sort();
+    const families = [...new Set(tabModels.map(m => m.family).filter(f => f && f !== 'Other'))].sort();
+    const hasTools = tabModels.some(m => m.tasks.includes('tools'));
+
+    // "All devices included" = semantically no filter. Render chips with the
+    // neutral .all-on style so users don't mistake the default state for an
+    // active filter. aria-pressed stays false in this state — chips are
+    // logically "not filtering". See _allDevicesIncluded for the shared check.
+    const allDevicesOn = _allDevicesIncluded();
 
     bar.innerHTML = `
       <div class="filter-group">
         <span class="filter-group-label"><i data-lucide="cpu" style="width:10px;height:10px;vertical-align:middle" aria-hidden="true"></i> Device</span>
         ${devices.map(d => {
             const meta = DEVICE_META[d] || { icon: 'cpu', cls: '', title: d };
-            const on = _modelFilters.devices.includes(d);
-            return `<button class="filter-chip${on ? ' on ' + meta.cls : ''}" title="${meta.title}" onclick="toggleDeviceFilter('${d}')" aria-pressed="${on}"><i data-lucide="${meta.icon}" style="width:10px;height:10px" aria-hidden="true"></i> ${d}</button>`;
+            const included = _modelFilters.devices.includes(d);
+            let cls, pressed, hint;
+            if (allDevicesOn) {
+                cls = ' all-on';
+                pressed = 'false';
+                hint = `${meta.title} — click to filter to ${d} only`;
+            } else if (included) {
+                cls = ' on ' + meta.cls;
+                pressed = 'true';
+                hint = `${meta.title} (active filter — click to remove)`;
+            } else {
+                cls = '';
+                pressed = 'false';
+                hint = `${meta.title} — click to include`;
+            }
+            return `<button class="filter-chip${cls}" title="${hint}" onclick="toggleDeviceFilter('${d}')" aria-pressed="${pressed}"><i data-lucide="${meta.icon}" style="width:10px;height:10px" aria-hidden="true"></i> ${d}</button>`;
         }).join('')}
       </div>
       <div class="filter-sep"></div>
@@ -9637,12 +9854,35 @@ function buildFilterBar(models) {
     lucide.createIcons({ nodes: [bar] });
 }
 
+// Returns true when no device filter is active — either the user hasn't
+// narrowed (devices = []) or they've included every available device.
+function _allDevicesIncluded() {
+    if (!_modelFilters.devices || _modelFilters.devices.length === 0) return true;
+    const available = [...new Set(_modelsForKind(_modelKindTab).map(m => m.device).filter(Boolean))];
+    return available.length > 0
+        && available.every(d => _modelFilters.devices.includes(d));
+}
+
 function toggleDeviceFilter(device) {
-    const idx = _modelFilters.devices.indexOf(device);
-    if (idx >= 0) {
-        if (_modelFilters.devices.length > 1) _modelFilters.devices.splice(idx, 1);
+    // Neutral "all on" state (devices=[]) → clicking narrows to just that device.
+    if (_allDevicesIncluded()) {
+        _modelFilters.devices = [device];
     } else {
-        _modelFilters.devices.push(device);
+        const idx = _modelFilters.devices.indexOf(device);
+        if (idx >= 0) {
+            // Removing an included device — if it's the last one, collapse
+            // back to "no filter" (empty array = show all) so users can
+            // deselect a single active chip to return to the neutral state.
+            _modelFilters.devices.splice(idx, 1);
+        } else {
+            _modelFilters.devices.push(device);
+            // If the user has now re-included every available device, collapse
+            // to the "no filter" state so the pills render as all-on.
+            const available = [...new Set(_modelsForKind(_modelKindTab).map(m => m.device).filter(Boolean))];
+            if (available.length > 0 && available.every(d => _modelFilters.devices.includes(d))) {
+                _modelFilters.devices = [];
+            }
+        }
     }
     persistDeviceFilter();
     buildFilterBar(_allModels);
@@ -9679,7 +9919,9 @@ function persistDeviceFilter() {
 
 function applyFiltersAndRender() {
     const filtered = _allModels.filter(m => {
-        if (!_modelFilters.devices.includes(m.device)) return false;
+        // Kind tab: only show models matching the active tab.
+        if ((m.kind || 'chat') !== _modelKindTab) return false;
+        if (_modelFilters.devices.length > 0 && !_modelFilters.devices.includes(m.device)) return false;
         if (_modelFilters.tools && !m.tasks.includes('tools')) return false;
         if (_modelFilters.sizeKey) {
             const range = SIZE_RANGES.find(r => r.key === _modelFilters.sizeKey);
@@ -9690,20 +9932,28 @@ function applyFiltersAndRender() {
             if (range && !range.test(m.maxInputTokens)) return false;
         }
         if (_modelFilters.family && m.family !== _modelFilters.family) return false;
-        // Header-level filters (compat + tool calling)
+        // Header-level filters (compat + tool calling) — tool-calling irrelevant on voice tab.
         if (_compatFilterOn && m.fileSizeGb) {
             const maxGb = _getMaxModelGb(m.device);
             if (m.fileSizeGb > maxGb) return false;
         }
-        if (_toolCallFilterOn && !m.tasks.includes('tools')) return false;
+        if (_toolCallFilterOn && _modelKindTab === 'chat' && !m.tasks.includes('tools')) return false;
         return true;
     });
 
     const footerEl = document.getElementById('modelFooterText');
     const totalCachedGb = filtered.filter(m => m.cached && m.fileSizeGb).reduce((sum, m) => sum + m.fileSizeGb, 0).toFixed(1);
-    if (footerEl) footerEl.textContent = `${filtered.length} of ${_allModels.length} models · ${totalCachedGb} GB cached · Switching loads via Foundry Local`;
+    const tabTotal = _modelsForKind(_modelKindTab).length;
+    if (footerEl) {
+        if (_modelKindTab === 'speech') {
+            footerEl.textContent = `${filtered.length} of ${tabTotal} voice models · ${totalCachedGb} GB cached · Used for on-device transcription`;
+        } else {
+            footerEl.textContent = `${filtered.length} of ${tabTotal} models · ${totalCachedGb} GB cached · Switching loads via Foundry Local`;
+        }
+    }
 
     renderModelList(document.getElementById('modelList'), filtered);
+    _syncKindTabCounts();
     // Re-initialize focus trap after DOM update — preserve active element if still in modal
     if (_modelPickerOpen) {
         const modal = document.querySelector('.model-modal');
@@ -9727,13 +9977,18 @@ function renderModelList(list, models) {
     list.innerHTML = models.map(m => {
         const isActive    = m.active;
         const isSwitching = _switchingModelId === m.modelId;
+        const isDownloading = _downloadingModelIds.has(m.modelId);
+        const isSpeech    = (m.kind || 'chat') === 'speech';
+        const configuredVoice = settingsConfig?.speech?.model || null;
+        const isDefaultVoice = isSpeech && configuredVoice && m.modelId === configuredVoice;
         const maxGb       = _getMaxModelGb(m.device);
         const tooLarge    = m.fileSizeGb && m.fileSizeGb > maxGb && window._hwProfile;
         const noTools     = !m.tasks.includes('tools');
-        const ineligible  = tooLarge || (noTools && settingsConfig?.toolCallOnly);
-        const taskBadges  = m.tasks.includes('tools') ? '<span class="model-badge tools"><i data-lucide="wrench" style="width:9px;height:9px;vertical-align:-1px"></i> tools</span>' : '';
+        // Tool-call eligibility is a chat concept — don't penalize voice models for it.
+        const ineligible  = tooLarge || (noTools && settingsConfig?.toolCallOnly && !isSpeech);
+        const taskBadges  = !isSpeech && m.tasks.includes('tools') ? '<span class="model-badge tools"><i data-lucide="wrench" style="width:9px;height:9px;vertical-align:-1px"></i> tools</span>' : '';
         const warnBadges  = (tooLarge ? `<span class="model-badge warn"><i data-lucide="alert-triangle" style="width:9px;height:9px;vertical-align:-1px"></i> too large</span>` : '')
-                          + (noTools ? `<span class="model-badge warn">no tools</span>` : '');
+                          + (!isSpeech && noTools ? `<span class="model-badge warn">no tools</span>` : '');
         const updateBadge = m.updateAvailable ? `<span class="model-badge update" style="background:var(--accent-soft);color:var(--accent);border-color:color-mix(in oklch, var(--accent) 30%, transparent)"><i data-lucide="arrow-up-circle" style="width:9px;height:9px;vertical-align:-1px"></i> update</span>` : '';
         const sizeBadge   = m.fileSizeGb ? `<span class="model-badge size">${m.fileSizeGb} GB</span>` : '';
         const diskBadge   = m.cachePath ? '<span class="model-badge size" title="Cached on disk">💾 cached</span>' : '';
@@ -9743,7 +9998,7 @@ function renderModelList(list, models) {
         const ctxIn       = fmtTokens(m.maxInputTokens);
         const ctxOut      = fmtTokens(m.maxOutputTokens);
         const ctxTotal    = (m.maxInputTokens && m.maxOutputTokens) ? fmtTokens(m.maxInputTokens + m.maxOutputTokens) : null;
-        const ctxHtml     = ctxIn ? `
+        const ctxHtml     = (!isSpeech && ctxIn) ? `
             <div class="model-ctx-row">
               <span class="model-ctx-chip" title="Max input tokens">↑ ${ctxIn} in</span>
               <span class="model-ctx-sep">·</span>
@@ -9752,7 +10007,18 @@ function renderModelList(list, models) {
             </div>` : '';
         let actionHtml;
         if (isSwitching) {
-            actionHtml = `<button class="model-use-btn loading-btn" disabled><i data-lucide="loader" class="icon-sm"></i> Loading…</button>`;
+            actionHtml = `<button class="model-use-btn loading-btn" disabled><i data-lucide="loader" class="icon-sm"></i> ${isSpeech ? 'Working…' : 'Loading…'}</button>`;
+        } else if (isDownloading) {
+            actionHtml = `<button class="model-use-btn loading-btn" disabled><i data-lucide="loader" class="icon-sm"></i> Downloading…</button>`;
+        } else if (isSpeech) {
+            // Voice tab actions: Download (uncached) / Default badge / Set as Default
+            if (!m.cached) {
+                actionHtml = `<button class="model-use-btn download-btn" onclick="downloadModel('${esc(m.modelId)}')"><i data-lucide="download" class="icon-sm"></i> Download</button>`;
+            } else if (isDefaultVoice) {
+                actionHtml = `<button class="model-use-btn default-indicator" disabled title="Used by /api/transcribe"><i data-lucide="check" class="icon-sm"></i> Default</button>`;
+            } else {
+                actionHtml = `<button class="model-use-btn set-default-btn" onclick="setVoiceModel('${esc(m.modelId)}')" title="Use for transcription"><i data-lucide="mic" class="icon-sm"></i> Set as Default</button>`;
+            }
         } else if (isActive) {
             actionHtml = `<button class="model-use-btn active-indicator" disabled><i data-lucide="check" class="icon-sm"></i> Active</button>`;
         } else if (m.cached && m.updateAvailable) {
@@ -9760,13 +10026,28 @@ function renderModelList(list, models) {
         } else if (m.cached) {
             actionHtml = `<button class="model-use-btn" onclick="switchModel('${esc(m.modelId)}')"><i data-lucide="play" class="icon-sm"></i> Use</button>`;
         } else {
-            actionHtml = `<button class="model-use-btn download-btn" onclick="switchModelForced('${esc(m.modelId)}')"><i data-lucide="download" class="icon-sm"></i> Download</button>`;
+            // Pure download — does NOT switch the active chat model. User can
+            // kick off multiple parallel downloads and keep using the current
+            // model; once cached, the card transitions to a "Use" button.
+            actionHtml = `<button class="model-use-btn download-btn" onclick="downloadModel('${esc(m.modelId)}')"><i data-lucide="download" class="icon-sm"></i> Download</button>`;
+        }
+        // Trash button: shown for all cached models. Active chat model and
+        // configured default voice model use the active-locked variant.
+        let deleteHtml = '';
+        if (m.cached && !isSwitching && !isDownloading) {
+            if (isActive) {
+                deleteHtml = `<button class="model-delete-btn active-locked" id="del-${CSS.escape(m.modelId)}" onclick="explainCannotDeleteActive('${esc(m.alias || m.modelId)}')" aria-label="Active model — switch to a different model first to delete ${esc(m.alias || m.modelId)}" title="Active model — switch first to delete"><i data-lucide="trash-2" style="width:13px;height:13px" aria-hidden="true"></i></button>`;
+            } else if (isDefaultVoice) {
+                deleteHtml = `<button class="model-delete-btn active-locked" id="del-${CSS.escape(m.modelId)}" onclick="explainCannotDeleteDefaultVoice('${esc(m.alias || m.modelId)}')" aria-label="Default voice model — pick a different voice first to delete ${esc(m.alias || m.modelId)}" title="Default voice — pick another voice first to delete"><i data-lucide="trash-2" style="width:13px;height:13px" aria-hidden="true"></i></button>`;
+            } else {
+                deleteHtml = `<button class="model-delete-btn" id="del-${CSS.escape(m.modelId)}" onclick="deleteModelCache('${esc(m.modelId)}', '${esc(m.alias || m.modelId)}')" aria-label="Delete cached model ${esc(m.alias || m.modelId)}" title="Delete from disk${m.fileSizeGb ? ` (${m.fileSizeGb}\u00a0GB)` : ''}"><i data-lucide="trash-2" style="width:13px;height:13px" aria-hidden="true"></i></button>`;
+            }
         }
         return `
-        <div class="model-card${isActive ? ' active' : ''}${ineligible && !isActive ? ' ineligible' : ''}" id="model-card-${CSS.escape(m.modelId)}">
-          <div class="model-card-icon"><i data-lucide="${m.device === 'GPU' ? 'monitor' : m.device === 'CPU' ? 'server' : 'cpu'}"></i></div>
+        <div class="model-card${isActive ? ' active' : ''}${isDefaultVoice ? ' active' : ''}${ineligible && !isActive ? ' ineligible' : ''}" id="model-card-${CSS.escape(m.modelId)}">
+          <div class="model-card-icon"><i data-lucide="${isSpeech ? 'mic' : (m.device === 'GPU' ? 'monitor' : m.device === 'CPU' ? 'server' : 'cpu')}"></i></div>
           <div class="model-card-body">
-            <div class="model-card-alias">${esc(m.alias)} <span style="font-size:10px;color:var(--muted);font-weight:400">· ${esc(m.device || 'CPU')}</span>${isActive ? ' <span style="color:var(--green);font-size:10px">●</span>' : ''}</div>
+            <div class="model-card-alias">${esc(m.alias)} <span style="font-size:10px;color:var(--muted);font-weight:400">· ${esc(m.device || 'CPU')}</span>${isActive ? ' <span style="color:var(--green);font-size:10px" title="Active chat model">●</span>' : ''}${isDefaultVoice ? ' <span style="color:var(--green);font-size:10px" title="Default voice model">●</span>' : ''}</div>
             <div class="model-card-id">${esc(m.modelId)}</div>
             <div class="model-card-meta">${devBadge}${sizeBadge}${diskBadge}${paramBadge}${taskBadges}${warnBadges}${updateBadge}</div>
             ${ctxHtml}
@@ -9781,7 +10062,7 @@ function renderModelList(list, models) {
               <div class="model-progress-track"><div class="model-progress-fill indeterminate"></div></div>
             </div>
           </div>
-          <div class="model-card-action">${actionHtml}</div>
+          <div class="model-card-action">${deleteHtml}${actionHtml}</div>
         </div>`;
     }).join('');
     lucide.createIcons();
@@ -9813,6 +10094,7 @@ function _updateProgressBar(modelId, { message, pct, fileSizeGb } = {}) {
 async function switchModel(modelId) {
     if (_switchingModelId) return;
     _switchingModelId = modelId;
+    _setComposerSwitchingState(_aliasForModelId(modelId));
     applyFiltersAndRender();
 
     _updateProgressBar(modelId, { message: 'Connecting…' });
@@ -9866,6 +10148,7 @@ async function switchModel(modelId) {
         addChat('error-msg', 'alert-circle', `Model switch failed: ${esc(err.message)}`);
     } finally {
         _switchingModelId = null;
+        _clearComposerSwitchingState();
         await loadModelList();
     }
 }
@@ -9874,6 +10157,7 @@ async function switchModelForced(modelId) {
     // Same as switchModel but with forceDownload: true — downloads then loads
     if (_switchingModelId) return;
     _switchingModelId = modelId;
+    _setComposerSwitchingState(_aliasForModelId(modelId));
     applyFiltersAndRender();
     addChat('info', 'download', `Downloading <strong>${esc(modelId.split(':')[0])}</strong>… this may take a few minutes.`);
     try {
@@ -9912,7 +10196,168 @@ async function switchModelForced(modelId) {
         addChat('error-msg', 'alert-circle', `Download failed: ${esc(err.message)}`);
     } finally {
         _switchingModelId = null;
+        _clearComposerSwitchingState();
         await loadModelList();
+    }
+}
+
+// ── Delete cached model ─────────────────────────────────────────────
+
+function explainCannotDeleteActive(alias) {
+    addChat('info', 'info',
+        `<strong>${esc(alias)}</strong> is the active model — switch to a different model first, then delete it.`
+    );
+}
+
+function explainCannotDeleteDefaultVoice(alias) {
+    addChat('info', 'info',
+        `<strong>${esc(alias)}</strong> is the default voice model — pick a different voice in the Voice tab first, then delete it.`
+    );
+}
+
+// ── Voice model actions ─────────────────────────────────────────────
+
+async function setVoiceModel(modelId) {
+    try {
+        const res = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ speech: { model: modelId } })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        // Keep settingsConfig in sync so the UI badges update immediately.
+        try { settingsConfig = data; } catch {}
+        applyFiltersAndRender();
+        const entry = _allModels.find(m => m.modelId === modelId);
+        addChat('info', 'info',
+            `🎤 Voice model set to <strong>${esc(entry?.alias || modelId)}</strong> — used for on-device transcription.`
+        );
+    } catch (err) {
+        addChat('info', 'error', `Failed to set voice model: ${esc(String(err.message || err))}`);
+    }
+}
+
+// Pure-download flow shared by chat-tab and voice-tab "Download" buttons.
+// Independent of `_switchingModelId`: multiple models can download in
+// parallel and the currently-loaded chat model keeps serving the whole time.
+async function downloadModel(modelId) {
+    if (_downloadingModelIds.has(modelId)) return;
+    _downloadingModelIds.add(modelId);
+    applyFiltersAndRender();
+    _updateProgressBar(modelId, { message: 'Connecting…' });
+
+    try {
+        const res = await fetch('/api/models/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modelId })
+        });
+        if (!res.ok) throw new Error(await res.text());
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let finished = false;
+        while (!finished) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split('\n\n');
+            buf = lines.pop() || '';
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                let evt;
+                try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+                if (evt.type === 'progress') {
+                    _updateProgressBar(modelId, evt);
+                } else if (evt.type === 'error') {
+                    throw new Error(evt.message);
+                } else if (evt.type === 'done') {
+                    finished = true;
+                    break;
+                }
+            }
+        }
+        try { reader.cancel(); } catch {}
+    } catch (err) {
+        addChat('info', 'error', `Download failed: ${esc(String(err.message || err))}`);
+    } finally {
+        _downloadingModelIds.delete(modelId);
+        // Refresh catalog so the card transitions to the cached state (and
+        // the action button flips from Downloading… → Use / Set as Default).
+        try { await loadModelList(); } catch { applyFiltersAndRender(); }
+    }
+}
+
+// Backwards-compatible alias (older callers may still reference this name).
+const downloadVoiceModel = downloadModel;
+
+// Two-step inline confirmation: first click morphs the trash icon into
+// a "Delete?" pill; second click (within 4s) actually deletes.
+const _deletePending = new Map(); // modelId → timeoutId
+
+async function deleteModelCache(modelId, alias) {
+    // Note: we don't block when another model is switching/downloading —
+    // the trash button is already hidden for the in-flight model itself
+    // (see renderModelList: `if (m.cached && !isSwitching)`), and deleting
+    // an unrelated cached model in parallel is safe.
+    const btn = document.getElementById(`del-${CSS.escape(modelId)}`);
+    if (!btn) return;
+
+    // First click — enter confirm state
+    if (!_deletePending.has(modelId)) {
+        btn.classList.add('confirm');
+        btn.innerHTML = '<i data-lucide="trash-2" style="width:13px;height:13px" aria-hidden="true"></i> Delete?';
+        btn.setAttribute('aria-label', `Confirm delete ${alias}`);
+        lucide.createIcons();
+        const t = setTimeout(() => {
+            _deletePending.delete(modelId);
+            btn.classList.remove('confirm');
+            btn.innerHTML = '<i data-lucide="trash-2" style="width:13px;height:13px" aria-hidden="true"></i>';
+            btn.setAttribute('aria-label', `Delete cached model ${alias}`);
+            lucide.createIcons();
+        }, 4000);
+        _deletePending.set(modelId, t);
+        return;
+    }
+
+    // Second click — confirm
+    clearTimeout(_deletePending.get(modelId));
+    _deletePending.delete(modelId);
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader" style="width:12px;height:12px;animation:spin .9s linear infinite" aria-hidden="true"></i>';
+    lucide.createIcons();
+
+    try {
+        const res = await fetch(`/api/models/cache/${encodeURIComponent(modelId)}`, {
+            method: 'DELETE',
+            headers: { 'traceparent': generateTraceparent() },
+        });
+        if (!res.ok) {
+            const txt = await res.text();
+            let msg = txt;
+            try { msg = JSON.parse(txt).detail || msg; } catch {}
+            throw new Error(msg);
+        }
+        addChat('info', 'trash-2', `Removed <strong>${esc(alias)}</strong> from cache.`);
+        await loadModelList();
+    } catch (err) {
+        addChat('error-msg', 'alert-circle',
+            `Delete failed: ${esc(err.message)}. Try again, or restart the app if the model is still in use.`);
+        btn.disabled = false;
+        btn.classList.remove('confirm');
+        btn.innerHTML = '<i data-lucide="trash-2" style="width:13px;height:13px" aria-hidden="true"></i>';
+        lucide.createIcons();
+    }
+}
+
+// Cancel any outstanding "Delete?" confirm timers when the picker closes,
+// so reopening the modal doesn't show a stale second-click-arms-deletion state.
+function _cancelPendingDeletes() {
+    for (const [id, timer] of _deletePending.entries()) {
+        clearTimeout(timer);
+        _deletePending.delete(id);
     }
 }
 

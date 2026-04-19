@@ -7,7 +7,8 @@ test.describe('taskbean — Smoke Tests', () => {
       const errors = [];
       page.on('pageerror', err => errors.push(err.message));
       await page.goto('/');
-      await expect(page.locator('header h1')).toContainText('taskbean');
+      // Page title must contain the brand name.
+      await expect(page).toHaveTitle(/taskbean/i);
       await expect(page.locator('#chatFeed')).toBeVisible();
       await expect(page.locator('#chatInput')).toBeVisible();
       expect(errors).toHaveLength(0);

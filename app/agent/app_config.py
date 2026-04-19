@@ -47,6 +47,7 @@ _DEFAULTS: dict = {
         "engine": "auto",       # "auto" | "web" | "whisper" | "sapi"
         "fallback": "whisper",  # "web" | "whisper" | "sapi" | "none"
         "micDevice": None,      # null = system default, or device label/id string
+        "model": None,          # null = use default whisper-tiny alias; else a speech modelId
     },
     "schedule": {
         "dnd": {
