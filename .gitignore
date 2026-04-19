@@ -49,3 +49,7 @@ test-results/
 
 # Stray shell-output files that have been accidentally committed before
 datetime
+
+# Sentinel written by app/launch.ps1/launch.cmd after 'pip install'
+app/agent/.deps-installed
+
