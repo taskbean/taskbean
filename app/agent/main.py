@@ -191,88 +191,23 @@ _PUBLIC = Path(__file__).parent.parent / "public"
 
 # ── AG-UI command endpoint ─────────────────────────────────────────────────────
 
-from ag_ui.core import RunErrorEvent
-from ag_ui.encoder import EventEncoder
-from agent_framework_ag_ui import AGUIRequest
+from agent_framework_ag_ui import AGUIRequest, add_agent_framework_fastapi_endpoint
 
 # Agent is built inside initialize_foundry() after the model loads.
 # Do NOT call build_agent() here — MODEL_ID and SERVICE_BASE_URL are still
 # empty at module-load time, which would create a broken agent pointed at
 # an invalid URL (http://127.0.0.1:0/v1).
 
-
-@app.post("/api/command", tags=["AG-UI"], response_model=None)
-async def command_endpoint(request_body: AGUIRequest) -> StreamingResponse:
-    """AG-UI SSE endpoint — dynamically delegates to the current _agui_singleton
-    so that model switches take effect without re-registering routes."""
-    input_data = request_body.model_dump(exclude_none=True)
-    state = input_data.setdefault("state", {})
-    for key, value in {
+# Use the DynamicAgentProxy so model switches take effect without re-registration.
+add_agent_framework_fastapi_endpoint(
+    app,
+    agent_mod.agent_proxy,
+    "/api/command",
+    default_state={
         "todos": state_mod.todos,
         "recurringTemplates": state_mod.recurring_templates,
-    }.items():
-        if key not in state:
-            state[key] = copy.deepcopy(value)
-
-    # Truncate task context system messages to fit model's context window (80% budget)
-    msgs = input_data.get("messages", [])
-    if msgs and msgs[0].get("role") == "system" and "[Task Context]" in (msgs[0].get("content") or ""):
-        max_in = agent_mod.MODEL_CONTEXT.get("maxInputTokens")
-        max_out = agent_mod.MODEL_CONTEXT.get("maxOutputTokens")
-        budget = get_input_budget(max_in, max_out)
-        if budget:
-            # Use 80% of the budget for the context, leave 20% for user messages + response
-            ctx_budget = int(budget * 0.80)
-            original = msgs[0]["content"]
-            truncated, was_truncated = truncate_to_budget(original, ctx_budget)
-            if was_truncated:
-                msgs[0]["content"] = truncated
-                logger.info("Task context truncated: %d → %d tokens (budget=%d)", count_tokens(original), count_tokens(truncated), ctx_budget)
-
-    user_msg = ""
-    for m in reversed(msgs):
-        if m.get("role") == "user":
-            content = m.get("content", "")
-            user_msg = content if isinstance(content, str) else str(content)[:200]
-            break
-    span = trace.get_current_span()
-    span.set_attribute("flow", "command")
-    span.set_attribute("input_length", len(user_msg))
-    start = time.time()
-
-    async def _event_generator():
-        encoder = EventEncoder()
-        try:
-            inst = agent_mod._agui_singleton
-            if inst is None:
-                raise RuntimeError("Agent not yet initialized")
-            async for event in inst.run(input_data):
-                yield encoder.encode(event)
-            elapsed = int((time.time() - start) * 1000)
-            span.set_attribute("duration_ms", elapsed)
-            span.set_attribute("gen_ai.system", "foundry-local")
-            span.set_attribute("gen_ai.request.model", agent_mod.MODEL_ID)
-        except BaseException as exc:
-            logger.exception("Agent error during /api/command: %s", exc)
-            span.set_status(trace.StatusCode.ERROR, str(exc)[:200])
-            span.record_exception(exc)
-            try:
-                yield encoder.encode(RunErrorEvent(
-                    message=f"{type(exc).__name__}: {str(exc)[:300]}",
-                    code=type(exc).__name__,
-                ))
-            except Exception:
-                pass
-
-    return StreamingResponse(
-        _event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    },
+)
 
 
 _instructions_lock = asyncio.Lock()
@@ -280,15 +215,43 @@ _instructions_lock = asyncio.Lock()
 
 @app.middleware("http")
 async def refresh_instructions_middleware(request: Request, call_next):
-    """Refresh agent instructions before each /api/command request so the
-    agent always sees the current time and latest todo list.
+    """Pre-process /api/command requests:
+    1. Refresh agent instructions (current time + todo list)
+    2. Truncate [Task Context] system messages to fit model context window
 
-    Uses a lock so that concurrent requests cannot interleave instruction
+    Uses a lock so concurrent requests cannot interleave instruction
     mutations on the shared singleton.
     """
     if request.url.path == "/api/command":
         async with _instructions_lock:
             refresh_agent_instructions()
+
+        # Only intercept JSON requests — skip streaming/multipart content
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            body = await request.body()
+            if b"[Task Context]" in body:
+                try:
+                    data = json.loads(body)
+                    msgs = data.get("messages", [])
+                    if msgs and msgs[0].get("role") == "system" and "[Task Context]" in (msgs[0].get("content") or ""):
+                        max_in = agent_mod.MODEL_CONTEXT.get("maxInputTokens")
+                        max_out = agent_mod.MODEL_CONTEXT.get("maxOutputTokens")
+                        budget = get_input_budget(max_in, max_out)
+                        if budget:
+                            ctx_budget = int(budget * 0.80)
+                            original = msgs[0]["content"]
+                            truncated, was_truncated = truncate_to_budget(original, ctx_budget)
+                            if was_truncated:
+                                msgs[0]["content"] = truncated
+                                logger.info(
+                                    "Task context truncated: %d → %d tokens (budget=%d)",
+                                    count_tokens(original), count_tokens(truncated), ctx_budget,
+                                )
+                                request._body = json.dumps(data).encode()
+                except (json.JSONDecodeError, KeyError):
+                    pass  # let the endpoint handle malformed requests
+
     return await call_next(request)
 
 async def _metric_sampler() -> None:

@@ -379,13 +379,13 @@ const INFORMATIONAL_TOOLS = new Set(['get_current_datetime', 'get_weather']);
 const NL_TOOLS = [
     {
         name: 'add_task',
-        description: 'Add a plain task or todo item (no timed reminder). Use whenever the user wants to add, create, or save something to their list.',
+        description: 'Add a plain task or todo item. Do NOT use for timed reminders — use set_reminder instead.',
         parameters: {
             type: 'object',
             properties: {
                 title: { type: 'string' },
-                due_date: { type: 'string', description: 'YYYY-MM-DD if known' },
-                due_time: { type: 'string', description: 'HH:MM if known' },
+                due_date: { type: 'string', description: "Due date in YYYY-MM-DD format, e.g. '2026-04-20'" },
+                due_time: { type: 'string', description: "Due time in HH:MM 24h format, e.g. '14:30'" },
                 emoji: { type: 'string', description: 'A fun emoji' }
             },
             required: ['title']
@@ -393,14 +393,14 @@ const NL_TOOLS = [
     },
     {
         name: 'set_reminder',
-        description: 'Create a task with a timed Windows notification. Use for "remind me to..." requests.',
+        description: "Create a task with a timed Windows notification. Use for 'remind me to...' requests. Call get_current_datetime first to resolve relative times like 'tomorrow' or 'in 2 hours'.",
         parameters: {
             type: 'object',
             properties: {
                 title: { type: 'string', description: 'Reminder text' },
                 remind_at: { type: 'string', description: 'ISO 8601 datetime with Pacific offset, e.g. "2026-04-09T17:00:00-07:00"' },
-                due_date: { type: 'string', description: 'YYYY-MM-DD' },
-                due_time: { type: 'string', description: 'HH:MM (24h)' },
+                due_date: { type: 'string', description: "Due date in YYYY-MM-DD format, e.g. '2026-04-20'" },
+                due_time: { type: 'string', description: "Due time in HH:MM 24h format, e.g. '14:30'" },
                 emoji: { type: 'string', description: 'A fun emoji for the reminder' }
             },
             required: ['title', 'remind_at']
@@ -408,7 +408,7 @@ const NL_TOOLS = [
     },
     {
         name: 'mark_complete',
-        description: 'Mark a todo as done.',
+        description: "Mark a todo as done. Match 'done with X' or 'finished X' to the closest todo title.",
         parameters: {
             type: 'object',
             properties: { todo_id: { type: 'string', description: 'Todo ID' } },
@@ -435,17 +435,17 @@ const NL_TOOLS = [
     },
     {
         name: 'update_task',
-        description: 'Update an existing todo\'s fields. Only provided fields are changed. Use for rename, reschedule, edit, change priority, add notes requests.',
+        description: "Update an existing todo's fields. Only provided fields are changed. Use for rename, reschedule, edit, change priority, add notes requests. Do NOT use for marking done — use mark_complete instead.",
         parameters: {
             type: 'object',
             properties: {
                 todo_id: { type: 'string', description: 'Todo ID to update' },
                 title: { type: 'string', description: 'New title' },
-                due_date: { type: 'string', description: 'New due date (YYYY-MM-DD), or "clear" to remove' },
-                due_time: { type: 'string', description: 'New due time (HH:MM 24h), or "clear" to remove' },
-                priority: { type: 'string', description: 'Priority: high, medium, low, or none' },
+                due_date: { type: 'string', description: "New due date in YYYY-MM-DD format, e.g. '2026-04-20', or 'clear' to remove" },
+                due_time: { type: 'string', description: "New due time in HH:MM 24h format, e.g. '14:30', or 'clear' to remove" },
+                priority: { type: 'string', enum: ['high', 'medium', 'low', 'none'], description: 'New priority level' },
                 notes: { type: 'string', description: 'Notes in markdown format, or "clear" to remove' },
-                tags: { type: 'array', items: { type: 'string' }, description: 'Replace tags with this list' },
+                tags: { type: 'array', items: { type: 'string' }, description: "Replace tags with this list, e.g. ['work', 'urgent']" },
                 emoji: { type: 'string', description: 'New emoji' }
             },
             required: ['todo_id']

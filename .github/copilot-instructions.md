@@ -68,11 +68,13 @@ State is **in-memory only** — todos and recurring templates live in `state.py`
 
 ```
 Browser (public/index.html)
-  → POST /api/command (AG-UI SSE)
-    → Agent/AI completes with tools → Foundry Local SDK → NPU/GPU/CPU inference
+  → POST /api/command (AG-UI SSE via add_agent_framework_fastapi_endpoint)
+    → DynamicAgentProxy → _agui_singleton → Agent → Foundry Local SDK
     → Tool calls mutate state (in-memory todos)
     → AG-UI events stream back: STATE_SNAPSHOT, STATE_DELTA, TEXT_MESSAGE_CONTENT
 ```
+
+The `/api/command` endpoint uses `add_agent_framework_fastapi_endpoint()` from `agent_framework_ag_ui` with a `DynamicAgentProxy` that resolves the current agent singleton at call time (supports model switching). `require_confirmation=False` disables human-in-the-loop.
 
 Long text input (e.g., pasted docs) goes to `/api/extract` instead — `handleSend()` routes based on content length.
 
@@ -201,6 +203,16 @@ Large file/paste input goes through `/api/extract` which uses MCP (Model Context
 ### Tool parity
 
 `agent/tools.py` (Python) and `NL_TOOLS` in `server.js` define the same tool set. Keep them in sync when adding tools.
+
+### Tool-calling best practices (for local LLMs)
+
+These conventions are critical for reliable tool calling on small local models (0.5B–3.8B):
+
+- **`priority` uses `Literal["high", "medium", "low", "none"]`** (Python) / `enum` (JS) — prevents hallucinated values like "urgent" or "critical". Always use `enum` for constrained string parameters.
+- **Negative guidance in descriptions** — each tool's docstring says what it does AND when NOT to use it (e.g., `add_task`: "Do NOT use for reminders"). This helps small models disambiguate.
+- **Format examples in parameter descriptions** — e.g., `"YYYY-MM-DD, e.g. '2026-04-20'"`. Reduces argument format errors.
+- **`tool_choice`** — set to `"auto"` by default (model decides). Use `"required"` only for models that don't produce structured tool calls natively (e.g., phi-4-mini NPU). The `"required"` setting uses constrained decoding in the Foundry Local runtime, bypassing prompt template limitations.
+- **Keep ≤ 10 tools** — accuracy drops sharply above 10–15 tools. The current 8-tool surface is within the sweet spot.
 
 ### Python backend owns agent-usage writes
 

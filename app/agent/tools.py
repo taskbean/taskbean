@@ -6,7 +6,7 @@ import json
 import sys
 import time
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -96,15 +96,15 @@ def _traced_tool(fn):
 @_traced_tool
 def add_task(
     title: Annotated[str, "Task title"],
-    due_date: Annotated[str | None, "YYYY-MM-DD if known"] = None,
-    due_time: Annotated[str | None, "HH:MM if known"] = None,
+    due_date: Annotated[str | None, "Due date in YYYY-MM-DD format, e.g. '2026-04-20'"] = None,
+    due_time: Annotated[str | None, "Due time in HH:MM 24h format, e.g. '14:30'"] = None,
     emoji: Annotated[str | None, "A fun emoji"] = None,
-    priority: Annotated[str | None, "Priority: high, medium, low, or none"] = None,
+    priority: Annotated[Literal["high", "medium", "low", "none"] | None, "Task priority level"] = None,
     notes: Annotated[str | None, "Optional notes in markdown format"] = None,
-    tags: Annotated[list[str] | None, "Category tags like work, personal, errands"] = None,
+    tags: Annotated[list[str] | None, "Category tags, e.g. ['work', 'errands']"] = None,
     project: Annotated[str | None, "Project name to associate this task with"] = None,
 ) -> str:
-    """Add a plain task or todo item (no timed reminder). Use whenever the user wants to add, create, or save something to their list."""
+    """Add a plain task or todo item. Do NOT use for timed reminders — use set_reminder instead."""
     todo = state_mod.add_todo(title, due_date, due_time, "command", emoji, priority, notes, tags, project)
     return json.dumps({"success": True, "todo": todo})
 
@@ -114,11 +114,11 @@ def add_task(
 def set_reminder(
     title: Annotated[str, "Reminder text"],
     remind_at: Annotated[str, 'ISO 8601 datetime with timezone offset, e.g. "2026-04-09T17:00:00-07:00"'],
-    due_date: Annotated[str | None, "YYYY-MM-DD"] = None,
-    due_time: Annotated[str | None, "HH:MM (24h)"] = None,
+    due_date: Annotated[str | None, "Due date in YYYY-MM-DD format, e.g. '2026-04-20'"] = None,
+    due_time: Annotated[str | None, "Due time in HH:MM 24h format, e.g. '14:30'"] = None,
     emoji: Annotated[str | None, "A fun emoji for the reminder"] = None,
 ) -> str:
-    """Create a task with a timed notification. Use for 'remind me to...' requests."""
+    """Create a task with a timed notification. Use for 'remind me to...' requests. Call get_current_datetime first to resolve relative times like 'tomorrow' or 'in 2 hours'."""
     todo = state_mod.add_todo(title, due_date, due_time, "reminder", emoji or "🔔")
     state_mod.set_reminder(todo["id"], remind_at)
     return json.dumps({"success": True, "todo": todo, "message": f"Reminder set for {remind_at}"})
@@ -127,7 +127,7 @@ def set_reminder(
 @tool
 @_traced_tool
 def mark_complete(todo_id: Annotated[str, "Todo ID"]) -> str:
-    """Mark a todo as done."""
+    """Mark a todo as done. Match 'done with X' or 'finished X' to the closest todo title."""
     t = next((t for t in state_mod.todos if t["id"] == todo_id), None)
     if t:
         t["completed"] = True
@@ -162,14 +162,14 @@ def remove_task(todo_id: Annotated[str, "Todo ID"]) -> str:
 def update_task(
     todo_id: Annotated[str, "Todo ID to update"],
     title: Annotated[str | None, "New title"] = None,
-    due_date: Annotated[str | None, "New due date (YYYY-MM-DD), or 'clear' to remove"] = None,
-    due_time: Annotated[str | None, "New due time (HH:MM 24h), or 'clear' to remove"] = None,
-    priority: Annotated[str | None, "New priority: high, medium, low, or none"] = None,
+    due_date: Annotated[str | None, "New due date in YYYY-MM-DD format, e.g. '2026-04-20', or 'clear' to remove"] = None,
+    due_time: Annotated[str | None, "New due time in HH:MM 24h format, e.g. '14:30', or 'clear' to remove"] = None,
+    priority: Annotated[Literal["high", "medium", "low", "none"] | None, "New priority level"] = None,
     notes: Annotated[str | None, "Notes in markdown format, or 'clear' to remove"] = None,
-    tags: Annotated[list[str] | None, "Replace tags with this list"] = None,
+    tags: Annotated[list[str] | None, "Replace tags with this list, e.g. ['work', 'urgent']"] = None,
     emoji: Annotated[str | None, "New emoji"] = None,
 ) -> str:
-    """Update an existing todo's fields. Only provided fields are changed. Use for 'change', 'rename', 'move', 'reschedule', or 'update' requests."""
+    """Update an existing todo's fields. Only provided fields are changed. Use for 'change', 'rename', 'reschedule', or 'update' requests. Do NOT use for marking done — use mark_complete instead."""
     fields = {}
     if title is not None:
         fields["title"] = title

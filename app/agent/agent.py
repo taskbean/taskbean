@@ -12,7 +12,7 @@ from typing import Any
 # Windows strftime uses %#d to remove leading zeros; POSIX uses %-d.
 _DAY_FMT = "%#d" if sys.platform == "win32" else "%-d"
 
-from agent_framework import Agent, Content, ToolResultCompactionStrategy
+from agent_framework import Agent, ChatOptions, Content, ToolResultCompactionStrategy
 from agent_framework_openai import OpenAIChatCompletionClient
 from agent_framework_ag_ui import AgentFrameworkAgent
 from foundry_local_sdk import Configuration, FoundryLocalManager as FLSdk
@@ -304,12 +304,19 @@ def build_agent() -> tuple[Agent, AgentFrameworkAgent]:
     # preventing the message history from ballooning across tool rounds.
     compaction = ToolResultCompactionStrategy(keep_last_tool_call_groups=1)
 
+    # tool_choice="auto" lets the model decide; the system prompt and tool
+    # descriptions (with negative guidance + enum constraints) steer selection.
+    # Use "required" only for models that don't produce structured tool_calls
+    # natively (e.g., phi-4-mini NPU) — see research/tool-calling findings.
+    default_opts = ChatOptions(tool_choice="auto")
+
     agent = Agent(
         client=client,
         instructions=_build_instructions(),
         name="todo-assistant",
         tools=ALL_TOOLS,
         compaction_strategy=compaction,
+        default_options=default_opts,
     )
 
     # State schema shared with the frontend via AG-UI STATE_SNAPSHOT / STATE_DELTA.
@@ -322,11 +329,43 @@ def build_agent() -> tuple[Agent, AgentFrameworkAgent]:
         agent=agent,
         name="Foundry Todo Assistant",
         state_schema=state_schema,
+        # predict_state_config is NOT used here because taskbean's tools
+        # append/modify items in a list, while predictive state uses
+        # "replace" operations. Using it with add_task would replace the
+        # entire todos array with the title string, corrupting client state.
+        # STATE_SNAPSHOT after tool execution correctly reflects mutations.
+        require_confirmation=False,
     )
 
     _agent_singleton = agent
     _agui_singleton = ag_ui_agent
     return agent, ag_ui_agent
+
+
+class DynamicAgentProxy(AgentFrameworkAgent):
+    """Proxy that delegates to the current _agui_singleton.
+
+    ``add_agent_framework_fastapi_endpoint()`` captures the agent once at
+    registration time. Since taskbean rebuilds the agent on every model
+    switch, we need a stable proxy object that resolves the real singleton
+    at call time. This subclass overrides ``run()`` to delegate.
+    """
+
+    def __init__(self):
+        # Don't call super().__init__() — we don't have an agent yet.
+        # The proxy resolves the real AgentFrameworkAgent at run time.
+        pass
+
+    async def run(self, input_data: dict[str, Any]):
+        inst = _agui_singleton
+        if inst is None:
+            raise RuntimeError("Agent not yet initialized — call initialize_foundry() first")
+        async for event in inst.run(input_data):
+            yield event
+
+
+# Single proxy instance — passed to add_agent_framework_fastapi_endpoint()
+agent_proxy = DynamicAgentProxy()
 
 
 def refresh_agent_instructions() -> None:
