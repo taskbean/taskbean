@@ -5,6 +5,7 @@ Endpoints mirror the original Node.js server:
   GET  /api/models
   POST /api/models/switch      (SSE)
   GET  /api/todos
+  GET  /api/todos/overdue
   PATCH /api/todos/:id
   DELETE /api/todos/:id
   GET  /api/projects
@@ -18,6 +19,10 @@ Endpoints mirror the original Node.js server:
   GET  /api/templates
   POST /api/templates/activate
   POST /api/templates/deactivate
+  GET  /api/hardware/eps
+  GET  /api/port-info
+  POST /api/port
+  POST /api/suggest
   POST /api/upload
   POST /api/extract            (SSE)
   POST /api/transcribe
@@ -533,6 +538,16 @@ async def hardware_snapshot() -> dict:
     return _hardware_snapshot()
 
 
+@app.get("/api/hardware/eps")
+async def hardware_eps() -> list:
+    try:
+        manager = get_fl_manager()
+        eps = await asyncio.to_thread(manager.discover_eps)
+        return eps
+    except Exception:
+        return []
+
+
 # ── Model management ──────────────────────────────────────────────────────────
 
 def _parse_model_catalog() -> list[dict]:
@@ -744,6 +759,28 @@ def _sync_startup_shortcut(enabled: bool) -> None:
             logging.getLogger(__name__).info("Removed startup shortcut")
     except Exception as e:
         logging.getLogger(__name__).warning("Startup shortcut sync failed: %s", e)
+
+
+@app.get("/api/port-info")
+async def port_info() -> dict:
+    return {
+        "port": int(app_config.get("port") or 8275),
+        "default": 8275,
+        "conflict": None,
+        "configurable": True,
+    }
+
+
+class PortBody(BaseModel):
+    port: int
+
+
+@app.post("/api/port")
+async def set_port(body: PortBody) -> dict:
+    if body.port < 1024 or body.port > 65535:
+        raise HTTPException(400, "Port must be between 1024 and 65535")
+    app_config.set("port", body.port)
+    return {"ok": True, "port": body.port, "message": f"Port set to {body.port}. Restart taskbean for it to take effect."}
 
 
 @app.post("/api/config")
@@ -1091,6 +1128,34 @@ class TodoCreate(BaseModel):
     priority: str | None = None
     notes: str | None = None
     tags: list[str] | None = None
+
+
+@app.get("/api/todos/overdue")
+async def todos_overdue() -> list:
+    now = datetime.now(timezone.utc)
+    overdue = []
+    for t in state_mod.todos:
+        if not t.get("reminder") or t.get("completed") or t.get("reminderFired"):
+            continue
+        remind_at = t.get("remindAt")
+        if not remind_at:
+            continue
+        try:
+            remind_dt = datetime.fromisoformat(remind_at)
+            if remind_dt > now:
+                continue
+            delta = now - remind_dt
+            mins = int(delta.total_seconds() / 60)
+            if mins < 60:
+                overdue_since = f"{mins}m ago"
+            elif mins < 1440:
+                overdue_since = f"{mins // 60}h ago"
+            else:
+                overdue_since = f"{mins // 1440}d ago"
+            overdue.append({**t, "overdueSince": overdue_since})
+        except (ValueError, TypeError):
+            continue
+    return overdue
 
 
 @app.post("/api/todos", status_code=201)
@@ -2300,6 +2365,112 @@ async def process_speech(request: Request) -> dict:
 
         span.set_attribute("tasks.count", len(added))
         return {"success": True, "tasks": added}
+
+
+# ── Suggestions ───────────────────────────────────────────────────────────────
+
+def _get_time_of_day() -> str:
+    from tools import _get_tz
+    h = datetime.now(tz=_get_tz()).hour
+    if h < 6:
+        return "night"
+    if h < 12:
+        return "morning"
+    if h < 17:
+        return "afternoon"
+    if h < 21:
+        return "evening"
+    return "night"
+
+
+class SuggestContext(BaseModel):
+    trigger: str = "idle"
+    lastTodoTitle: str = ""
+    todoCount: int = 0
+    pendingCount: int = 0
+    timeOfDay: str = ""
+    categories: str = ""
+
+
+class SuggestBody(BaseModel):
+    context: SuggestContext | None = None
+
+
+@app.post("/api/suggest")
+async def suggest(body: SuggestBody) -> dict:
+    if not agent_mod.model_ready:
+        return {"suggestions": []}
+
+    ctx = body.context or SuggestContext()
+    trigger = ctx.trigger or "idle"
+    todo_count = ctx.todoCount or len(state_mod.todos)
+    pending_count = ctx.pendingCount or sum(1 for t in state_mod.todos if not t.get("completed"))
+    last_todo = ctx.lastTodoTitle or ""
+    time_of_day = ctx.timeOfDay or _get_time_of_day()
+    categories = ctx.categories or ""
+
+    todo_list = "\n".join(
+        f'- [{"x" if t.get("completed") else " "}] {t["title"]}'
+        f'{" (due: " + t["dueDate"] + ")" if t.get("dueDate") else ""}'
+        for t in state_mod.todos[:10]
+    ) or "(empty list)"
+
+    active_recurring = "\n".join(
+        f'- {r.get("icon", "🔁")} {r["title"]} (every {r.get("intervalMin", "?")}m)'
+        for r in state_mod.recurring_templates if r.get("active")
+    ) or "(none active)"
+
+    builtin_inactive = "\n".join(
+        f'- {b.get("icon", "🔁")} {b["title"]} ({b["intervalMin"]}m) — {b.get("description", "")}'
+        for b in state_mod.BUILT_IN_TEMPLATES
+        if not any(r["title"] == b["title"] and r.get("active") for r in state_mod.recurring_templates)
+    ) or "(all enabled)"
+
+    sys_prompt = f"""You generate quick suggestion chips for a todo app. Return ONLY a JSON array of 2-4 suggestions.
+
+Each suggestion: {{ "label": "emoji + short text (max 4 words)", "message": "the full command to send to the AI assistant" }}
+
+Context:
+- Trigger: {trigger}
+- Time: {time_of_day}
+- Total todos: {todo_count}, Pending: {pending_count}
+{f'- Last added: "{last_todo}"' if last_todo else ''}
+{f'- Active categories: {categories}' if categories else ''}
+
+Current todos:
+{todo_list}
+
+Active recurring reminders:
+{active_recurring}
+
+Available built-in recurring reminders (not yet enabled):
+{builtin_inactive}
+
+Rules:
+- If trigger is "onboarding" (empty list): suggest getting started (plan my day, add first task, what's the weather)
+- If trigger is "thematic" and lastTodo is set: suggest 2-3 related items in the same category
+- If trigger is "completion": suggest next actions or celebration
+- If trigger is "recurring_recommendations": suggest 2-3 recurring reminders to enable or create
+- If trigger is "idle" + morning: suggest planning the day
+- If trigger is "idle" + evening: suggest reviewing what's done
+- If trigger is "idle" + general: suggest organizing, adding reminders, or fun tasks
+- Keep labels SHORT (emoji + 2-4 words). Messages should be natural language commands.
+- Be creative, helpful, and slightly playful.
+
+Return ONLY the JSON array, no other text."""
+
+    try:
+        raw = await _foundry_complete(sys_prompt, f'Generate suggestions for trigger="{trigger}"')
+        match = re.search(r"\[[\s\S]*\]", raw)
+        suggestions = json.loads(match.group(0)) if match else []
+        suggestions = [
+            {"label": str(s.get("label", ""))[:40], "message": str(s.get("message", ""))[:200]}
+            for s in suggestions
+            if s.get("label") and s.get("message")
+        ][:4]
+        return {"suggestions": suggestions}
+    except Exception:
+        return {"suggestions": []}
 
 
 # ── Notifications ─────────────────────────────────────────────────────────────
