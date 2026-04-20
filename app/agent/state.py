@@ -1,9 +1,12 @@
 """Shared in-memory state for todos and recurring templates."""
 
 from __future__ import annotations
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 todos: list[dict[str, Any]] = []
@@ -49,6 +52,11 @@ def add_todo(
         "createdAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     todos.append(todo)
+    try:
+        import persistence
+        persistence.persist_todo(todo)
+    except Exception as e:
+        logger.warning("Failed to persist new todo: %s", e)
     return todo
 
 
@@ -68,6 +76,12 @@ def update_todo(todo_id: str, **fields: Any) -> dict[str, Any] | None:
             if key == "tags":
                 val = list(set(val[:10]))
             todo[key] = val
+    if todo:
+        try:
+            import persistence
+            persistence.update_todo_fields(todo)
+        except Exception as e:
+            logger.warning("Failed to persist todo update: %s", e)
     return todo
 
 
@@ -77,6 +91,11 @@ def set_reminder(todo_id: str, remind_at: str) -> dict[str, Any] | None:
         todo["reminder"] = True
         todo["remindAt"] = remind_at
         todo["reminderFired"] = False
+        try:
+            import persistence
+            persistence.update_todo_fields(todo)
+        except Exception as e:
+            logger.warning("Failed to persist reminder: %s", e)
     return todo
 
 
@@ -84,6 +103,11 @@ def activate_template(template: dict[str, Any]) -> dict[str, Any]:
     existing = next((r for r in recurring_templates if r["title"] == template["title"]), None)
     if existing:
         existing["active"] = True
+        try:
+            import persistence
+            persistence.update_template(existing)
+        except Exception as e:
+            logger.warning("Failed to persist template activation: %s", e)
         return existing
     rec = {
         "id": str(uuid.uuid4()),
@@ -97,6 +121,11 @@ def activate_template(template: dict[str, Any]) -> dict[str, Any]:
         "lastFired": datetime.now(timezone.utc).timestamp() * 1000,
     }
     recurring_templates.append(rec)
+    try:
+        import persistence
+        persistence.persist_template(rec)
+    except Exception as e:
+        logger.warning("Failed to persist template: %s", e)
     return rec
 
 
@@ -125,6 +154,11 @@ def create_custom_template(
         "custom": True,
     }
     recurring_templates.append(rec)
+    try:
+        import persistence
+        persistence.persist_template(rec)
+    except Exception as e:
+        logger.warning("Failed to persist custom template: %s", e)
     return rec
 
 
@@ -132,4 +166,9 @@ def deactivate_template(template_id: str) -> dict[str, Any] | None:
     rec = next((r for r in recurring_templates if r["id"] == template_id), None)
     if rec:
         rec["active"] = False
+        try:
+            import persistence
+            persistence.update_template(rec)
+        except Exception as e:
+            logger.warning("Failed to persist template deactivation: %s", e)
     return rec
