@@ -1,0 +1,46 @@
+{
+  "arm": "experiment",
+  "turns": [
+    {
+      "text": "I will mark your task as done. Please provide instructions on how to do so.",
+      "tool_calls": [],
+      "input_tokens": 643,
+      "output_tokens": 17,
+      "total_tokens": 660,
+      "ttft_ms": 0,
+      "e2e_ms": 3439,
+      "rounds": 0,
+      "xml_leak": false,
+      "error": null
+    }
+  ],
+  "cumulative_input_tokens": 643,
+  "cumulative_output_tokens": 17,
+  "cumulative_total_tokens": 660,
+  "total_e2e_ms": 3439,
+  "total_rounds": 0,
+  "tool_sequence": [],
+  "final_state": {
+    "todos": [
+      {
+        "id": "abc-123",
+        "title": "laundry",
+        "completed": false,
+        "emoji": null,
+        "dueDate": null,
+        "dueTime": null,
+        "priority": "none",
+        "notes": null,
+        "tags": [],
+        "source": "seed",
+        "reminder": false,
+        "remindAt": null
+      }
+    ],
+    "recurring_templates": []
+  },
+  "error": null,
+  "scenario_id": "single-02",
+  "model": "qwen2.5-0.5b",
+  "run_index": 0
+}

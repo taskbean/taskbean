@@ -7,7 +7,7 @@ This is a **monorepo** with two halves of the same product:
 | Directory | What | Tech |
 |-----------|------|------|
 | `cli/` | Agent-facing CLI tool — `bean add`, `bean done`, `bean report` | Node.js, commander, SQLite |
-| `app/` | Human-facing desktop PWA — dashboard, AI chat, reminders | FastAPI + Express, Foundry Local, vanilla JS |
+| `app/` | Human-facing desktop PWA — dashboard, AI chat, reminders | FastAPI, Foundry Local, vanilla JS |
 
 Both share `~/.taskbean/taskbean.db`. The CLI writes tasks; the app displays and manages them.
 
@@ -34,18 +34,15 @@ Skill wrappers set `TASKBEAN_AGENT` + `TASKBEAN_NATIVE_SESSION_ID` env vars so `
 
 ## Desktop App (`app/`)
 
-**Dual-backend** local AI todo app powered by [Foundry Local](https://github.com/microsoft/foundry-local) (on-device NPU/GPU/CPU inference). Both backends serve the same single-page frontend and share the same API contract.
+Local AI todo app powered by [Foundry Local](https://github.com/microsoft/foundry-local) (on-device NPU/GPU/CPU inference).
 
-### Two backends, one frontend
+### Backend
 
-| Backend | Entry point | Framework | When to use |
-|---------|-------------|-----------|-------------|
-| **Node.js** | `server.js` | Express 5 | Standalone — in-process inference via `foundry-local-sdk` native FFI |
-| **Python** | `agent/main.py` | FastAPI + uvicorn | Primary — uses `agent-framework` + `agent-framework-ag-ui` for multi-turn tool-calling |
+| Entry point | Framework | How to start |
+|-------------|-----------|-------------|
+| `agent/main.py` | FastAPI + uvicorn | `cd app/agent && python main.py` |
 
-The Python backend is the primary backend. The Node.js backend is legacy but still functional.
-
-Both backends use the Foundry Local SDK for in-process inference (no external service needed). The Node.js backend uses `FoundryLocalManager.create()` with auto-discovery; do NOT pass a custom `libraryPath` — it breaks EP (execution provider) registration for NPU models.
+Uses `agent-framework` + `agent-framework-ag-ui` for multi-turn tool-calling with Foundry Local SDK for on-device NPU/GPU/CPU inference (no external service needed).
 
 ### Python agent module structure
 
@@ -58,11 +55,11 @@ Both backends use the Foundry Local SDK for in-process inference (no external se
 | `agent/app_config.py` | Persistent config at `~/.taskbean/config.json`, model-switch lock |
 | `agent/hardware.py` | Windows NPU/GPU/CPU detection via WMI/PowerShell |
 | `agent/telemetry.py` | OTel pipeline + `UISpanExporter` for nerd panel |
-| `agent/notifications.py` | Windows toast notifications (optional `win10toast`) |
+| `agent/notifications.py` | Windows toast notifications via `winotify` |
 | `agent/recommender.py` | Model recommendation engine for hardware-based selection |
 | `agent/context.py` | Token counting via `tiktoken` + chunked extraction for large docs |
 
-State is **in-memory only** — todos and recurring templates live in `state.py` dicts and reset on restart. Config persists to `~/.taskbean/config.json` (migrated from legacy `~/.foundry-local-demo/`).
+State is **in-memory with SQLite write-through** — todos and recurring templates live in `state.py` dicts for fast access and are persisted to `~/.taskbean/taskbean.db` (shared with the CLI) via `persistence.py`. Config persists to `~/.taskbean/config.json` (migrated from legacy `~/.foundry-local-demo/`).
 
 ### Key data flow
 
@@ -88,17 +85,16 @@ OTel SDK (auto-instrumentation + manual spans)
   → BatchSpanProcessor  → OTLP/gRPC     → Jaeger v2.17
 ```
 
-- **`UISpanExporter`** (in `telemetry.js` and `agent/telemetry.py`) converts completed OTel spans into JSON events for the nerd panel. It whitelist-filters to only export app-level spans (`ai.complete`, `ai.completeWithTools`, `tool.*`, `model.switch`).
+- **`UISpanExporter`** (in `agent/telemetry.py`) converts completed OTel spans into JSON events for the nerd panel. It whitelist-filters to only export app-level spans (`ai.complete`, `ai.completeWithTools`, `tool.*`, `model.switch`).
 - **`health.snapshot`** and **`metric.sample`** are direct SSE pushes (not spans) — they bypass the OTel pipeline.
 - **GenAI semantic conventions**: AI spans carry `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.request.model`, `gen_ai.response.finish_reason`.
-- Token counts come from the SDK's standard `response.usage` field — streaming chunks include `usage` on every chunk (Foundry Local always provides this). Capture `chunk.usage` BEFORE the `if (!delta) continue` guard.
+- Token counts come from the SDK's standard `response.usage` field — streaming chunks include `usage` on every chunk (Foundry Local always provides this).
 
 ### Foundry Local SDK — EP registration
 
 The SDK auto-discovers and registers execution providers (VitisAI for NPU, MIGraphX for GPU) via `downloadAndRegisterEps()`. Critical rules:
 - Let the SDK auto-discover native libraries — do NOT pass `libraryPath` to `FoundryLocalManager.create()`.
 - After EP registration, invalidate the server-level model catalog cache (`_modelCatalogCache = null`) so NPU models appear in the API.
-- `foundry-local-sdk-winml` must be installed for NPU support. Run `node script/install-winml.cjs` if native DLLs are missing.
 
 ### Frontend
 
@@ -110,20 +106,12 @@ Chat submission uses `handleSend()` triggered by Enter key on `#chatInput` texta
 
 ## Build & Run
 
-### Python backend (primary)
+### Python backend
 
 ```bash
 cd app/agent
 pip install -r requirements.txt
 python main.py                    # starts on :8275, auto-starts Jaeger
-```
-
-### Node.js backend (legacy)
-
-```bash
-cd app
-npm install
-node server.js                    # starts on :8275, auto-starts Jaeger
 ```
 
 ### One-click launch
@@ -165,8 +153,6 @@ npx playwright test --project=smoke                    # smoke project only
 
 Requires the server running on `:8275`. Config uses 3 projects with dependencies: `smoke` runs first, then `features` and `model-tests` run after smoke passes. Runs in Edge (`channel: 'msedge'`), records trace/video on failure.
 
-Note: `npm test` runs `node test.js` (legacy Node test), not Playwright.
-
 ## Key Conventions
 
 ### SSE is the transport for everything complex
@@ -197,18 +183,14 @@ Large file/paste input goes through `/api/extract` which uses MCP (Model Context
 
 - `strftime`: `%#d` on Windows, `%-d` on POSIX
 - Hardware detection: WMI/PowerShell queries in `hardware.py`
-- Notifications: `win10toast` — optional, gracefully skipped if unavailable
+- Notifications: `winotify` — Windows toast notifications (gracefully skipped if unavailable)
 - Protocol handler: `taskbean://` registered by `launch.ps1` for PWA server restart
-
-### Tool parity
-
-`agent/tools.py` (Python) and `NL_TOOLS` in `server.js` define the same tool set. Keep them in sync when adding tools.
 
 ### Tool-calling best practices (for local LLMs)
 
 These conventions are critical for reliable tool calling on small local models (0.5B–3.8B):
 
-- **`priority` uses `Literal["high", "medium", "low", "none"]`** (Python) / `enum` (JS) — prevents hallucinated values like "urgent" or "critical". Always use `enum` for constrained string parameters.
+- **`priority` uses `Literal["high", "medium", "low", "none"]`** — prevents hallucinated values like "urgent" or "critical". Always use `enum` for constrained string parameters.
 - **Negative guidance in descriptions** — each tool's docstring says what it does AND when NOT to use it (e.g., `add_task`: "Do NOT use for reminders"). This helps small models disambiguate.
 - **Format examples in parameter descriptions** — e.g., `"YYYY-MM-DD, e.g. '2026-04-20'"`. Reduces argument format errors.
 - **`tool_choice`** — set to `"auto"` by default (model decides). Use `"required"` only for models that don't produce structured tool calls natively (e.g., phi-4-mini NPU). The `"required"` setting uses constrained decoding in the Foundry Local runtime, bypassing prompt template limitations.

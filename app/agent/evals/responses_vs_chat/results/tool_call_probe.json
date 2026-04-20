@@ -1,0 +1,215 @@
+{
+  "qwen2.5-0.5b": {
+    "model_id": "qwen2.5-0.5b-instruct-vitis-npu:3",
+    "prompt_template_system": "<|im_start|>system\n{Content}<|im_end|>",
+    "web_service": {
+      "has_structured_tool_calls": true,
+      "structured_tool_call_count": 1,
+      "has_xml_tool_call": true,
+      "has_phi_tool_call": false,
+      "has_json_block": false,
+      "has_function_name_in_text": true,
+      "text_preview": "<tool_call>\n{\"name\": \"add_task\", \"arguments\": {\"title\": \"buy groceries\"}}\n</tool_call>",
+      "tool_calls_detail": [
+        {
+          "id": "Z7e45vig3",
+          "name": "add_task",
+          "arguments": "{\r\n  \"title\": \"buy groceries\"\r\n}"
+        }
+      ],
+      "xml_extracted": [
+        {
+          "name": "add_task",
+          "arguments": {
+            "title": "buy groceries"
+          }
+        }
+      ],
+      "method": "WebService (/v1/chat/completions)",
+      "model_id": "qwen2.5-0.5b-instruct-vitis-npu:3",
+      "finish_reason": "tool_calls",
+      "input_tokens": 165,
+      "output_tokens": 20,
+      "error": null
+    },
+    "responses_api": {
+      "has_structured_tool_calls": false,
+      "structured_tool_call_count": 0,
+      "has_xml_tool_call": false,
+      "has_phi_tool_call": false,
+      "has_json_block": false,
+      "has_function_name_in_text": false,
+      "text_preview": "Sure, I can help with that. Please provide your tasks for today.",
+      "tool_calls_detail": [],
+      "method": "Responses API (/v1/responses)",
+      "model_id": "qwen2.5-0.5b-instruct-vitis-npu:3",
+      "input_tokens": 150,
+      "output_tokens": 15,
+      "error": null
+    }
+  },
+  "qwen2.5-coder-0.5b": {
+    "model_id": "qwen2.5-coder-0.5b-instruct-vitis-npu:2",
+    "prompt_template_system": "<|im_start|>system\n{Content}<|im_end|>",
+    "web_service": {
+      "has_structured_tool_calls": false,
+      "structured_tool_call_count": 0,
+      "has_xml_tool_call": false,
+      "has_phi_tool_call": false,
+      "has_json_block": true,
+      "has_function_name_in_text": false,
+      "text_preview": "```json\n{\n  \"name\": \"buyGroceries\",\n  \"arguments\": {\n    \"title\": \"Buy groceries\"\n  }\n}\n```",
+      "tool_calls_detail": [],
+      "method": "WebService (/v1/chat/completions)",
+      "model_id": "qwen2.5-coder-0.5b-instruct-vitis-npu:2",
+      "finish_reason": "stop",
+      "input_tokens": 165,
+      "output_tokens": 30,
+      "error": null
+    },
+    "responses_api": {
+      "has_structured_tool_calls": false,
+      "structured_tool_call_count": 0,
+      "has_xml_tool_call": false,
+      "has_phi_tool_call": false,
+      "has_json_block": true,
+      "has_function_name_in_text": false,
+      "text_preview": "```json\n{\n  \"name\": \"buy groceries\",\n  \"arguments\": {\n    \"items\": [\"apple\", \"banana\", \"orange\"]\n  }\n}\n```",
+      "tool_calls_detail": [],
+      "method": "Responses API (/v1/responses)",
+      "model_id": "qwen2.5-coder-0.5b-instruct-vitis-npu:2",
+      "input_tokens": 150,
+      "output_tokens": 34,
+      "error": null
+    }
+  },
+  "qwen2.5-coder-1.5b": {
+    "model_id": "qwen2.5-coder-1.5b-instruct-vitis-npu:2",
+    "prompt_template_system": "<|im_start|>system\n{Content}<|im_end|>",
+    "web_service": {
+      "has_structured_tool_calls": false,
+      "structured_tool_call_count": 0,
+      "has_xml_tool_call": false,
+      "has_phi_tool_call": false,
+      "has_json_block": true,
+      "has_function_name_in_text": true,
+      "text_preview": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"buy groceries\"\n  }\n}\n```",
+      "tool_calls_detail": [],
+      "method": "WebService (/v1/chat/completions)",
+      "model_id": "qwen2.5-coder-1.5b-instruct-vitis-npu:2",
+      "finish_reason": "stop",
+      "input_tokens": 165,
+      "output_tokens": 29,
+      "error": null
+    },
+    "responses_api": {
+      "has_structured_tool_calls": false,
+      "structured_tool_call_count": 0,
+      "has_xml_tool_call": false,
+      "has_phi_tool_call": false,
+      "has_json_block": true,
+      "has_function_name_in_text": true,
+      "text_preview": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"task\": \"buy groceries\"\n  }\n}\n```",
+      "tool_calls_detail": [],
+      "method": "Responses API (/v1/responses)",
+      "model_id": "qwen2.5-coder-1.5b-instruct-vitis-npu:2",
+      "input_tokens": 150,
+      "output_tokens": 29,
+      "error": null
+    }
+  },
+  "phi-4-mini": {
+    "model_id": "phi-4-mini-instruct-vitis-npu:2",
+    "prompt_template_system": "<|system|>{Content}<|end|>",
+    "web_service": {
+      "method": "WebService",
+      "model_id": "phi-4-mini-instruct-vitis-npu:2",
+      "error": ""
+    },
+    "responses_api": {
+      "has_structured_tool_calls": false,
+      "structured_tool_call_count": 0,
+      "has_xml_tool_call": false,
+      "has_phi_tool_call": false,
+      "has_json_block": false,
+      "has_function_name_in_text": false,
+      "text_preview": "add_20230405_0930_groceries Buy groceries at Walmart and Home Depot. Remember to check the sale section and compare prices. Leave time for picking up fresh produce and non-perishable items. Don't forget to make a list to avoid forgetting anything. Leave ample time to drive back home. Leave time to u",
+      "tool_calls_detail": [],
+      "method": "Responses API (/v1/responses)",
+      "model_id": "phi-4-mini-instruct-vitis-npu:2",
+      "input_tokens": 42,
+      "output_tokens": 500,
+      "error": null
+    }
+  },
+  "qwen2.5-coder-7b": {
+    "model_id": "qwen2.5-coder-7b-instruct-vitis-npu:2",
+    "prompt_template_system": "<|im_start|>system\n{Content}<|im_end|>",
+    "web_service": {
+      "has_structured_tool_calls": false,
+      "structured_tool_call_count": 0,
+      "has_xml_tool_call": false,
+      "has_phi_tool_call": false,
+      "has_json_block": false,
+      "has_function_name_in_text": false,
+      "text_preview": "ampie\n\n\n\n\n\n\n\n\n```\n\"\n\n\n```\n\n",
+      "tool_calls_detail": [],
+      "method": "WebService (/v1/chat/completions)",
+      "model_id": "qwen2.5-coder-7b-instruct-vitis-npu:2",
+      "finish_reason": "stop",
+      "input_tokens": 165,
+      "output_tokens": 41,
+      "error": null
+    },
+    "responses_api": {
+      "has_structured_tool_calls": false,
+      "structured_tool_call_count": 0,
+      "has_xml_tool_call": false,
+      "has_phi_tool_call": false,
+      "has_json_block": false,
+      "has_function_name_in_text": false,
+      "text_preview": "'t have any arguments to\n\n\n\n\n\n\n\n\n\n\n\n\n```\nampie\noutil\n\n",
+      "tool_calls_detail": [],
+      "method": "Responses API (/v1/responses)",
+      "model_id": "qwen2.5-coder-7b-instruct-vitis-npu:2",
+      "input_tokens": 150,
+      "output_tokens": 47,
+      "error": null
+    }
+  },
+  "qwen2.5-7b": {
+    "model_id": "qwen2.5-7b-instruct-vitis-npu:2",
+    "prompt_template_system": "<|im_start|>system\n{Content}<|im_end|>",
+    "web_service": {
+      "has_structured_tool_calls": false,
+      "structured_tool_call_count": 0,
+      "has_xml_tool_call": false,
+      "has_phi_tool_call": false,
+      "has_json_block": false,
+      "has_function_name_in_text": false,
+      "text_preview": "120 \\nGenerate a a{\"a brief response\n{\"renewably,\"How to describe the \"response Ryzen>\n\"response{a brief\u56de\u7b54 to user\nPlease specify how you'desription to1 \"\u8832{\\nGenerate{\"\\text{AI generated a{\"\\n{\"response response\\n\"Generate brief brief sentence about a{\\n\"Generate a of a{\\n\"Generate{\"Generate a{\"The ",
+      "tool_calls_detail": [],
+      "method": "WebService (/v1/chat/completions)",
+      "model_id": "qwen2.5-7b-instruct-vitis-npu:2",
+      "finish_reason": "length",
+      "input_tokens": 165,
+      "output_tokens": 500,
+      "error": null
+    },
+    "responses_api": {
+      "has_structured_tool_calls": false,
+      "structured_tool_call_count": 0,
+      "has_xml_tool_call": false,
+      "has_phi_tool_call": false,
+      "has_json_block": false,
+      "has_function_name_in_text": false,
+      "text_preview": " \\n\nanswerIn a, you write \"Thequery\n\nInquery matching\n\n{\"\\n\"\\\\n\nspringin' \"yieldin\n2020\n{\"1. {\"\n\n{\"\n\n20240 \"In\nspring\nin202020\n202020\n{\"temperature\nin\n{\"in\n\\ spring\naunder\nin202020\n202020\n202020202020202020202020202020202020202020202920202020 already added\n2020292020202020202020202020202020202020202",
+      "tool_calls_detail": [],
+      "method": "Responses API (/v1/responses)",
+      "model_id": "qwen2.5-7b-instruct-vitis-npu:2",
+      "input_tokens": 150,
+      "output_tokens": 500,
+      "error": null
+    }
+  }
+}

@@ -1,6 +1,6 @@
 """Persistent application configuration.
 
-Stored at ~/.foundry-local-demo/config.json so settings survive restarts and
+Stored at ~/.taskbean/config.json so settings survive restarts and
 reboots. Falls back to safe defaults if the file is missing or corrupt.
 
 Config keys

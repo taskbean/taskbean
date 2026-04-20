@@ -1,0 +1,46 @@
+{
+  "arm": "experiment",
+  "turns": [
+    {
+      "text": "Mark task abc-123 as done.",
+      "tool_calls": [],
+      "input_tokens": 297,
+      "output_tokens": 8,
+      "total_tokens": 305,
+      "ttft_ms": 0,
+      "e2e_ms": 2540,
+      "rounds": 0,
+      "xml_leak": false,
+      "error": null
+    }
+  ],
+  "cumulative_input_tokens": 297,
+  "cumulative_output_tokens": 8,
+  "cumulative_total_tokens": 305,
+  "total_e2e_ms": 2540,
+  "total_rounds": 0,
+  "tool_sequence": [],
+  "final_state": {
+    "todos": [
+      {
+        "id": "abc-123",
+        "title": "laundry",
+        "completed": false,
+        "emoji": null,
+        "dueDate": null,
+        "dueTime": null,
+        "priority": "none",
+        "notes": null,
+        "tags": [],
+        "source": "seed",
+        "reminder": false,
+        "remindAt": null
+      }
+    ],
+    "recurring_templates": []
+  },
+  "error": null,
+  "scenario_id": "single-02",
+  "model": "phi-4-mini",
+  "run_index": 1
+}

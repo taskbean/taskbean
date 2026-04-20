@@ -1,0 +1,168 @@
+{
+  "qwen2.5-0.5b": {
+    "A1_official_ffi": {
+      "finish_reason": "tool_calls",
+      "has_structured_tool_calls": true,
+      "tool_call_count": 1,
+      "tool_calls": [
+        {
+          "name": "get_weather",
+          "args": "{\r\n  \"location\": \"Seattle\"\r\n}",
+          "id": "3HvCBPZ6e"
+        }
+      ],
+      "has_xml_tool_call": true,
+      "text_preview": "<tool_call>\n{\"name\": \"get_weather\", \"arguments\": {\"location\": \"Seattle\"}}\n</tool_call>\n{\"name\": \"calculate\", \"arguments\": {\"expression\": \"42 * 17\"}}\n</tool_call>",
+      "input_tokens": 221,
+      "output_tokens": 41
+    },
+    "A2_our_ffi": {
+      "finish_reason": "tool_calls",
+      "has_structured_tool_calls": true,
+      "tool_call_count": 1,
+      "tool_calls": [
+        {
+          "name": "add_task",
+          "args": "{\r\n  \"title\": \"buy groceries\"\r\n}",
+          "id": "WFa9stcun"
+        }
+      ],
+      "has_xml_tool_call": true,
+      "text_preview": "<tool_call>\n{\"name\": \"add_task\", \"arguments\": {\"title\": \"buy groceries\"}}\n</tool_call>",
+      "input_tokens": 165,
+      "output_tokens": 20
+    },
+    "B1_official_ws": {
+      "error": "not cached"
+    },
+    "B2_our_ws": {
+      "error": "not cached"
+    }
+  },
+  "qwen2.5-coder-0.5b": {
+    "A1_official_ffi": {
+      "finish_reason": "stop",
+      "has_structured_tool_calls": false,
+      "tool_call_count": 0,
+      "tool_calls": [],
+      "has_xml_tool_call": false,
+      "text_preview": "```json\n{\n  \"name\": \"get_weather\",\n  \"arguments\": {\n    \"location\": \"Seattle\",\n    \"unit\": \"celsius\"\n  }\n}\n```",
+      "input_tokens": 221,
+      "output_tokens": 36
+    },
+    "A2_our_ffi": {
+      "finish_reason": "stop",
+      "has_structured_tool_calls": false,
+      "tool_call_count": 0,
+      "tool_calls": [],
+      "has_xml_tool_call": false,
+      "text_preview": "```json\n{\n  \"name\": \"buyGroceries\",\n  \"arguments\": {\n    \"title\": \"Buy groceries\"\n  }\n}\n```",
+      "input_tokens": 165,
+      "output_tokens": 30
+    },
+    "B1_official_ws": {
+      "error": "not cached"
+    },
+    "B2_our_ws": {
+      "error": "not cached"
+    }
+  },
+  "qwen2.5-coder-1.5b": {
+    "A1_official_ffi": {
+      "finish_reason": "stop",
+      "has_structured_tool_calls": false,
+      "tool_call_count": 0,
+      "tool_calls": [],
+      "has_xml_tool_call": false,
+      "text_preview": "```json\n{\n  \"name\": \"get_weather\",\n  \"arguments\": {\n    \"location\": \"Seattle\",\n    \"unit\": \"celsius\"\n  }\n}\n```",
+      "input_tokens": 221,
+      "output_tokens": 36
+    },
+    "A2_our_ffi": {
+      "finish_reason": "stop",
+      "has_structured_tool_calls": false,
+      "tool_call_count": 0,
+      "tool_calls": [],
+      "has_xml_tool_call": false,
+      "text_preview": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"buy groceries\"\n  }\n}\n```",
+      "input_tokens": 165,
+      "output_tokens": 29
+    },
+    "B1_official_ws": {
+      "error": "not cached"
+    },
+    "B2_our_ws": {
+      "error": "not cached"
+    }
+  },
+  "phi-4-mini": {
+    "A1_official_ffi": {
+      "finish_reason": "stop",
+      "has_structured_tool_calls": false,
+      "tool_call_count": 0,
+      "tool_calls": [],
+      "has_xml_tool_call": false,
+      "text_preview": "The current weather conditions in Seattle, WA, are partly cloudy with a temperature of 55\u00b0F, and there is a 10% chance of rain. The wind is coming from the NE at 5 mph, and the sky is partly cloudy.\n\nRegarding the math question, 42 multiplied by 17 is equal to 714.",
+      "input_tokens": 39,
+      "output_tokens": 67
+    },
+    "A2_our_ffi": {
+      "finish_reason": "length",
+      "has_structured_tool_calls": false,
+      "tool_call_count": 0,
+      "tool_calls": [],
+      "has_xml_tool_call": false,
+      "text_preview": "add_20230405_0930_groceries Buy groceries at Walmart and Home Depot. Remember to check the sale section and compare prices. Leave time for picking up fresh produce and non-perishable items. Don't forget to make a list to avoid forgetting anything. Leave ample time to drive back home. Leave time to u",
+      "input_tokens": 42,
+      "output_tokens": 500
+    },
+    "B1_official_ws": {
+      "error": "not cached"
+    },
+    "B2_our_ws": {
+      "error": "not cached"
+    }
+  },
+  "qwen2.5-coder-7b": {
+    "A1_official_ffi": {
+      "finish_reason": "stop",
+      "has_structured_tool_calls": false,
+      "tool_call_count": 0,
+      "tool_calls": [],
+      "has_xml_tool_call": false,
+      "text_preview": "",
+      "input_tokens": 221,
+      "output_tokens": 1
+    },
+    "A2_our_ffi": {
+      "finish_reason": "stop",
+      "has_structured_tool_calls": false,
+      "tool_call_count": 0,
+      "tool_calls": [],
+      "has_xml_tool_call": false,
+      "text_preview": "ampie\n\n\n\n\n\n\n\n\n```\n\"\n\n\n```\n\n",
+      "input_tokens": 165,
+      "output_tokens": 41
+    },
+    "B1_official_ws": {
+      "error": "not cached"
+    },
+    "B2_our_ws": {
+      "error": "not cached"
+    }
+  },
+  "qwen2.5-7b": {
+    "A1_official_ffi": {
+      "error": "Error during chat completion: Operation was cancelled\u0000"
+    },
+    "A2_our_ffi": {
+      "error": "Error during chat completion: Operation was cancelled\u0000"
+    },
+    "B1_official_ws": {
+      "error": "not cached"
+    },
+    "B2_our_ws": {
+      "error": "not cached"
+    }
+  }
+}

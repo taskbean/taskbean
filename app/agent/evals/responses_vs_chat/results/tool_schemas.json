@@ -1,0 +1,398 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "add_task",
+      "description": "Add a plain task or todo item (no timed reminder). Use whenever the user wants to add, create, or save something to their list.",
+      "parameters": {
+        "properties": {
+          "title": {
+            "description": "Task title",
+            "title": "Title",
+            "type": "string"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "YYYY-MM-DD if known",
+            "title": "Due Date"
+          },
+          "due_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "HH:MM if known",
+            "title": "Due Time"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A fun emoji",
+            "title": "Emoji"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Priority: high, medium, low, or none",
+            "title": "Priority"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional notes in markdown format",
+            "title": "Notes"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Category tags like work, personal, errands",
+            "title": "Tags"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Project name to associate this task with",
+            "title": "Project"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "add_task_input",
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_reminder",
+      "description": "Create a task with a timed notification. Use for 'remind me to...' requests.",
+      "parameters": {
+        "properties": {
+          "title": {
+            "description": "Reminder text",
+            "title": "Title",
+            "type": "string"
+          },
+          "remind_at": {
+            "description": "ISO 8601 datetime with timezone offset, e.g. \"2026-04-09T17:00:00-07:00\"",
+            "title": "Remind At",
+            "type": "string"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "YYYY-MM-DD",
+            "title": "Due Date"
+          },
+          "due_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "HH:MM (24h)",
+            "title": "Due Time"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A fun emoji for the reminder",
+            "title": "Emoji"
+          }
+        },
+        "required": [
+          "title",
+          "remind_at"
+        ],
+        "title": "set_reminder_input",
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "mark_complete",
+      "description": "Mark a todo as done.",
+      "parameters": {
+        "properties": {
+          "todo_id": {
+            "description": "Todo ID",
+            "title": "Todo Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "todo_id"
+        ],
+        "title": "mark_complete_input",
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "mark_incomplete",
+      "description": "Re-open a completed todo.",
+      "parameters": {
+        "properties": {
+          "todo_id": {
+            "description": "Todo ID",
+            "title": "Todo Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "todo_id"
+        ],
+        "title": "mark_incomplete_input",
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "remove_task",
+      "description": "Delete a todo.",
+      "parameters": {
+        "properties": {
+          "todo_id": {
+            "description": "Todo ID",
+            "title": "Todo Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "todo_id"
+        ],
+        "title": "remove_task_input",
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "update_task",
+      "description": "Update an existing todo's fields. Only provided fields are changed. Use for 'change', 'rename', 'move', 'reschedule', or 'update' requests.",
+      "parameters": {
+        "properties": {
+          "todo_id": {
+            "description": "Todo ID to update",
+            "title": "Todo Id",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New title",
+            "title": "Title"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New due date (YYYY-MM-DD), or 'clear' to remove",
+            "title": "Due Date"
+          },
+          "due_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New due time (HH:MM 24h), or 'clear' to remove",
+            "title": "Due Time"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New priority: high, medium, low, or none",
+            "title": "Priority"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Notes in markdown format, or 'clear' to remove",
+            "title": "Notes"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Replace tags with this list",
+            "title": "Tags"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New emoji",
+            "title": "Emoji"
+          }
+        },
+        "required": [
+          "todo_id"
+        ],
+        "title": "update_task_input",
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_current_datetime",
+      "description": "Get current date/time in the user's configured timezone. Call when you need to resolve relative times before setting a reminder.",
+      "parameters": {
+        "properties": {},
+        "title": "get_current_datetime_input",
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_weather",
+      "description": "Get current weather for a location. Default is Redmond, WA. Only call when the user explicitly asks about current weather conditions.",
+      "parameters": {
+        "properties": {
+          "latitude": {
+            "default": 47.674,
+            "description": "Latitude (default 47.674 for Redmond)",
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "default": -122.121,
+            "description": "Longitude (default -122.121 for Redmond)",
+            "title": "Longitude",
+            "type": "number"
+          }
+        },
+        "title": "get_weather_input",
+        "type": "object"
+      }
+    }
+  }
+]
