@@ -437,7 +437,7 @@ async def _foundry_complete(system_prompt: str, user_message: str) -> str:
     usage: dict[str, Any] = {}
     chunk: dict[str, Any] = {}
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=300, write=10, pool=10)) as client:
         async with client.stream("POST", url, json=body, headers=headers) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
@@ -446,7 +446,10 @@ async def _foundry_complete(system_prompt: str, user_message: str) -> str:
                 data = line[6:]
                 if data == "[DONE]":
                     break
-                chunk = json.loads(data)
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
                 # Capture usage from the final chunk (Foundry Local includes it)
                 if chunk.get("usage"):
                     usage = chunk["usage"]
@@ -1200,6 +1203,11 @@ async def delete_todo(todo_id: str) -> dict:
     if idx is None:
         raise HTTPException(404, "Not found")
     state_mod.todos.pop(idx)
+    try:
+        import persistence
+        persistence.delete_todo(todo_id)
+    except Exception as e:
+        logger.warning("Failed to delete todo from DB: %s", e)
     return {"success": True}
 
 
@@ -1212,6 +1220,11 @@ async def todo_action(todo_id: str, action: str | None = None):
 
     if action == "complete":
         todo["completed"] = True
+        try:
+            import persistence
+            persistence.update_todo_fields(todo)
+        except Exception:
+            pass
         return HTMLResponse(
             "<h2>✅ Done!</h2>"
             f"<p>Marked <strong>{todo['title']}</strong> as complete.</p>"
@@ -1223,6 +1236,11 @@ async def todo_action(todo_id: str, action: str | None = None):
         todo["reminder"] = True
         todo["remindAt"] = snooze_until
         todo["reminderFired"] = False
+        try:
+            import persistence
+            persistence.update_todo_fields(todo)
+        except Exception:
+            pass
         return HTMLResponse(
             "<h2>⏰ Snoozed</h2>"
             f"<p><strong>{todo['title']}</strong> will remind you again in 10 minutes.</p>"
@@ -1274,16 +1292,13 @@ async def get_projects() -> list:
     result = []
     for r in rows:
         name = r["name"]
-        project_todos = [t for t in state_mod.todos if t.get("project") == name]
         sc = todo_counts.get(name, {"total": 0, "done": 0})
-        mem_total = len(project_todos)
-        mem_done = sum(1 for t in project_todos if t.get("completed"))
         result.append({
             "name": name,
             "path": r["path"],
-            "total": sc["total"] + mem_total,
-            "done": sc["done"] + mem_done,
-            "pending": (sc["total"] - sc["done"]) + (mem_total - mem_done),
+            "total": sc["total"],
+            "done": sc["done"],
+            "pending": sc["total"] - sc["done"],
         })
     return result
 
