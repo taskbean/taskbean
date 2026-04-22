@@ -1,0 +1,46 @@
+{
+  "arm": "experiment",
+  "turns": [
+    {
+      "text": "delete_2026-04-19-task-1",
+      "tool_calls": [],
+      "input_tokens": 302,
+      "output_tokens": 11,
+      "total_tokens": 313,
+      "ttft_ms": 0,
+      "e2e_ms": 3335,
+      "rounds": 0,
+      "xml_leak": false,
+      "error": null
+    }
+  ],
+  "cumulative_input_tokens": 302,
+  "cumulative_output_tokens": 11,
+  "cumulative_total_tokens": 313,
+  "total_e2e_ms": 3335,
+  "total_rounds": 0,
+  "tool_sequence": [],
+  "final_state": {
+    "todos": [
+      {
+        "id": "task-del-1",
+        "title": "old meeting",
+        "completed": false,
+        "emoji": null,
+        "dueDate": null,
+        "dueTime": null,
+        "priority": "none",
+        "notes": null,
+        "tags": [],
+        "source": "seed",
+        "reminder": false,
+        "remindAt": null
+      }
+    ],
+    "recurring_templates": []
+  },
+  "error": null,
+  "scenario_id": "single-03",
+  "model": "phi-4-mini",
+  "run_index": 1
+}

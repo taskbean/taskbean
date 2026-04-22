@@ -81,10 +81,8 @@ Every productivity app wants your data on their servers. Every AI assistant need
 | **Backend** | Python 3.10+, FastAPI, uvicorn, Agent Framework + AG-UI protocol |
 | **AI Runtime** | [Foundry Local SDK](https://github.com/microsoft/foundry-local) — on-device inference |
 | **Telemetry** | OpenTelemetry → Jaeger (optional, for nerd mode tracing) |
-| **Notifications** | Windows toast notifications via win10toast |
+| **Notifications** | Windows toast notifications via `winotify` |
 | **File Parsing** | MCP (Model Context Protocol) + MarkItDown |
-| **Legacy Backend** | Node.js / Express 5 (still functional, in `server.js`) |
-
 ---
 
 ## Install
@@ -189,7 +187,6 @@ python main.py
 | Dependency | Purpose | Install |
 |-----------|---------|---------|
 | **Docker** | Jaeger tracing (nerd mode) | [docker.com](https://www.docker.com/products/docker-desktop/) |
-| **Node.js 18+** | Legacy Node backend only | [nodejs.org](https://nodejs.org/) |
 
 ### Python Packages (installed via `pip install -r requirements.txt`)
 
@@ -198,7 +195,7 @@ python main.py
 - `fastapi` + `uvicorn` — Web framework
 - `tiktoken` — Token counting for context management
 - `opentelemetry-sdk` — Telemetry and tracing
-- `win10toast` — Windows notifications
+- `winotify` — Windows notifications
 - `mcp` — MarkItDown file conversion
 
 ---
@@ -274,9 +271,8 @@ Local speech recognition requires a Windows language pack. If prompted, go to:
 
 ## Known Issues
 
-- **Tool parity**: The Python backend has 7 tools; the legacy Node.js backend has 8 (`create_recurring_reminder` is Node-only)
 - **Windows-only NPU**: NPU acceleration requires Windows. GPU/CPU work cross-platform with Foundry Local, but notifications and some hardware detection are Windows-specific
-- **Single-user**: The app stores state in-memory (Python) or on-disk (Node). No multi-user support
+- **Single-user**: The app stores state in-memory. No multi-user support
 - **Model size**: First model download can be 2–4 GB depending on the model
 
 ---
@@ -315,8 +311,6 @@ taskbean/
 │   ├── manifest.json         # PWA manifest
 │   ├── vendor/               # Self-hosted vendor scripts
 │   └── icons/                # App icons (192px, 512px)
-├── server.js                 # Legacy Node.js backend
-├── telemetry.js              # Node.js OpenTelemetry setup
 ├── docker-compose.yml        # Jaeger all-in-one
 ├── launch.ps1                # One-click launcher (PowerShell)
 ├── launch.cmd                # One-click launcher (batch)

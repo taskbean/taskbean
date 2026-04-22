@@ -1,0 +1,1010 @@
+{
+  "qwen2.5-0.5b": {
+    "baseline": {
+      "accuracy": 60.0,
+      "correct": 6,
+      "total": 10,
+      "details": [
+        {
+          "scenario": "add",
+          "expected": "add_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 613,
+          "output_tokens": 47,
+          "text_preview": "SetTitle: \"buy groceries\"\nPriority: \"low\"\nNotes: \"I need to go to the grocery store.\"\nTags: [\"groceries\", \"shopping\"]\nDue Date Time: \"today\"\nRemind At"
+        },
+        {
+          "scenario": "complete",
+          "expected": "mark_complete",
+          "called": [
+            "mark_complete"
+          ],
+          "correct": true,
+          "finish_reason": "tool_calls",
+          "structured": true,
+          "input_tokens": 630,
+          "output_tokens": 24,
+          "text_preview": "<tool_call>\n{\"name\": \"mark_complete\", \"arguments\": {\"todo_id\": \"abc-123\"}}\n</tool_call>"
+        },
+        {
+          "scenario": "delete",
+          "expected": "remove_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 629,
+          "output_tokens": 25,
+          "text_preview": "Task with ID \"task-del-1\" has been deleted. Please note that this task was due by \"tomorrow\"."
+        },
+        {
+          "scenario": "update",
+          "expected": "update_task",
+          "called": [
+            "change_priority"
+          ],
+          "correct": false,
+          "finish_reason": "tool_calls",
+          "structured": true,
+          "input_tokens": 629,
+          "output_tokens": 30,
+          "text_preview": "<tool_call>\n{\"name\": \"change_priority\", \"arguments\": {\"task_id\": \"prio-1\", \"new_priority\": \"high\"}}\n</tool_call>"
+        },
+        {
+          "scenario": "reminder",
+          "expected": "set_reminder",
+          "called": [
+            "set_reminder"
+          ],
+          "correct": false,
+          "finish_reason": "tool_calls",
+          "structured": true,
+          "input_tokens": 619,
+          "output_tokens": 30,
+          "text_preview": "<tool_call>\n{\"name\": \"set_reminder\", \"arguments\": {\"title\": \"dentist\", \"remind_at\": \"3pm\"}}\n</tool_call>"
+        },
+        {
+          "scenario": "weather",
+          "expected": "get_weather",
+          "called": [
+            "get_weather"
+          ],
+          "correct": true,
+          "finish_reason": "tool_calls",
+          "structured": true,
+          "input_tokens": 613,
+          "output_tokens": 36,
+          "text_preview": "<tool_call>\n{\"name\": \"get_weather\", \"arguments\": {\"latitude\": -37.816, \"longitude\": 144.962}}\n</tool_call>"
+        },
+        {
+          "scenario": "no-tool-greet",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 615,
+          "output_tokens": 24,
+          "text_preview": "That was it for today. If you have any other tasks or need help with anything else, feel free to ask."
+        },
+        {
+          "scenario": "no-tool-info",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 614,
+          "output_tokens": 26,
+          "text_preview": "Sure, I can help you with tasks, reminders, and updates. Could you please provide some information or ask your question directly?"
+        },
+        {
+          "scenario": "multi",
+          "expected": "multi",
+          "called": [
+            "add_task",
+            "mark_complete"
+          ],
+          "correct": true,
+          "finish_reason": "tool_calls",
+          "structured": true,
+          "input_tokens": 630,
+          "output_tokens": 52,
+          "text_preview": "<tool_call>\n{\"name\": \"add_task\", \"arguments\": {\"title\": \"buy milk\"}}\n</tool_call>\n<tool_call>\n{\"name\": \"mark_complete\", \"arguments\": {\"todo_id\": \"chor"
+        },
+        {
+          "scenario": "ambiguous",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 615,
+          "output_tokens": 40,
+          "text_preview": "Sure, I can help you with that. Let's start by setting up a reminder for your cooking tasks. Would you like to set a reminder now? If so, please provi"
+        }
+      ]
+    },
+    "optimized": {
+      "accuracy": 50.0,
+      "correct": 5,
+      "total": 10,
+      "details": [
+        {
+          "scenario": "add",
+          "expected": "add_task",
+          "called": [
+            "add_task"
+          ],
+          "correct": true,
+          "finish_reason": "tool_calls",
+          "structured": true,
+          "input_tokens": 644,
+          "output_tokens": 63,
+          "text_preview": "SetTitle: \"Buy groceries\"\nPriority: \"low\"\nNotes: \"I need to buy some groceries.\"\nTags: [\"groceries\"]\nDue Date: \"20:00\"\nReminder: \"Every Sunday\"\n\n<tool"
+        },
+        {
+          "scenario": "complete",
+          "expected": "mark_complete",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 674,
+          "output_tokens": 9,
+          "text_preview": "mark_complete(abc-123)"
+        },
+        {
+          "scenario": "delete",
+          "expected": "remove_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 672,
+          "output_tokens": 3,
+          "text_preview": "Task deleted."
+        },
+        {
+          "scenario": "update",
+          "expected": "update_task",
+          "called": [
+            "update_task"
+          ],
+          "correct": true,
+          "finish_reason": "tool_calls",
+          "structured": true,
+          "input_tokens": 671,
+          "output_tokens": 36,
+          "text_preview": "<tool_call>\n{\"name\": \"update_task\", \"arguments\": {\"todo_id\": \"prio-1\", \"title\": \"change_priority\", \"priority\": \"high\"}}\n</tool_call>"
+        },
+        {
+          "scenario": "reminder",
+          "expected": "set_reminder",
+          "called": [
+            "set_reminder"
+          ],
+          "correct": false,
+          "finish_reason": "tool_calls",
+          "structured": true,
+          "input_tokens": 650,
+          "output_tokens": 48,
+          "text_preview": "<tool_call>\n{\"name\": \"set_reminder\", \"arguments\": {\"title\": \"call the dentist\", \"remind_at\": \"2020-04-20T15:00:00\"}}\n</tool_call>"
+        },
+        {
+          "scenario": "weather",
+          "expected": "get_weather",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 644,
+          "output_tokens": 22,
+          "text_preview": ":Get_weather(latitude=34.0500, longitude=-118.000)"
+        },
+        {
+          "scenario": "no-tool-greet",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 646,
+          "output_tokens": 15,
+          "text_preview": "Great! Let's move on to tomorrow. Ready for your next request?"
+        },
+        {
+          "scenario": "no-tool-info",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 645,
+          "output_tokens": 19,
+          "text_preview": "I'm ready to help! Could you please tell me what tasks I need help with today?"
+        },
+        {
+          "scenario": "multi",
+          "expected": "multi",
+          "called": [
+            "add_task"
+          ],
+          "correct": false,
+          "finish_reason": "tool_calls",
+          "structured": true,
+          "input_tokens": 672,
+          "output_tokens": 20,
+          "text_preview": "<tool_call>\n{\"name\": \"add_task\", \"arguments\": {\"title\": \"buy milk\"}}\n</tool_call>"
+        },
+        {
+          "scenario": "ambiguous",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 646,
+          "output_tokens": 43,
+          "text_preview": "Sure, I can help you with that. Let's start by setting a reminder for when we should go to the store. Would you like to set this reminder now? If not,"
+        }
+      ]
+    }
+  },
+  "qwen2.5-coder-0.5b": {
+    "baseline": {
+      "accuracy": 40.0,
+      "correct": 4,
+      "total": 10,
+      "details": [
+        {
+          "scenario": "add",
+          "expected": "add_task",
+          "called": [
+            "add_task"
+          ],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 613,
+          "output_tokens": 29,
+          "text_preview": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"Buy groceries\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "complete",
+          "expected": "mark_complete",
+          "called": [
+            "mark_complete"
+          ],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 630,
+          "output_tokens": 33,
+          "text_preview": "```json\n{\n  \"name\": \"mark_complete\",\n  \"arguments\": {\n    \"todo_id\": \"abc-123\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "delete",
+          "expected": "remove_task",
+          "called": [
+            "delete_task"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 629,
+          "output_tokens": 32,
+          "text_preview": "```json\n{\n  \"name\": \"delete_task\",\n  \"arguments\": {\n    \"todo_id\": \"task-del-1\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "update",
+          "expected": "update_task",
+          "called": [
+            "mark_complete"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 629,
+          "output_tokens": 32,
+          "text_preview": "```json\n{\n  \"name\": \"mark_complete\",\n  \"arguments\": {\n    \"todo_id\": \"prio-1\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "reminder",
+          "expected": "set_reminder",
+          "called": [
+            "set_reminder"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 619,
+          "output_tokens": 61,
+          "text_preview": "```json\n{\n  \"name\": \"set_reminder\",\n  \"arguments\": {\n    \"title\": \"Dentist Remind\",\n    \"remind_at\": \"2026-04-20T14:00:00Z\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "weather",
+          "expected": "get_weather",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 613,
+          "output_tokens": 44,
+          "text_preview": "{\n  \"name\": \"get_weather\",\n  \"arguments\": {\n    \"latitude\": 37.7749,\n    \"longitude\": -122.4194\n  }\n}"
+        },
+        {
+          "scenario": "no-tool-greet",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 615,
+          "output_tokens": 30,
+          "text_preview": "You're welcome! I'm here to help you with your tasks. If you have any more questions or need further assistance, feel free to ask."
+        },
+        {
+          "scenario": "no-tool-info",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 614,
+          "output_tokens": 23,
+          "text_preview": "I can help you with tasks, reminders, marking tasks, updating tasks, getting current datetime, and getting weather."
+        },
+        {
+          "scenario": "multi",
+          "expected": "multi",
+          "called": [
+            "add_task"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 630,
+          "output_tokens": 29,
+          "text_preview": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"Buy Milk\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "ambiguous",
+          "expected": null,
+          "called": [
+            "add_task"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 615,
+          "output_tokens": 29,
+          "text_preview": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"Kitchen Cleaning\"\n  }\n}\n```"
+        }
+      ]
+    },
+    "optimized": {
+      "accuracy": 20.0,
+      "correct": 2,
+      "total": 10,
+      "details": [
+        {
+          "scenario": "add",
+          "expected": "add_task",
+          "called": [
+            "add_task"
+          ],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 644,
+          "output_tokens": 29,
+          "text_preview": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"Buy groceries\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "complete",
+          "expected": "mark_complete",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 674,
+          "output_tokens": 7,
+          "text_preview": "Mark_complete for closest matching todo."
+        },
+        {
+          "scenario": "delete",
+          "expected": "remove_task",
+          "called": [
+            "delete_task"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 672,
+          "output_tokens": 32,
+          "text_preview": "```json\n{\n  \"name\": \"delete_task\",\n  \"arguments\": {\n    \"todo_id\": \"task-del-1\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "update",
+          "expected": "update_task",
+          "called": [
+            "change_priority"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 671,
+          "output_tokens": 32,
+          "text_preview": "```json\n{\n  \"name\": \"change_priority\",\n  \"arguments\": {\n    \"todo_id\": \"prio-1\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "reminder",
+          "expected": "set_reminder",
+          "called": [
+            "set_reminder"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 650,
+          "output_tokens": 60,
+          "text_preview": "```json\n{\n  \"name\": \"set_reminder\",\n  \"arguments\": {\n    \"title\": \"Dentist Reminder\",\n    \"remind_at\": \"2026-04-20T15:00:00Z\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "weather",
+          "expected": "get_weather",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 644,
+          "output_tokens": 44,
+          "text_preview": "{\n  \"name\": \"get_weather\",\n  \"arguments\": {\n    \"latitude\": 37.7749,\n    \"longitude\": -122.4194\n  }\n}"
+        },
+        {
+          "scenario": "no-tool-greet",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 646,
+          "output_tokens": 27,
+          "text_preview": "You're welcome! I'm glad I could help. If you have any more questions or need further assistance, feel free to ask."
+        },
+        {
+          "scenario": "no-tool-info",
+          "expected": null,
+          "called": [
+            "add_task",
+            "set_reminder",
+            "mark_complete",
+            "mark_incomplete"
+          ],
+          "correct": false,
+          "finish_reason": "length",
+          "structured": false,
+          "input_tokens": 645,
+          "output_tokens": 300,
+          "text_preview": "Sure! I can help you with the following tasks:\n\n1. **Add a task**: You can add a new task by calling the `add_task` function with the title as an argu"
+        },
+        {
+          "scenario": "multi",
+          "expected": "multi",
+          "called": [
+            "add_task"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 672,
+          "output_tokens": 29,
+          "text_preview": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"Buy Milk\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "ambiguous",
+          "expected": null,
+          "called": [
+            "add_task"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 646,
+          "output_tokens": 30,
+          "text_preview": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"Clean the kitchen\"\n  }\n}\n```"
+        }
+      ]
+    }
+  },
+  "qwen2.5-coder-1.5b": {
+    "baseline": {
+      "accuracy": 40.0,
+      "correct": 4,
+      "total": 10,
+      "details": [
+        {
+          "scenario": "add",
+          "expected": "add_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 613,
+          "output_tokens": 25,
+          "text_preview": "{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"buy groceries\"\n  }\n}"
+        },
+        {
+          "scenario": "complete",
+          "expected": "mark_complete",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 630,
+          "output_tokens": 29,
+          "text_preview": "{\n    \"name\": \"mark_complete\",\n    \"arguments\": {\n        \"todo_id\": \"abc-123\"\n    }\n}"
+        },
+        {
+          "scenario": "delete",
+          "expected": "remove_task",
+          "called": [
+            "remove_task"
+          ],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 629,
+          "output_tokens": 32,
+          "text_preview": "```json\n{\n  \"name\": \"remove_task\",\n  \"arguments\": {\n    \"todo_id\": \"task-del-1\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "update",
+          "expected": "update_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 629,
+          "output_tokens": 35,
+          "text_preview": "{\n    \"name\": \"update_task\",\n    \"arguments\": {\n        \"todo_id\": \"prio-1\",\n        \"priority\": \"high\"\n    }\n}"
+        },
+        {
+          "scenario": "reminder",
+          "expected": "set_reminder",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 619,
+          "output_tokens": 45,
+          "text_preview": "{\n    \"name\": \"set_reminder\",\n    \"arguments\": {\n        \"title\": \"Call the dentist tomorrow at 3pm\",\n        \"remind_at\": \"tomorrow 3pm\"\n    }\n}"
+        },
+        {
+          "scenario": "weather",
+          "expected": "get_weather",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 613,
+          "output_tokens": 23,
+          "text_preview": "To get the weather, you can use the `get_weather` function. Please provide your latitude and longitude coordinates."
+        },
+        {
+          "scenario": "no-tool-greet",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 615,
+          "output_tokens": 6,
+          "text_preview": "{\"name\": \"exit\"}"
+        },
+        {
+          "scenario": "no-tool-info",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 614,
+          "output_tokens": 13,
+          "text_preview": "I'm ready to help! What do you need assistance with?"
+        },
+        {
+          "scenario": "multi",
+          "expected": "multi",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 630,
+          "output_tokens": 53,
+          "text_preview": "{\n    \"name\": \"add_task\",\n    \"arguments\": {\n        \"title\": \"buy milk\"\n    }\n}\n\n{\n    \"name\": \"mark_complete\",\n    \"arguments\": {\n        \"todo_id\":"
+        },
+        {
+          "scenario": "ambiguous",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 615,
+          "output_tokens": 18,
+          "text_preview": "{\"name\": \"add_task\", \"arguments\": {\"title\": \"Prepare dinner\"}}"
+        }
+      ]
+    },
+    "optimized": {
+      "accuracy": 40.0,
+      "correct": 4,
+      "total": 10,
+      "details": [
+        {
+          "scenario": "add",
+          "expected": "add_task",
+          "called": [
+            "add_task"
+          ],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 644,
+          "output_tokens": 29,
+          "text_preview": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"buy groceries\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "complete",
+          "expected": "mark_complete",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 674,
+          "output_tokens": 29,
+          "text_preview": "{\n    \"name\": \"mark_complete\",\n    \"arguments\": {\n        \"todo_id\": \"abc-123\"\n    }\n}"
+        },
+        {
+          "scenario": "delete",
+          "expected": "remove_task",
+          "called": [
+            "remove_task"
+          ],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 672,
+          "output_tokens": 32,
+          "text_preview": "```json\n{\n  \"name\": \"remove_task\",\n  \"arguments\": {\n    \"todo_id\": \"task-del-1\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "update",
+          "expected": "update_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 671,
+          "output_tokens": 35,
+          "text_preview": "{\n    \"name\": \"update_task\",\n    \"arguments\": {\n        \"todo_id\": \"prio-1\",\n        \"priority\": \"high\"\n    }\n}"
+        },
+        {
+          "scenario": "reminder",
+          "expected": "set_reminder",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 650,
+          "output_tokens": 45,
+          "text_preview": "{\n    \"name\": \"set_reminder\",\n    \"arguments\": {\n        \"title\": \"Call the dentist tomorrow at 3pm\",\n        \"remind_at\": \"tomorrow 3pm\"\n    }\n}"
+        },
+        {
+          "scenario": "weather",
+          "expected": "get_weather",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 644,
+          "output_tokens": 8,
+          "text_preview": "The weather is clear and warm today."
+        },
+        {
+          "scenario": "no-tool-greet",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 646,
+          "output_tokens": 20,
+          "text_preview": "You're welcome! If you have any other questions or need further assistance, feel free to ask."
+        },
+        {
+          "scenario": "no-tool-info",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 645,
+          "output_tokens": 13,
+          "text_preview": "I'm ready to help! What do you need assistance with?"
+        },
+        {
+          "scenario": "multi",
+          "expected": "multi",
+          "called": [
+            "add_task"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 672,
+          "output_tokens": 29,
+          "text_preview": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"buy milk\"\n  }\n}\n```"
+        },
+        {
+          "scenario": "ambiguous",
+          "expected": null,
+          "called": [
+            "clean countertops",
+            "prepare dinner",
+            "cook a meal",
+            "organize the pantry",
+            "make coffee"
+          ],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 646,
+          "output_tokens": 289,
+          "text_preview": "To help you with your kitchen tasks, I can suggest some options:\n\n1. **Clean the countertops**: If you need to clean the countertops, you can use the "
+        }
+      ]
+    }
+  },
+  "phi-4-mini": {
+    "baseline": {
+      "accuracy": 30.0,
+      "correct": 3,
+      "total": 10,
+      "details": [
+        {
+          "scenario": "add",
+          "expected": "add_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 285,
+          "output_tokens": 20,
+          "text_preview": "add_ task: Buy groceries at grocery store near home. reminder: tomorrow at 9 AM."
+        },
+        {
+          "scenario": "complete",
+          "expected": "mark_complete",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 297,
+          "output_tokens": 8,
+          "text_preview": "Mark task abc-123 as done."
+        },
+        {
+          "scenario": "delete",
+          "expected": "remove_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 302,
+          "output_tokens": 11,
+          "text_preview": "delete_2026-04-20-task-1"
+        },
+        {
+          "scenario": "update",
+          "expected": "update_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 302,
+          "output_tokens": 12,
+          "text_preview": "Priorities updated: prio-1 is now high."
+        },
+        {
+          "scenario": "reminder",
+          "expected": "set_reminder",
+          "called": [],
+          "correct": false,
+          "finish_reason": "length",
+          "structured": false,
+          "input_tokens": 291,
+          "output_tokens": 300,
+          "text_preview": "add_thermometer\nadd_thermometer: temperature\nadd_thermometer: temperature\nadd_thermometer: temperature\nadd_thermometer: temperature\nadd_thermometer: t"
+        },
+        {
+          "scenario": "weather",
+          "expected": "get_weather",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 285,
+          "output_tokens": 50,
+          "text_preview": "I'm sorry, but I am unable to provide current weather information as I am unable to make calls to external tools. To check the weather, you may want t"
+        },
+        {
+          "scenario": "no-tool-greet",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 287,
+          "output_tokens": 16,
+          "text_preview": "Understood, no further assistance needed at the moment. Have a great day!"
+        },
+        {
+          "scenario": "no-tool-info",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 286,
+          "output_tokens": 58,
+          "text_preview": "I am here to assist you with managing your tasks, setting reminders, and updating your to-do list. I can help you add new tasks, mark tasks as complet"
+        },
+        {
+          "scenario": "multi",
+          "expected": "multi",
+          "called": [],
+          "correct": false,
+          "finish_reason": "length",
+          "structured": false,
+          "input_tokens": 301,
+          "output_tokens": 300,
+          "text_preview": "add_thermometer\nadd_thermometer\nadd_thermometer\nadd_thermometer\nadd_thermometer\nadd_thermometer\nadd_thermometer\nadd_thermometer\nadd_thermometer\nadd_th"
+        },
+        {
+          "scenario": "ambiguous",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 287,
+          "output_tokens": 12,
+          "text_preview": "add_theraput(\"Clean and organize the kitchen\")"
+        }
+      ]
+    },
+    "optimized": {
+      "accuracy": 30.0,
+      "correct": 3,
+      "total": 10,
+      "details": [
+        {
+          "scenario": "add",
+          "expected": "add_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 316,
+          "output_tokens": 5,
+          "text_preview": "add_task: Buy groceries"
+        },
+        {
+          "scenario": "complete",
+          "expected": "mark_complete",
+          "called": [],
+          "correct": false,
+          "finish_reason": "length",
+          "structured": false,
+          "input_tokens": 339,
+          "output_tokens": 300,
+          "text_preview": "Mark task abc-123 as done. Mark task abc-123 as done. Mark task abc-123 as done. Mark task abc-123 as done. Mark task abc-123 as done. Mark task abc-1"
+        },
+        {
+          "scenario": "delete",
+          "expected": "remove_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 346,
+          "output_tokens": 11,
+          "text_preview": "The task with id task-1 has been deleted."
+        },
+        {
+          "scenario": "update",
+          "expected": "update_task",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 345,
+          "output_tokens": 10,
+          "text_preview": "update_1 (prio-1, high)"
+        },
+        {
+          "scenario": "reminder",
+          "expected": "set_reminder",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 322,
+          "output_tokens": 48,
+          "text_preview": "Goodie job, reminder set! Just to recap, I will remind you to call the dentist tomorrow at 3pm. Is that correct? If so, no action needed, but if you w"
+        },
+        {
+          "scenario": "weather",
+          "expected": "get_weather",
+          "called": [],
+          "correct": false,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 316,
+          "output_tokens": 40,
+          "text_preview": "I'm sorry, but I can't provide current weather updates. I suggest checking a reliable weather service or website for the most accurate and up-to-date "
+        },
+        {
+          "scenario": "no-tool-greet",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 318,
+          "output_tokens": 23,
+          "text_preview": "No problem, have a great day! If you need any assistance later on, feel free to ask. Goodbye!"
+        },
+        {
+          "scenario": "no-tool-info",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 317,
+          "output_tokens": 33,
+          "text_preview": "I can assist you with managing tasks, setting reminders, and even providing you with the weather update if you want. Just let me know what you need he"
+        },
+        {
+          "scenario": "multi",
+          "expected": "multi",
+          "called": [],
+          "correct": false,
+          "finish_reason": "length",
+          "structured": false,
+          "input_tokens": 343,
+          "output_tokens": 300,
+          "text_preview": "add_therapist\nget_therapist\nadd_therapist\nadd_therapist\nadd_therapist\nadd_therapist\nadd_therapist\nadd_therapist\nadd_therapist\nadd_therapist\nadd_therap"
+        },
+        {
+          "scenario": "ambiguous",
+          "expected": null,
+          "called": [],
+          "correct": true,
+          "finish_reason": "stop",
+          "structured": false,
+          "input_tokens": 318,
+          "output_tokens": 18,
+          "text_preview": "Update_kitc. Leave by 17:00, medium priority. Got it."
+        }
+      ]
+    }
+  }
+}

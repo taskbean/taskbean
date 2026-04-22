@@ -1,0 +1,64 @@
+{
+  "arm": "experiment",
+  "turns": [
+    {
+      "text": "The task titled \"buy groceries\" has been added successfully. It will be updated later.",
+      "tool_calls": [
+        {
+          "name": "add_task",
+          "arguments": "{\r\n  \"title\": \"buy groceries\",\r\n  \"priority\": \"low\",\r\n  \"notes\": \"\",\r\n  \"tags\": \"groceries\"\r\n}"
+        }
+      ],
+      "input_tokens": 1497,
+      "output_tokens": 55,
+      "total_tokens": 1552,
+      "ttft_ms": 0,
+      "e2e_ms": 6537,
+      "rounds": 1,
+      "xml_leak": false,
+      "error": null
+    }
+  ],
+  "cumulative_input_tokens": 1497,
+  "cumulative_output_tokens": 55,
+  "cumulative_total_tokens": 1552,
+  "total_e2e_ms": 6537,
+  "total_rounds": 1,
+  "tool_sequence": [
+    "add_task"
+  ],
+  "final_state": {
+    "todos": [
+      {
+        "id": "ef93bedc-f49e-4825-9771-110c983800d1",
+        "title": "buy groceries",
+        "emoji": null,
+        "dueDate": null,
+        "dueTime": null,
+        "completed": false,
+        "reminder": false,
+        "remindAt": null,
+        "reminderFired": false,
+        "source": "command",
+        "priority": "low",
+        "notes": null,
+        "tags": [
+          "e",
+          "r",
+          "i",
+          "s",
+          "o",
+          "c",
+          "g"
+        ],
+        "project": null,
+        "createdAt": "2026-04-19T22:04:29.255539Z"
+      }
+    ],
+    "recurring_templates": []
+  },
+  "error": null,
+  "scenario_id": "single-01",
+  "model": "qwen2.5-0.5b",
+  "run_index": 0
+}

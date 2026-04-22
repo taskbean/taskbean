@@ -1,0 +1,10 @@
+{
+  "run_id": "sweep-1776635860",
+  "models": [
+    "phi-4-mini"
+  ],
+  "runs_per_scenario": 2,
+  "scenario_count": 3,
+  "results": [],
+  "grades_path": "C:\\Users\\nbrady\\personal\\taskbean\\app\\agent\\evals\\responses_vs_chat\\results\\sweep-1776635860\\grades.json"
+}

@@ -1,0 +1,10 @@
+{
+  "run_id": "sweep-1776636237",
+  "models": [
+    "qwen2.5-0.5b"
+  ],
+  "runs_per_scenario": 1,
+  "scenario_count": 3,
+  "results": [],
+  "grades_path": "C:\\Users\\nbrady\\personal\\taskbean\\app\\agent\\evals\\responses_vs_chat\\results\\sweep-1776636237\\grades.json"
+}

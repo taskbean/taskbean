@@ -5,6 +5,7 @@ Endpoints mirror the original Node.js server:
   GET  /api/models
   POST /api/models/switch      (SSE)
   GET  /api/todos
+  GET  /api/todos/overdue
   PATCH /api/todos/:id
   DELETE /api/todos/:id
   GET  /api/projects
@@ -18,6 +19,10 @@ Endpoints mirror the original Node.js server:
   GET  /api/templates
   POST /api/templates/activate
   POST /api/templates/deactivate
+  GET  /api/hardware/eps
+  GET  /api/port-info
+  POST /api/port
+  POST /api/suggest
   POST /api/upload
   POST /api/extract            (SSE)
   POST /api/transcribe
@@ -142,6 +147,20 @@ async def lifespan(app: FastAPI):
     # Register taskbean:// protocol so the PWA can restart the server
     _register_protocol_handler()
 
+    # Load persisted state from SQLite so chat-created todos survive restarts
+    try:
+        from persistence import load_todos, load_templates
+        db_todos = load_todos()
+        if db_todos:
+            state_mod.todos.extend(db_todos)
+            logger.info("Loaded %d todos from SQLite", len(db_todos))
+        db_templates = load_templates()
+        if db_templates:
+            state_mod.recurring_templates.extend(db_templates)
+            logger.info("Loaded %d templates from SQLite", len(db_templates))
+    except Exception as e:
+        logger.warning("Failed to load persisted state: %s", e)
+
     # Resolve startup model: env var > user preference > SDK default
     startup_model = os.environ.get("FOUNDRY_MODEL") or app_config.preferred_model()
     preferred_device = os.environ.get("FOUNDRY_DEVICE") or app_config.preferred_device()
@@ -182,6 +201,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Prevent browser from caching API responses (avoids stale HTML from SPA fallback)
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        else:
+            # CSP for HTML pages only — API responses (JSON) don't need it
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "script-src-attr 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; "
+                "connect-src 'self' https://unpkg.com https://api.open-meteo.com http://localhost:*; "
+                "frame-src 'self' http://localhost:*; "
+                "frame-ancestors 'none'"
+            )
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -359,6 +390,81 @@ async def health() -> dict:
     return _health_data()
 
 
+# ── Single-shot inference helper ──────────────────────────────────────────────
+
+_THINK_RE = re.compile(r"<think>[\s\S]*?</think>")
+
+
+def _strip_reasoning_tags(text: str) -> str:
+    """Remove <think>…</think> reasoning blocks that some models emit."""
+    return _THINK_RE.sub("", text).strip()
+
+
+async def _foundry_complete(system_prompt: str, user_message: str) -> str:
+    """Single-shot LLM inference via the Foundry Local web service.
+
+    Uses streaming to be NPU-safe (NPU models return HTTP 500 on
+    non-streaming requests). Returns the accumulated text response.
+    """
+    if not agent_mod.model_ready:
+        raise HTTPException(status_code=503, detail="Model not ready")
+
+    messages: list[dict[str, str]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": user_message})
+
+    max_out = agent_mod.MODEL_CONTEXT.get("maxOutputTokens")
+    body: dict[str, Any] = {
+        "model": agent_mod.MODEL_ID,
+        "messages": messages,
+        "stream": True,
+        "max_tokens": min(2000, max_out) if max_out else 2000,
+        "temperature": 0.7,
+    }
+
+    span = trace.get_current_span()
+    span.set_attribute("gen_ai.system", "foundry-local")
+    span.set_attribute("gen_ai.request.model", agent_mod.MODEL_ID)
+    span.set_attribute("gen_ai.request.max_tokens", body["max_tokens"])
+    span.set_attribute("gen_ai.request.mode", "streaming")
+    span.set_attribute("gen_ai.input_length", sum(len(m.get("content", "")) for m in messages))
+    _fc_start = time.time()
+
+    url = f"{agent_mod.SERVICE_BASE_URL}/v1/chat/completions"
+    headers = {"Accept": "text/event-stream"}
+    accumulated = ""
+    usage: dict[str, Any] = {}
+    chunk: dict[str, Any] = {}
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        async with client.stream("POST", url, json=body, headers=headers) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:]
+                if data == "[DONE]":
+                    break
+                chunk = json.loads(data)
+                # Capture usage from the final chunk (Foundry Local includes it)
+                if chunk.get("usage"):
+                    usage = chunk["usage"]
+                delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content")
+                if delta:
+                    accumulated += delta
+
+    _fc_elapsed = int((time.time() - _fc_start) * 1000)
+    span.set_attribute("gen_ai.response.duration_ms", _fc_elapsed)
+    span.set_attribute("gen_ai.usage.input_tokens", usage.get("prompt_tokens"))
+    span.set_attribute("gen_ai.usage.output_tokens", usage.get("completion_tokens"))
+    finish_reason = chunk.get("choices", [{}])[0].get("finish_reason")
+    if finish_reason:
+        span.set_attribute("gen_ai.response.finish_reason", finish_reason)
+
+    return _strip_reasoning_tags(accumulated)
+
+
 # ── Version / build info ──────────────────────────────────────────────────────
 
 _STARTED_AT = datetime.now(timezone.utc).isoformat()
@@ -430,6 +536,16 @@ async def version() -> dict:
 @app.get("/api/hardware")
 async def hardware_snapshot() -> dict:
     return _hardware_snapshot()
+
+
+@app.get("/api/hardware/eps")
+async def hardware_eps() -> list:
+    try:
+        manager = get_fl_manager()
+        eps = await asyncio.to_thread(manager.discover_eps)
+        return eps
+    except Exception:
+        return []
 
 
 # ── Model management ──────────────────────────────────────────────────────────
@@ -643,6 +759,28 @@ def _sync_startup_shortcut(enabled: bool) -> None:
             logging.getLogger(__name__).info("Removed startup shortcut")
     except Exception as e:
         logging.getLogger(__name__).warning("Startup shortcut sync failed: %s", e)
+
+
+@app.get("/api/port-info")
+async def port_info() -> dict:
+    return {
+        "port": int(app_config.get("port") or 8275),
+        "default": 8275,
+        "conflict": None,
+        "configurable": True,
+    }
+
+
+class PortBody(BaseModel):
+    port: int
+
+
+@app.post("/api/port")
+async def set_port(body: PortBody) -> dict:
+    if body.port < 1024 or body.port > 65535:
+        raise HTTPException(400, "Port must be between 1024 and 65535")
+    app_config.set("port", body.port)
+    return {"ok": True, "port": body.port, "message": f"Port set to {body.port}. Restart taskbean for it to take effect."}
 
 
 @app.post("/api/config")
@@ -990,6 +1128,34 @@ class TodoCreate(BaseModel):
     priority: str | None = None
     notes: str | None = None
     tags: list[str] | None = None
+
+
+@app.get("/api/todos/overdue")
+async def todos_overdue() -> list:
+    now = datetime.now(timezone.utc)
+    overdue = []
+    for t in state_mod.todos:
+        if not t.get("reminder") or t.get("completed") or t.get("reminderFired"):
+            continue
+        remind_at = t.get("remindAt")
+        if not remind_at:
+            continue
+        try:
+            remind_dt = datetime.fromisoformat(remind_at)
+            if remind_dt > now:
+                continue
+            delta = now - remind_dt
+            mins = int(delta.total_seconds() / 60)
+            if mins < 60:
+                overdue_since = f"{mins}m ago"
+            elif mins < 1440:
+                overdue_since = f"{mins // 60}h ago"
+            else:
+                overdue_since = f"{mins // 1440}d ago"
+            overdue.append({**t, "overdueSince": overdue_since})
+        except (ValueError, TypeError):
+            continue
+    return overdue
 
 
 @app.post("/api/todos", status_code=201)
@@ -2201,6 +2367,112 @@ async def process_speech(request: Request) -> dict:
         return {"success": True, "tasks": added}
 
 
+# ── Suggestions ───────────────────────────────────────────────────────────────
+
+def _get_time_of_day() -> str:
+    from tools import _get_tz
+    h = datetime.now(tz=_get_tz()).hour
+    if h < 6:
+        return "night"
+    if h < 12:
+        return "morning"
+    if h < 17:
+        return "afternoon"
+    if h < 21:
+        return "evening"
+    return "night"
+
+
+class SuggestContext(BaseModel):
+    trigger: str = "idle"
+    lastTodoTitle: str = ""
+    todoCount: int = 0
+    pendingCount: int = 0
+    timeOfDay: str = ""
+    categories: str = ""
+
+
+class SuggestBody(BaseModel):
+    context: SuggestContext | None = None
+
+
+@app.post("/api/suggest")
+async def suggest(body: SuggestBody) -> dict:
+    if not agent_mod.model_ready:
+        return {"suggestions": []}
+
+    ctx = body.context or SuggestContext()
+    trigger = ctx.trigger or "idle"
+    todo_count = ctx.todoCount or len(state_mod.todos)
+    pending_count = ctx.pendingCount or sum(1 for t in state_mod.todos if not t.get("completed"))
+    last_todo = ctx.lastTodoTitle or ""
+    time_of_day = ctx.timeOfDay or _get_time_of_day()
+    categories = ctx.categories or ""
+
+    todo_list = "\n".join(
+        f'- [{"x" if t.get("completed") else " "}] {t["title"]}'
+        f'{" (due: " + t["dueDate"] + ")" if t.get("dueDate") else ""}'
+        for t in state_mod.todos[:10]
+    ) or "(empty list)"
+
+    active_recurring = "\n".join(
+        f'- {r.get("icon", "🔁")} {r["title"]} (every {r.get("intervalMin", "?")}m)'
+        for r in state_mod.recurring_templates if r.get("active")
+    ) or "(none active)"
+
+    builtin_inactive = "\n".join(
+        f'- {b.get("icon", "🔁")} {b["title"]} ({b["intervalMin"]}m) — {b.get("description", "")}'
+        for b in state_mod.BUILT_IN_TEMPLATES
+        if not any(r["title"] == b["title"] and r.get("active") for r in state_mod.recurring_templates)
+    ) or "(all enabled)"
+
+    sys_prompt = f"""You generate quick suggestion chips for a todo app. Return ONLY a JSON array of 2-4 suggestions.
+
+Each suggestion: {{ "label": "emoji + short text (max 4 words)", "message": "the full command to send to the AI assistant" }}
+
+Context:
+- Trigger: {trigger}
+- Time: {time_of_day}
+- Total todos: {todo_count}, Pending: {pending_count}
+{f'- Last added: "{last_todo}"' if last_todo else ''}
+{f'- Active categories: {categories}' if categories else ''}
+
+Current todos:
+{todo_list}
+
+Active recurring reminders:
+{active_recurring}
+
+Available built-in recurring reminders (not yet enabled):
+{builtin_inactive}
+
+Rules:
+- If trigger is "onboarding" (empty list): suggest getting started (plan my day, add first task, what's the weather)
+- If trigger is "thematic" and lastTodo is set: suggest 2-3 related items in the same category
+- If trigger is "completion": suggest next actions or celebration
+- If trigger is "recurring_recommendations": suggest 2-3 recurring reminders to enable or create
+- If trigger is "idle" + morning: suggest planning the day
+- If trigger is "idle" + evening: suggest reviewing what's done
+- If trigger is "idle" + general: suggest organizing, adding reminders, or fun tasks
+- Keep labels SHORT (emoji + 2-4 words). Messages should be natural language commands.
+- Be creative, helpful, and slightly playful.
+
+Return ONLY the JSON array, no other text."""
+
+    try:
+        raw = await _foundry_complete(sys_prompt, f'Generate suggestions for trigger="{trigger}"')
+        match = re.search(r"\[[\s\S]*\]", raw)
+        suggestions = json.loads(match.group(0)) if match else []
+        suggestions = [
+            {"label": str(s.get("label", ""))[:40], "message": str(s.get("message", ""))[:200]}
+            for s in suggestions
+            if s.get("label") and s.get("message")
+        ][:4]
+        return {"suggestions": suggestions}
+    except Exception:
+        return {"suggestions": []}
+
+
 # ── Notifications ─────────────────────────────────────────────────────────────
 
 @app.post("/api/test-notification")
@@ -2474,64 +2746,6 @@ async def spa_fallback(full_path: str):
 def _sse(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
-
-async def _foundry_complete(system: str, user: str) -> str:
-    """Single-turn completion via Foundry Local OpenAI-compat API (non-streaming)."""
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": user})
-
-    max_out = agent_mod.MODEL_CONTEXT.get("maxOutputTokens")
-    body: dict[str, Any] = {
-        "model": agent_mod.MODEL_ID,
-        "messages": messages,
-        "stream": False,
-        "max_tokens": min(2000, max_out) if max_out else 2000,
-    }
-
-    span = trace.get_current_span()
-    span.set_attribute("gen_ai.system", "foundry-local")
-    span.set_attribute("gen_ai.request.model", agent_mod.MODEL_ID)
-    span.set_attribute("gen_ai.request.max_tokens", body["max_tokens"])
-    span.set_attribute("gen_ai.request.mode", "non-streaming")
-    span.set_attribute("gen_ai.input_length", sum(len(m.get("content", "")) for m in messages))
-    _fc_start = time.time()
-
-    async with httpx.AsyncClient(timeout=120) as client:
-        last_exc: httpx.HTTPStatusError | None = None
-        for attempt in range(3):  # 1 initial + 2 retries
-            try:
-                r = await client.post(f"{agent_mod.SERVICE_BASE_URL}/v1/chat/completions", json=body)
-                r.raise_for_status()
-                data = r.json()
-                break
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code < 500 or attempt >= 2:
-                    raise
-                last_exc = exc
-                delay = attempt + 1  # 1s, 2s
-                logger.warning("Foundry 5xx (attempt %d/3), retrying in %ds: %s", attempt + 1, delay, exc)
-                span.add_event("ai.retry", {"attempt": attempt + 1, "status": exc.response.status_code, "model": agent_mod.MODEL_ID})
-                await asyncio.sleep(delay)
-        else:
-            raise last_exc  # type: ignore[misc]
-
-    _fc_elapsed = int((time.time() - _fc_start) * 1000)
-    usage = data.get("usage", {})
-    span.set_attribute("gen_ai.response.duration_ms", _fc_elapsed)
-    span.set_attribute("gen_ai.usage.input_tokens", usage.get("prompt_tokens"))
-    span.set_attribute("gen_ai.usage.output_tokens", usage.get("completion_tokens"))
-    finish_reason = data.get("choices", [{}])[0].get("finish_reason")
-    if finish_reason:
-        span.set_attribute("gen_ai.response.finish_reason", finish_reason)
-
-    msg = data["choices"][0]["message"]
-    if isinstance(msg.get("content"), str):
-        return msg["content"]
-    if isinstance(msg.get("content"), list):
-        return "".join(p.get("text", "") for p in msg["content"] if p.get("type") == "text")
-    return ""
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

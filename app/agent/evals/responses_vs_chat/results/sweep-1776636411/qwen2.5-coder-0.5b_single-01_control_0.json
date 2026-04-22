@@ -1,0 +1,31 @@
+{
+  "arm": "control",
+  "turns": [
+    {
+      "text": "```json\n{\n  \"name\": \"add_task\",\n  \"arguments\": {\n    \"title\": \"Buy groceries\",\n    \"due_date\": \"2026-04-19\",\n    \"due_time\": \"12:00:00\",\n    \"emoji\": \"\ud83d\uded2\",\n    \"priority\": \"high\",\n    \"notes\": \"Buy groceries for groceries\",\n    \"tags\": [\"groceries\"],\n    \"project\": \"Grocery Shopping\"\n  }\n}\n```",
+      "tool_calls": [],
+      "input_tokens": 1101,
+      "output_tokens": 102,
+      "total_tokens": 1203,
+      "ttft_ms": 0,
+      "e2e_ms": 15593,
+      "rounds": 0,
+      "xml_leak": false,
+      "error": null
+    }
+  ],
+  "cumulative_input_tokens": 1101,
+  "cumulative_output_tokens": 102,
+  "cumulative_total_tokens": 1203,
+  "total_e2e_ms": 15593,
+  "total_rounds": 0,
+  "tool_sequence": [],
+  "final_state": {
+    "todos": [],
+    "recurring_templates": []
+  },
+  "error": null,
+  "scenario_id": "single-01",
+  "model": "qwen2.5-coder-0.5b",
+  "run_index": 0
+}

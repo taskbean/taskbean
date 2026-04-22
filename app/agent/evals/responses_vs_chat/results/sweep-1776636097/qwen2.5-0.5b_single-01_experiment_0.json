@@ -1,0 +1,31 @@
+{
+  "arm": "experiment",
+  "turns": [
+    {
+      "text": "Sure, let's add a task: \"buy groceries\". Would you like to do this now? If not, feel free to start a new task.",
+      "tool_calls": [],
+      "input_tokens": 626,
+      "output_tokens": 31,
+      "total_tokens": 657,
+      "ttft_ms": 0,
+      "e2e_ms": 4685,
+      "rounds": 0,
+      "xml_leak": false,
+      "error": null
+    }
+  ],
+  "cumulative_input_tokens": 626,
+  "cumulative_output_tokens": 31,
+  "cumulative_total_tokens": 657,
+  "total_e2e_ms": 4685,
+  "total_rounds": 0,
+  "tool_sequence": [],
+  "final_state": {
+    "todos": [],
+    "recurring_templates": []
+  },
+  "error": null,
+  "scenario_id": "single-01",
+  "model": "qwen2.5-0.5b",
+  "run_index": 0
+}

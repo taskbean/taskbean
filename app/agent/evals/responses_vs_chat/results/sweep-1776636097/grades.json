@@ -1,0 +1,112 @@
+[
+  {
+    "scenario_id": "single-01",
+    "arm": "control",
+    "model": "qwen2.5-0.5b",
+    "run_index": 0,
+    "tool_sequence_match": true,
+    "tool_args_valid": true,
+    "state_delta_match": true,
+    "hallucinated_tool": false,
+    "xml_leak": false,
+    "must_not_call_violation": false,
+    "title_phrasing_match": null,
+    "all_deterministic_pass": true,
+    "all_pass": true,
+    "details": []
+  },
+  {
+    "scenario_id": "single-01",
+    "arm": "experiment",
+    "model": "qwen2.5-0.5b",
+    "run_index": 0,
+    "tool_sequence_match": false,
+    "tool_args_valid": false,
+    "state_delta_match": false,
+    "hallucinated_tool": false,
+    "xml_leak": false,
+    "must_not_call_violation": false,
+    "title_phrasing_match": null,
+    "all_deterministic_pass": false,
+    "all_pass": false,
+    "details": [
+      "Expected ['add_task'] but no tools were called",
+      "No actual call for expected add_task[0]",
+      "todos_added: expected 1, got 0"
+    ]
+  },
+  {
+    "scenario_id": "single-02",
+    "arm": "control",
+    "model": "qwen2.5-0.5b",
+    "run_index": 0,
+    "tool_sequence_match": true,
+    "tool_args_valid": true,
+    "state_delta_match": true,
+    "hallucinated_tool": false,
+    "xml_leak": false,
+    "must_not_call_violation": false,
+    "title_phrasing_match": null,
+    "all_deterministic_pass": true,
+    "all_pass": true,
+    "details": []
+  },
+  {
+    "scenario_id": "single-02",
+    "arm": "experiment",
+    "model": "qwen2.5-0.5b",
+    "run_index": 0,
+    "tool_sequence_match": false,
+    "tool_args_valid": false,
+    "state_delta_match": true,
+    "hallucinated_tool": false,
+    "xml_leak": false,
+    "must_not_call_violation": false,
+    "title_phrasing_match": null,
+    "all_deterministic_pass": false,
+    "all_pass": false,
+    "details": [
+      "Expected ['mark_complete'] but no tools were called",
+      "No actual call for expected mark_complete[0]"
+    ]
+  },
+  {
+    "scenario_id": "single-03",
+    "arm": "control",
+    "model": "qwen2.5-0.5b",
+    "run_index": 0,
+    "tool_sequence_match": false,
+    "tool_args_valid": false,
+    "state_delta_match": true,
+    "hallucinated_tool": true,
+    "xml_leak": false,
+    "must_not_call_violation": false,
+    "title_phrasing_match": null,
+    "all_deterministic_pass": false,
+    "all_pass": false,
+    "details": [
+      "Tool sequence mismatch: expected ['remove_task'], got ['delete_task']",
+      "No actual call for expected remove_task[0]",
+      "Hallucinated tools: ['delete_task']"
+    ]
+  },
+  {
+    "scenario_id": "single-03",
+    "arm": "experiment",
+    "model": "qwen2.5-0.5b",
+    "run_index": 0,
+    "tool_sequence_match": false,
+    "tool_args_valid": false,
+    "state_delta_match": true,
+    "hallucinated_tool": false,
+    "xml_leak": false,
+    "must_not_call_violation": false,
+    "title_phrasing_match": null,
+    "all_deterministic_pass": false,
+    "all_pass": false,
+    "details": [
+      "Expected ['remove_task'] but no tools were called",
+      "No actual call for expected remove_task[0]"
+    ]
+  }
+]

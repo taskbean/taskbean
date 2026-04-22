@@ -3175,15 +3175,16 @@ let isProcessing = false;
 
 // ── ConnectionManager: centralized server health & reconnection ─────────────
 const ConnectionManager = (() => {
-    let _reachable = true;
-    // Initialize to page-load time so the GRACE_PERIOD below is meaningful on
-    // the first call. With `0`, `Date.now() - _lastSuccessAt > GRACE_PERIOD`
-    // is always true, so a single transient /api/health failure during cold
-    // start would immediately flip the UI to offline.
-    let _lastSuccessAt = Date.now();
+    let _reachable = false; // start unknown — explicit check() sets true state
+    // Start at 0 so the first failed check immediately flips to offline.
+    // The explicit await ConnectionManager.check() in initApp sets _lastSuccessAt
+    // on success, after which GRACE_PERIOD protects against transient failures.
+    let _lastSuccessAt = 0;
     let _pollTimer = null;
+    let _pollStarted = false;
     let _pollingStopped = false;
-    let _backoff = 3000;        // current backoff (ms)
+    let _inflight = null;       // deduped in-flight check promise
+    let _backoff = 1000;        // current backoff (ms)
     const BACKOFF_MIN = 1000;
     const BACKOFF_MAX = 15000;
     const BACKOFF_FACTOR = 1.5;
@@ -3211,33 +3212,40 @@ const ConnectionManager = (() => {
             }
         },
 
-        /** Single health check — returns true/false */
+        /** Single health check — returns true/false. Dedupes concurrent calls. */
         async check() {
-            try {
-                const res = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
-                if (res.ok) { this.setReachable(true); return true; }
-            } catch {}
-            this.setReachable(false);
-            return false;
+            if (_inflight) return _inflight;
+            _inflight = (async () => {
+                try {
+                    const res = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
+                    if (res.ok) { this.setReachable(true); return true; }
+                } catch {}
+                this.setReachable(false);
+                return false;
+            })();
+            try { return await _inflight; } finally { _inflight = null; }
         },
 
         /** Start background polling with exponential backoff */
         startPolling() {
-            if (_pollTimer) return;
+            if (_pollStarted) return;
+            _pollStarted = true;
             _pollingStopped = false;
             const tick = async () => {
                 await this.check();
-                if (_pollingStopped) return; // don't reschedule if stopped during check
+                if (_pollingStopped) return;
                 _backoff = _reachable
                     ? 10_000 // stable: poll every 10s
                     : Math.min(_backoff * BACKOFF_FACTOR, BACKOFF_MAX);
                 _pollTimer = setTimeout(tick, _backoff);
             };
-            _pollTimer = setTimeout(tick, _backoff);
+            // First tick is immediate — no initial delay
+            tick();
         },
 
         stopPolling() {
             _pollingStopped = true;
+            _pollStarted = false;
             if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
         }
     };
@@ -3422,7 +3430,7 @@ function setReachability(ok) {
     ConnectionManager.setReachable(ok);
     if (ok) {
         hideOfflineOverlay();
-        offlineOverlayDismissed = true;
+        offlineOverlayDismissed = false; // reset so future disconnects can show overlay
     }
     updateReachabilityUI();
 }
@@ -7577,8 +7585,12 @@ function switchNerdTab(tab) {
     }
 }
 
+let _telemGeneration = 0; // generation token to prevent stale reconnects
+let _telemRetryTimer = null;
+
 async function connectTelemetryStream() {
     disconnectTelemetryStream();
+    const generation = ++_telemGeneration;
     const dot = document.getElementById('nerdLiveDot');
     dot.className = 'nerd-live-dot';
 
@@ -7619,6 +7631,7 @@ async function connectTelemetryStream() {
     nerdStreamController = new AbortController();
     try {
         const res = await fetch('/api/telemetry/stream', { signal: nerdStreamController.signal });
+        if (generation !== _telemGeneration) return; // stale connection
         dot.className = 'nerd-live-dot live';
         const reader = res.body.getReader();
         const dec = new TextDecoder();
@@ -7626,6 +7639,7 @@ async function connectTelemetryStream() {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+            if (generation !== _telemGeneration) return; // stale after reconnect
             buf += dec.decode(value, { stream: true });
             const blocks = buf.split('\n\n');
             buf = blocks.pop() || '';
@@ -7639,14 +7653,29 @@ async function connectTelemetryStream() {
                 } catch { /* skip malformed */ }
             }
         }
+        // Stream ended cleanly (server closed) — schedule reconnect
+        if (generation === _telemGeneration) _scheduleTelemetryReconnect(generation);
     } catch (err) {
-        if (err.name !== 'AbortError') {
+        if (err.name !== 'AbortError' && generation === _telemGeneration) {
             dot.className = 'nerd-live-dot error';
+            _scheduleTelemetryReconnect(generation);
         }
     }
 }
 
+function _scheduleTelemetryReconnect(generation) {
+    if (_telemRetryTimer) clearTimeout(_telemRetryTimer);
+    _telemRetryTimer = setTimeout(() => {
+        _telemRetryTimer = null;
+        if (generation === _telemGeneration && nerdModeOpen && serverReachable) {
+            connectTelemetryStream();
+        }
+    }, 5000);
+}
+
 function disconnectTelemetryStream() {
+    ++_telemGeneration; // invalidate any in-flight reconnect
+    if (_telemRetryTimer) { clearTimeout(_telemRetryTimer); _telemRetryTimer = null; }
     if (nerdStreamController) { nerdStreamController.abort(); nerdStreamController = null; }
     const dot = document.getElementById('nerdLiveDot');
     if (dot) dot.className = 'nerd-live-dot';
@@ -9215,7 +9244,6 @@ async function initApp() {
     initSpeech();
     lucide.createIcons();
     updateNotificationButton();
-    updateReachabilityUI();
     applyLaunchContext();
 
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -9269,6 +9297,14 @@ async function initApp() {
         });
     }
 
+    // ── Authoritative startup reachability check ──────────────────────────────
+    // Must happen BEFORE refreshTodos/loadTemplates so we know whether to show
+    // the offline overlay and so _lastSuccessAt is set correctly for GRACE_PERIOD.
+    await ConnectionManager.check();
+    updateReachabilityUI();
+    // Start health polling immediately after the initial check
+    ConnectionManager.startPolling();
+
     // Throttled update checks: on tab focus / visibility change, ask the SW
     // to check for updates AND poll /api/version to detect backend restarts
     // from a `git pull && launch.ps1` cycle. Both share a 60s throttle.
@@ -9281,10 +9317,15 @@ async function initApp() {
         try { await swRegistration?.update(); } catch {}
         try { await checkBackendVersion(); } catch {}
     }
+    // Immediate reconnection check on tab refocus / visibility change
+    function _onAppFocus() {
+        _maybeCheckForUpdates();
+        ConnectionManager.check(); // fast, deduped — catches server restarts while backgrounded
+    }
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') _maybeCheckForUpdates();
+        if (document.visibilityState === 'visible') _onAppFocus();
     });
-    window.addEventListener('focus', _maybeCheckForUpdates);
+    window.addEventListener('focus', _onAppFocus);
 
     // Initial backend version fetch (captures startup fingerprint). Stamp
     // _lastUpdateCheck so the 60s focus-throttle is measured from page load,
@@ -9337,8 +9378,9 @@ async function initApp() {
         }
     } catch {}
 
-    setInterval(refreshTodos, 15_000);
-    setInterval(loadTemplates, 30_000);
+    // Data polling intervals — guarded by serverReachable to avoid wasted requests
+    setInterval(() => { if (serverReachable) refreshTodos(); }, 15_000);
+    setInterval(() => { if (serverReachable) loadTemplates(); }, 30_000);
     setInterval(processReminderNotifications, 30_000);
 
     // F1/F2: 10s cadence for Projects tab + Usage panel.
@@ -9414,9 +9456,6 @@ async function initApp() {
     updateClock();
     setInterval(updateClock, 1000);
 
-    // Centralized health polling via ConnectionManager (replaces manual setInterval)
-    ConnectionManager.startPolling();
-
     // Status bar health details (piggybacks on ConnectionManager, adds model/hardware info)
     async function pollStatusHealth() {
         if (!serverReachable) return;
@@ -9428,13 +9467,21 @@ async function initApp() {
     pollStatusHealth();
     setInterval(pollStatusHealth, 10_000);
 
-    // Listen for reachability changes — auto-refresh settings panel if open
+    // Listen for reachability changes — reconnect subsystems when server comes back
     document.addEventListener('reachability-change', (e) => {
         updateReachabilityUI();
         if (e.detail.reachable) {
             // If settings modal is open, refresh it to re-enable controls
             const settingsOverlay = document.getElementById('settingsModalOverlay');
             if (settingsOverlay?.classList.contains('open')) loadSettingsConfig();
+            // Reconnect telemetry stream if nerd panel is open
+            if (nerdModeOpen) {
+                disconnectTelemetryStream();
+                connectTelemetryStream();
+            }
+        } else {
+            // Server went down — show overlay so user gets retry/launch UI
+            showOfflineOverlay();
         }
     });
 }
