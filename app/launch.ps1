@@ -76,36 +76,133 @@ if (Test-Path $reqFile) {
     }
 }
 
+# ── Single-instance guard ─────────────────────────────────────────────────────
+# A global named mutex prevents two concurrent Reconnect clicks (or a click
+# racing with the Startup-folder launcher) from both spawning python children.
+# The loser exits immediately; the winner owns the startup sequence.
+$mutex = New-Object System.Threading.Mutex($false, 'Global\TaskBeanLauncher')
+$ownMutex = $false
+try { $ownMutex = $mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $ownMutex = $true }
+if (-not $ownMutex) {
+    Write-Host "Another taskbean launcher is already starting the server — exiting." -ForegroundColor Yellow
+    if (-not $SkipBrowser) { Start-Process "http://127.0.0.1:$Port" }
+    exit 0
+}
+
+try {
+
+# Probe — use 127.0.0.1 explicitly to match uvicorn's bind (main.py passes
+# host="127.0.0.1" to uvicorn.run; resolving "localhost" can hit ::1 first
+# on Windows 10+ and false-fail even when the server is up).
+function Test-ServerHealth {
+    try {
+        $h = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/health" -TimeoutSec 2 -ErrorAction Stop
+        return $h
+    } catch {
+        return $null
+    }
+}
+
 # Already running?
 $alive = $false
-try {
-    $r = Invoke-WebRequest -Uri "http://localhost:$Port/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
-    if ($r.StatusCode -eq 200) { $alive = $true }
-} catch {}
+$existing = Test-ServerHealth
+if ($existing -and $existing.modelReady) {
+    $alive = $true
+    Write-Host "taskbean already running (model: $($existing.model))." -ForegroundColor Green
+} elseif ($existing) {
+    # Server is up but not ready — let the retry loop below decide what to do.
+    Write-Host "taskbean server is up but model is not ready — waiting for readiness." -ForegroundColor Yellow
+}
 
 if (-not $alive) {
-    Write-Host "Starting taskbean server..." -ForegroundColor Cyan
-    Start-Process -FilePath $python -ArgumentList "main.py" -WorkingDirectory $AgentDir -WindowStyle Hidden
+    # Foundry Local EP registration is empirically flaky on cold boot; failures
+    # are recorded in startup_error without crashing the web server, and only
+    # a fresh process restart recovers. We retry up to 3 times on startupError.
+    $maxAttempts = 3
+    $attemptBudget = 60   # seconds per attempt to reach modelReady
+    $success = $false
+    $lastError = $null
 
-    # Wait up to 60 s for the server to become healthy
-    $deadline = (Get-Date).AddSeconds(60)
-    $ready = $false
-    while ((Get-Date) -lt $deadline) {
-        Start-Sleep -Milliseconds 500
-        try {
-            $r = Invoke-WebRequest -Uri "http://localhost:$Port/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
-            if ($r.StatusCode -eq 200) { $ready = $true; break }
-        } catch {}
+    for ($attempt = 1; $attempt -le $maxAttempts -and -not $success; $attempt++) {
+        # Only spawn a child if the server isn't already listening. On attempt
+        # 1 with a dead server we spawn; on retries after a startupError we
+        # spawn a fresh process because the existing one is stuck.
+        $proc = $null
+        $existing = Test-ServerHealth
+        if (-not $existing) {
+            Write-Host "Starting taskbean server (attempt $attempt/$maxAttempts)..." -ForegroundColor Cyan
+            $proc = Start-Process -FilePath $python -ArgumentList "main.py" `
+                -WorkingDirectory $AgentDir -WindowStyle Hidden -PassThru
+        } elseif ($attempt -gt 1) {
+            # Server is up from the previous attempt but wedged — identify the
+            # child process so we can kill it before restarting.
+            $conn = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+            if ($conn.Count -gt 0) {
+                $pidToKill = [int]$conn[0].OwningProcess
+                if ($pidToKill -gt 0) {
+                    Write-Host "Restarting stuck server (PID $pidToKill)..." -ForegroundColor Yellow
+                    Stop-Process -Id $pidToKill -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 2
+                }
+            }
+            $proc = Start-Process -FilePath $python -ArgumentList "main.py" `
+                -WorkingDirectory $AgentDir -WindowStyle Hidden -PassThru
+        }
+
+        # Poll /api/health and parse the JSON response. Three terminal states:
+        #   modelReady=true       -> success
+        #   startupError set      -> retryable (kill + respawn)
+        #   child process exited  -> non-retryable (crash during import)
+        $deadline = (Get-Date).AddSeconds($attemptBudget)
+        $retryThisAttempt = $false
+        while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Milliseconds 500
+
+            if ($proc -and $proc.HasExited) {
+                $lastError = "Python process exited immediately (exit code $($proc.ExitCode)). Check that requirements are installed."
+                Write-Host "  ✗ $lastError" -ForegroundColor Red
+                break
+            }
+
+            $h = Test-ServerHealth
+            if (-not $h) { continue }
+
+            if ($h.modelReady) {
+                Write-Host "Server is ready (model: $($h.model))." -ForegroundColor Green
+                $success = $true
+                break
+            }
+
+            if ($h.startupError) {
+                $snippet = if ($h.startupError.Length -gt 120) { $h.startupError.Substring(0, 120) + '…' } else { $h.startupError }
+                Write-Host "  startupError on attempt $attempt : $snippet" -ForegroundColor Yellow
+                $lastError = $h.startupError
+                $retryThisAttempt = $true
+                break
+            }
+            # Otherwise: web server is up but still initializing — keep polling.
+        }
+
+        if (-not $success -and $attempt -lt $maxAttempts -and $retryThisAttempt) {
+            Start-Sleep -Seconds 5
+        }
     }
 
-    if (-not $ready) {
-        Write-Host "Server did not become healthy within 60 s — opening anyway." -ForegroundColor Yellow
-    } else {
-        Write-Host "Server is ready." -ForegroundColor Green
+    if (-not $success) {
+        if ($lastError) {
+            Write-Host "Server did not become ready after $maxAttempts attempts. Last error: $lastError" -ForegroundColor Yellow
+        } else {
+            Write-Host "Server did not become ready within the timeout — opening anyway." -ForegroundColor Yellow
+        }
     }
 }
 
 if (-not $SkipBrowser) {
-    # Open in the default browser (Edge/Chrome will use the installed PWA if available)
-    Start-Process "http://localhost:$Port"
+    # Use 127.0.0.1 to match uvicorn's bind (see note on Test-ServerHealth).
+    Start-Process "http://127.0.0.1:$Port"
+}
+
+} finally {
+    if ($ownMutex) { $mutex.ReleaseMutex() }
+    $mutex.Dispose()
 }
