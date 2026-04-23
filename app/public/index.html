@@ -7092,7 +7092,7 @@ function stopVolumeMeter() {
 
 // Close mic popover on outside click
 document.addEventListener('click', (e) => {
-    if (_micPopoverOpen && !e.target.closest('.mic-popover') && !e.target.closest('#micBtn')) closeMicPopover();
+    if (_micPopoverOpen && !e.target.closest?.('.mic-popover') && !e.target.closest?.('#micBtn')) closeMicPopover();
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -7161,7 +7161,7 @@ async function quickSwitchModel(modelId) {
 
 // Close quick model popover on outside click
 document.addEventListener('click', (e) => {
-    if (_quickModelOpen && !e.target.closest('.quick-model-popover') && !e.target.closest('#composerModelPill')) closeQuickModelPicker();
+    if (_quickModelOpen && !e.target.closest?.('.quick-model-popover') && !e.target.closest?.('#composerModelPill')) closeQuickModelPicker();
 });
 
 // Sync composer model label with status bar model label
@@ -7578,7 +7578,7 @@ function toggleClockSeconds() {
 
 // Close clock popover on outside click
 document.addEventListener('click', (e) => {
-    if (_clockPopoverOpen && !e.target.closest('.clock-popover') && !e.target.closest('#chipClock')) closeClockPopover();
+    if (_clockPopoverOpen && !e.target.closest?.('.clock-popover') && !e.target.closest?.('#chipClock')) closeClockPopover();
 });
 
 function updateStatusBarHealth(ev) {
@@ -8947,18 +8947,18 @@ function filterSettings(query) {
         if (floatEl) floatEl.style.display = 'none';
     }
     document.addEventListener('pointerenter', (e) => {
-        const tip = e.target.closest('.info-tip');
+        const tip = e.target.closest?.('.info-tip');
         if (tip) show(tip);
     }, true);
     document.addEventListener('pointerleave', (e) => {
-        if (e.target.closest('.info-tip')) hide();
+        if (e.target.closest?.('.info-tip')) hide();
     }, true);
     document.addEventListener('focusin', (e) => {
-        const tip = e.target.closest('.info-tip');
+        const tip = e.target.closest?.('.info-tip');
         if (tip) show(tip);
     });
     document.addEventListener('focusout', (e) => {
-        if (e.target.closest('.info-tip')) hide();
+        if (e.target.closest?.('.info-tip')) hide();
     });
     // Hide on scroll within any settings panel
     document.addEventListener('scroll', (e) => {
@@ -9000,7 +9000,7 @@ function updateSettingsClockPreview() {
 // ── Unified toggle handler ──────────────────────────────────────
 
 document.addEventListener('click', async (e) => {
-    const toggle = e.target.closest('.stg-toggle[data-key]');
+    const toggle = e.target.closest?.('.stg-toggle[data-key]');
     if (!toggle) return;
     const key = toggle.dataset.key;
     const store = toggle.dataset.store || 'server';
