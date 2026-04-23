@@ -390,6 +390,39 @@ async def health() -> dict:
     return _health_data()
 
 
+@app.get("/api/launch-errors")
+async def launch_errors() -> dict:
+    """Returns the last error written by app/launch.ps1, if any.
+
+    The launcher writes a JSON record to %TEMP%\\taskbean-launch.err whenever
+    it gives up (missing prereqs, model never reached ready). On a successful
+    start the launcher deletes the file. The PWA polls this endpoint on
+    reconnect to surface a real error message instead of "Failed to fetch".
+
+    Once read, the file is removed so the same error is not toasted again on
+    the next reconnect; subsequent failures will recreate it.
+    """
+    try:
+        err_path = Path(os.environ.get("TEMP", "")) / "taskbean-launch.err"
+    except Exception:
+        return {"error": None}
+    if not err_path.is_file():
+        return {"error": None}
+    try:
+        raw = err_path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except Exception as exc:
+        return {"error": {"code": "READ_FAILED", "message": str(exc)}}
+    finally:
+        # Best-effort delete; if it races with a new launch, the new file
+        # will overwrite cleanly because Set-Content uses replace semantics.
+        try:
+            err_path.unlink()
+        except Exception:
+            pass
+    return {"error": data}
+
+
 # ── Single-shot inference helper ──────────────────────────────────────────────
 
 _THINK_RE = re.compile(r"<think>[\s\S]*?</think>")

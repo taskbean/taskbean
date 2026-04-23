@@ -4,11 +4,56 @@
    as the first argument — in that case we only start the server (the user
    already has a browser window open). #>
 
-param([string]$ProtocolUrl = "")
+param(
+    [string]$ProtocolUrl = "",
+    [ValidateSet('foreground','background')][string]$Mode = ''
+)
 
 $Port = 8275
 $AgentDir = Join-Path $PSScriptRoot "agent"
 $SkipBrowser = $ProtocolUrl -like "taskbean://*"
+
+# Mode resolution: protocol-handler invocations are always background (no
+# console attached). Explicit -Mode overrides auto-detection.
+if (-not $Mode) {
+    $Mode = if ($SkipBrowser) { 'background' } else { 'foreground' }
+}
+$IsBackground = $Mode -eq 'background'
+
+# Structured error reporting. In background mode the launcher has no console,
+# so any "we couldn't start" condition is written to a JSON error file the
+# /api/launch-errors endpoint surfaces back to the PWA. In foreground mode
+# we still write the file (so post-mortem inspection works) but also print
+# to the console for the developer running the script directly.
+$LaunchErrorFile = Join-Path $env:TEMP "taskbean-launch.err"
+
+function Write-LaunchError {
+    param(
+        [Parameter(Mandatory)][string]$Code,
+        [Parameter(Mandatory)][string]$Message,
+        [string]$Detail = ''
+    )
+    $payload = @{
+        code = $Code
+        message = $Message
+        detail = $Detail
+        timestamp = (Get-Date).ToUniversalTime().ToString('o')
+        mode = $Mode
+        protocolUrl = $ProtocolUrl
+    } | ConvertTo-Json -Compress
+    try { Set-Content -Path $LaunchErrorFile -Value $payload -Encoding UTF8 -ErrorAction Stop } catch {}
+    if (-not $IsBackground) {
+        Write-Host ""
+        Write-Host "[$Code] $Message" -ForegroundColor Red
+        if ($Detail) { Write-Host $Detail -ForegroundColor DarkGray }
+    }
+}
+
+function Clear-LaunchError {
+    if (Test-Path $LaunchErrorFile) {
+        try { Remove-Item $LaunchErrorFile -Force -ErrorAction Stop } catch {}
+    }
+}
 
 # ── Self-register taskbean:// protocol handler (best-effort, non-blocking) ────
 try {
@@ -41,6 +86,13 @@ function Resolve-RealPython {
 $python = Resolve-RealPython
 
 if (-not $python) {
+    if ($IsBackground) {
+        # No console -> never prompt. Surface a structured error and bail.
+        Write-LaunchError -Code 'PYTHON_MISSING' `
+            -Message 'Python 3.10+ is required but was not found on PATH.' `
+            -Detail 'Install from https://python.org/downloads/ or run: winget install Python.Python.3.12'
+        exit 2
+    }
     Write-Host ""
     Write-Host "Python not found." -ForegroundColor Red
     Write-Host "Install Python 3.10+ from https://python.org/downloads/" -ForegroundColor Yellow
@@ -50,12 +102,21 @@ if (-not $python) {
     Read-Host "Press Enter after installing Python to continue"
     $python = Resolve-RealPython
     if (-not $python) {
-        Write-Host "Python still not found. Please install it and try again." -ForegroundColor Red
-        exit 1
+        Write-LaunchError -Code 'PYTHON_MISSING' `
+            -Message 'Python 3.10+ is required but was not found on PATH after install prompt.' `
+            -Detail 'Install from https://python.org/downloads/ or run: winget install Python.Python.3.12'
+        exit 2
     }
 }
 
 if (-not (Get-Command foundry -ErrorAction SilentlyContinue)) {
+    if ($IsBackground) {
+        # winget is interactive (UAC, license prompts) -> never auto-install in background.
+        Write-LaunchError -Code 'FOUNDRY_MISSING' `
+            -Message 'Foundry Local is not installed.' `
+            -Detail 'Run: winget install Microsoft.FoundryLocal'
+        exit 3
+    }
     Write-Host ""
     Write-Host "Foundry Local not found. Installing via winget..." -ForegroundColor Yellow
     winget install Microsoft.FoundryLocal --accept-package-agreements --accept-source-agreements
@@ -191,11 +252,24 @@ if (-not $alive) {
     if (-not $success) {
         if ($lastError) {
             Write-Host "Server did not become ready after $maxAttempts attempts. Last error: $lastError" -ForegroundColor Yellow
+            Write-LaunchError -Code 'STARTUP_FAILED' `
+                -Message "Server did not become ready after $maxAttempts attempts." `
+                -Detail $lastError
         } else {
             Write-Host "Server did not become ready within the timeout — opening anyway." -ForegroundColor Yellow
+            Write-LaunchError -Code 'STARTUP_TIMEOUT' `
+                -Message "Server did not become ready within $($maxAttempts * $attemptBudget) seconds." `
+                -Detail 'No startupError reported by /api/health; the model load is taking longer than expected.'
         }
+    } else {
+        # Successful start (possibly after retries) -> erase any prior error
+        # so the PWA does not toast a stale message on reconnect.
+        Clear-LaunchError
     }
 }
+
+# Already-running short-circuit also counts as success.
+if ($alive) { Clear-LaunchError }
 
 if (-not $SkipBrowser) {
     # Use 127.0.0.1 to match uvicorn's bind (see note on Test-ServerHealth).

@@ -2252,6 +2252,9 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         or run <code>launch.cmd</code>
         <button aria-label="Copy command" onclick="copyOverlayCmd(this)"><i data-lucide="clipboard"></i></button>
       </div>
+      <div class="cmd-hint" style="font-size:10px;opacity:.75">
+        check launch log: <code>%TEMP%\taskbean-launch.err</code>
+      </div>
       <div class="auto-retry-status" id="autoRetryStatus"><span class="auto-retry-dot"></span> Auto-retrying every 3&nbsp;s</div>
     </div>
 
@@ -3343,6 +3346,24 @@ document.addEventListener('reachability-change', async (e) => {
         if (n > 0) {
             addChat('info', 'cloud-upload', `Synced ${n} offline change${n > 1 ? 's' : ''} to server.`);
         }
+        // Step 3: surface any prior launcher error. The launcher writes a JSON
+        // record to %TEMP%\taskbean-launch.err whenever it gives up (missing
+        // prereqs, model never reached ready). On a successful start it deletes
+        // the file. So if /api/launch-errors returns a payload at this point,
+        // it means earlier launch attempts failed before the one that succeeded
+        // — we toast it once so the user knows what was wrong.
+        try {
+            const res = await fetch('/api/launch-errors');
+            if (res.ok) {
+                const body = await res.json();
+                const err = body && body.error;
+                if (err && err.message) {
+                    const code = err.code ? ` (${err.code})` : '';
+                    const detail = err.detail ? ` — ${err.detail}` : '';
+                    addChat('info', 'alert-triangle', `Earlier launch attempt failed${code}: ${err.message}${detail}`);
+                }
+            }
+        } catch {}
     } finally {
         _reconnectInProgress = false;
     }
