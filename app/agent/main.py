@@ -391,36 +391,44 @@ async def health() -> dict:
 
 
 @app.get("/api/launch-errors")
-async def launch_errors() -> dict:
-    """Returns the last error written by app/launch.ps1, if any.
+async def launch_errors(limit: int = 20) -> dict:
+    """Returns a rolling history of launcher errors written by app/launch.ps1.
 
-    The launcher writes a JSON record to %TEMP%\\taskbean-launch.err whenever
-    it gives up (missing prereqs, model never reached ready). On a successful
-    start the launcher deletes the file. The PWA polls this endpoint on
-    reconnect to surface a real error message instead of "Failed to fetch".
+    The launcher appends a JSON line to %TEMP%\\taskbean-launch.log whenever
+    Write-LaunchError fires (missing prereqs, model never reached ready,
+    venv could not be created, etc.). Entries are capped at 50 in the log
+    file itself; this endpoint returns the most recent `limit` entries.
 
-    Once read, the file is removed so the same error is not toasted again on
-    the next reconnect; subsequent failures will recreate it.
+    Successful launches do NOT clear the log — it is a diagnostic history,
+    surfaced in the PWA's stats-for-nerds Logs tab. Returns an empty list
+    when no log file exists yet.
     """
     try:
-        err_path = Path(os.environ.get("TEMP", "")) / "taskbean-launch.err"
+        log_path = Path(os.environ.get("TEMP", "")) / "taskbean-launch.log"
     except Exception:
-        return {"error": None}
-    if not err_path.is_file():
-        return {"error": None}
+        return {"entries": []}
+    if not log_path.is_file():
+        return {"entries": []}
     try:
-        raw = err_path.read_text(encoding="utf-8")
-        data = json.loads(raw)
+        # PowerShell's `Set-Content -Encoding UTF8` adds a BOM on PS 5.1; use
+        # utf-8-sig so we tolerate either BOM or no-BOM writers.
+        raw = log_path.read_text(encoding="utf-8-sig")
     except Exception as exc:
-        return {"error": {"code": "READ_FAILED", "message": str(exc)}}
-    finally:
-        # Best-effort delete; if it races with a new launch, the new file
-        # will overwrite cleanly because Set-Content uses replace semantics.
+        return {"entries": [], "readError": str(exc)}
+    entries: list[dict] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
         try:
-            err_path.unlink()
+            entries.append(json.loads(line))
         except Exception:
-            pass
-    return {"error": data}
+            # Skip malformed lines rather than failing the whole response.
+            continue
+    # Most recent first, capped at `limit`.
+    entries.reverse()
+    capped = max(1, min(limit, 50))
+    return {"entries": entries[:capped]}
 
 
 # ── Single-shot inference helper ──────────────────────────────────────────────

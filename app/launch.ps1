@@ -25,7 +25,8 @@ $IsBackground = $Mode -eq 'background'
 # /api/launch-errors endpoint surfaces back to the PWA. In foreground mode
 # we still write the file (so post-mortem inspection works) but also print
 # to the console for the developer running the script directly.
-$LaunchErrorFile = Join-Path $env:TEMP "taskbean-launch.err"
+$LaunchLogFile = Join-Path $env:TEMP "taskbean-launch.log"
+$LaunchLogMaxEntries = 50
 
 function Write-LaunchError {
     param(
@@ -41,17 +42,23 @@ function Write-LaunchError {
         mode = $Mode
         protocolUrl = $ProtocolUrl
     } | ConvertTo-Json -Compress
-    try { Set-Content -Path $LaunchErrorFile -Value $payload -Encoding UTF8 -ErrorAction Stop } catch {}
+    # Append-as-JSONL with naive cap. Single launcher process at a time
+    # (named-mutex above), so no contention. Read-modify-write is fine.
+    try {
+        $existing = @()
+        if (Test-Path $LaunchLogFile) {
+            $existing = @(Get-Content $LaunchLogFile -ErrorAction SilentlyContinue)
+        }
+        $combined = @($existing) + @($payload)
+        if ($combined.Count -gt $LaunchLogMaxEntries) {
+            $combined = $combined | Select-Object -Last $LaunchLogMaxEntries
+        }
+        Set-Content -Path $LaunchLogFile -Value $combined -Encoding UTF8 -ErrorAction Stop
+    } catch {}
     if (-not $IsBackground) {
         Write-Host ""
         Write-Host "[$Code] $Message" -ForegroundColor Red
         if ($Detail) { Write-Host $Detail -ForegroundColor DarkGray }
-    }
-}
-
-function Clear-LaunchError {
-    if (Test-Path $LaunchErrorFile) {
-        try { Remove-Item $LaunchErrorFile -Force -ErrorAction Stop } catch {}
     }
 }
 
@@ -159,7 +166,8 @@ if (Ensure-Venv) { $python = $VenvPython }
 # Switching the system Python no longer triggers spurious reinstalls; only
 # editing requirements.txt or rebuilding the venv does.
 $reqFile = Join-Path $AgentDir "requirements.txt"
-if (Test-Path $reqFile) {
+$venvOk = Test-Path $VenvPython
+if ($venvOk -and (Test-Path $reqFile)) {
     $stamp = Join-Path $VenvDir ".deps-stamp"
     $legacyMarker = Join-Path $AgentDir ".deps-installed"
     $reqHash = (Get-FileHash -Path $reqFile -Algorithm SHA256).Hash
@@ -184,6 +192,27 @@ if (Test-Path $reqFile) {
             if ($IsBackground) { exit 5 }
         }
     }
+} elseif (-not $venvOk -and (Test-Path $reqFile)) {
+    # Venv creation failed and we fell back to system python. We deliberately
+    # do NOT pip-install into the system interpreter — that would (a) pollute
+    # the user's global site-packages and (b) fail outright on PEP 668
+    # externally-managed installs. Surface a clear error and let the launch
+    # attempt fail with a useful message instead.
+    Write-LaunchError -Code 'VENV_REQUIRED' `
+        -Message 'A virtual environment is required to install dependencies, but app\.venv could not be created.' `
+        -Detail 'Delete app\.venv if it exists and re-run, or create it manually with: python -m venv app\.venv'
+    if ($IsBackground) { exit 4 }
+    # Foreground: do NOT continue. Without deps the server would die later
+    # with a cryptic ImportError, masking the real cause. Pause so the user
+    # actually sees the message before the window closes (interactive launch
+    # is typically a double-click that closes on exit).
+    Write-Host ""
+    Write-Host "Cannot continue without a working virtual environment." -ForegroundColor Yellow
+    Write-Host "See error log at $env:TEMP\taskbean-launch.log" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Press any key to exit..." -ForegroundColor DarkGray
+    [void][System.Console]::ReadKey($true)
+    exit 4
 }
 
 # ── Single-instance guard ─────────────────────────────────────────────────────
@@ -311,14 +340,15 @@ if (-not $alive) {
                 -Detail 'No startupError reported by /api/health; the model load is taking longer than expected.'
         }
     } else {
-        # Successful start (possibly after retries) -> erase any prior error
-        # so the PWA does not toast a stale message on reconnect.
-        Clear-LaunchError
+        # Successful start (possibly after retries). The launch log keeps a
+        # rolling history of the last 50 entries so users can review prior
+        # issues from the Diagnostics tab in stats-for-nerds — we deliberately
+        # do NOT clear it on success.
     }
 }
 
-# Already-running short-circuit also counts as success.
-if ($alive) { Clear-LaunchError }
+# Already-running short-circuit also counts as success; nothing to clear.
+if ($alive) { }
 
 if (-not $SkipBrowser) {
     # Use 127.0.0.1 to match uvicorn's bind (see note on Test-ServerHealth).
