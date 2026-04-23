@@ -32,7 +32,7 @@ jobs:
             Write-Error "app/launch.ps1 must start with a UTF-8 BOM (EF BB BF). Found: $hex. Re-save with UTF-8-BOM encoding (see .editorconfig)."
             exit 1
           }
-          Write-Host "✓ BOM present" -ForegroundColor Green
+          Write-Host "[OK] BOM present" -ForegroundColor Green
 
       - name: Assert -UseBasicParsing on every Invoke-WebRequest
         shell: pwsh
@@ -48,7 +48,7 @@ jobs:
             Write-Error "Every Invoke-WebRequest in launch.ps1 must include -UseBasicParsing. Offending lines:`n$($bad.Value -join "`n")"
             exit 1
           }
-          Write-Host "✓ All $($matches.Count) Invoke-WebRequest call(s) use -UseBasicParsing" -ForegroundColor Green
+          Write-Host "[OK] All $($matches.Count) Invoke-WebRequest call(s) use -UseBasicParsing" -ForegroundColor Green
 
       - name: Assert WindowsApps filter in Python resolver
         shell: pwsh
@@ -58,7 +58,7 @@ jobs:
             Write-Error "launch.ps1 must filter out Microsoft Store App Execution Alias stubs under \WindowsApps\. See Resolve-RealPython."
             exit 1
           }
-          Write-Host "✓ WindowsApps filter present" -ForegroundColor Green
+          Write-Host "[OK] WindowsApps filter present" -ForegroundColor Green
 
   parse-powershell-51:
     name: Parse under Windows PowerShell 5.1
@@ -79,7 +79,7 @@ jobs:
             Write-Error "Parse errors under Windows PowerShell 5.1:`n$($errors | ForEach-Object { $_.Message } | Out-String)"
             exit 1
           }
-          Write-Host "✓ Parses cleanly under Windows PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Green
+          Write-Host "[OK] Parses cleanly under Windows PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Green
 
   parse-pwsh-7:
     name: Parse under PowerShell 7
@@ -100,4 +100,4 @@ jobs:
             Write-Error "Parse errors under PowerShell 7:`n$($errors | ForEach-Object { $_.Message } | Out-String)"
             exit 1
           }
-          Write-Host "✓ Parses cleanly under PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Green
+          Write-Host "[OK] Parses cleanly under PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Green
