@@ -126,14 +126,63 @@ if (-not (Get-Command foundry -ErrorAction SilentlyContinue)) {
     }
 }
 
-# Install Python dependencies if needed
+# ── Python virtual environment ────────────────────────────────────────────────
+# We install dependencies into a repo-local virtual environment (app/.venv)
+# so the running server is hermetically isolated from changes to the system
+# Python install path. This eliminates the "I uninstalled Python 3.11 and
+# now the launcher picks up an incompatible 3.13" class of breakage. The
+# bootstrap python ($python from Resolve-RealPython) is used only to create
+# the venv and is then discarded — all subsequent commands use the venv.
+$VenvDir = Join-Path $AgentDir ".venv"
+$VenvPython = Join-Path $VenvDir "Scripts\python.exe"
+
+function Ensure-Venv {
+    if (Test-Path $VenvPython) { return $true }
+    Write-Host "Creating virtual environment at app\.venv (one-time setup)..." -ForegroundColor Cyan
+    & $python -m venv $VenvDir
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $VenvPython)) {
+        Write-LaunchError -Code 'VENV_CREATE_FAILED' `
+            -Message 'Could not create the virtual environment at app\.venv.' `
+            -Detail "Bootstrap python: $python (exit $LASTEXITCODE). Try deleting app\.venv and re-running."
+        if ($IsBackground) { exit 4 }
+        Write-Host "Could not create venv — falling back to system python." -ForegroundColor Yellow
+        return $false
+    }
+    return $true
+}
+
+if (Ensure-Venv) { $python = $VenvPython }
+
+# Install / refresh Python dependencies. The deps stamp lives inside the
+# venv (so it is invalidated automatically when the venv is rebuilt) and
+# records the SHA256 of requirements.txt from the last successful install.
+# Switching the system Python no longer triggers spurious reinstalls; only
+# editing requirements.txt or rebuilding the venv does.
 $reqFile = Join-Path $AgentDir "requirements.txt"
 if (Test-Path $reqFile) {
-    $marker = Join-Path $AgentDir ".deps-installed"
-    if (-not (Test-Path $marker)) {
-        Write-Host "Installing Python dependencies..." -ForegroundColor Cyan
+    $stamp = Join-Path $VenvDir ".deps-stamp"
+    $legacyMarker = Join-Path $AgentDir ".deps-installed"
+    $reqHash = (Get-FileHash -Path $reqFile -Algorithm SHA256).Hash
+    $needInstall = $true
+    if (Test-Path $stamp) {
+        $existing = ((Get-Content $stamp -Raw -ErrorAction SilentlyContinue) -as [string]).Trim()
+        if ($existing -eq $reqHash) { $needInstall = $false }
+    }
+    if ($needInstall) {
+        Write-Host "Installing Python dependencies into app\.venv..." -ForegroundColor Cyan
         & $python -m pip install -r $reqFile --quiet 2>$null
-        if ($LASTEXITCODE -eq 0) { New-Item -Path $marker -ItemType File -Force | Out-Null }
+        if ($LASTEXITCODE -eq 0) {
+            Set-Content -Path $stamp -Value $reqHash -Encoding ASCII
+            # Migration: legacy marker in $AgentDir is no longer authoritative
+            # because it was interpreter-agnostic. Remove it once the venv has
+            # a successful install.
+            if (Test-Path $legacyMarker) { Remove-Item $legacyMarker -Force -ErrorAction SilentlyContinue }
+        } else {
+            Write-LaunchError -Code 'PIP_INSTALL_FAILED' `
+                -Message 'pip install -r requirements.txt failed.' `
+                -Detail "Interpreter: $python (exit $LASTEXITCODE)"
+            if ($IsBackground) { exit 5 }
+        }
     }
 }
 
