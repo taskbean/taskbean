@@ -38,6 +38,40 @@ bean list --json
 
 Always pass `--json` so you can read the returned `id`.
 
+## Project Management
+
+```bash
+# List tracked projects (excludes hidden by default)
+bean projects --json
+
+# Include hidden projects
+bean projects --all --json
+
+# Filter by category
+bean projects --category work --json
+
+# Hide a project from default views (tasks still exist, just hidden from lists)
+bean projects hide [name] --json
+
+# Show a hidden project again
+bean projects show [name] --json
+
+# Set a category on a project (e.g. work, personal, oss)
+bean projects categorize [name] --category work --json
+
+# Remove a category
+bean projects categorize [name] --clear --json
+
+# Delete a project (removes DB entry + skill files, keeps tasks)
+bean projects delete [name] --confirm --json
+
+# Delete without cleaning up files on disk
+bean projects delete [name] --confirm --keep-files --json
+
+# Untrack a project (also removes installed skill files)
+bean untrack --json
+```
+
 ## Writing good task titles
 
 Task titles end up in the user's weekly report. Write them the way you'd describe the work to a colleague — specific and outcome-oriented.
