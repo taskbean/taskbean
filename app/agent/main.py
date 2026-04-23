@@ -1408,6 +1408,19 @@ async def todo_action(todo_id: str, action: str | None = None):
 # ── Projects (reads from CLI's SQLite DB) ─────────────────────────────────────
 
 
+def _ensure_projects_schema(conn):
+    """Ensure projects table has hidden + category columns (migration)."""
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info('projects')").fetchall()}
+        if 'hidden' not in cols:
+            conn.execute("ALTER TABLE projects ADD COLUMN hidden INTEGER DEFAULT 0")
+        if 'category' not in cols:
+            conn.execute("ALTER TABLE projects ADD COLUMN category TEXT DEFAULT NULL")
+        conn.commit()
+    except Exception:
+        pass  # safe no-op if table doesn't exist yet
+
+
 def _get_taskbean_db():
     """Open the shared taskbean SQLite DB (read-only)."""
     import sqlite3
@@ -1416,6 +1429,7 @@ def _get_taskbean_db():
         return None
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
+    _ensure_projects_schema(conn)
     return conn
 
 
@@ -1427,6 +1441,7 @@ def _get_taskbean_db_rw():
         return None
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    _ensure_projects_schema(conn)
     return conn
 
 
@@ -1520,60 +1535,83 @@ class ProjectActionBody(BaseModel):
 class ProjectCategoryBody(BaseModel):
     category: str | None = None
 
-@app.post("/api/projects/{name}/hide")
+def _find_project(conn, name_or_path: str):
+    """Find a project by path (unique) or name (must be unambiguous)."""
+    row = conn.execute("SELECT * FROM projects WHERE path = ?", (name_or_path,)).fetchone()
+    if row:
+        return row
+    rows = conn.execute("SELECT * FROM projects WHERE name = ?", (name_or_path,)).fetchall()
+    if len(rows) == 1:
+        return rows[0]
+    if len(rows) > 1:
+        raise HTTPException(status_code=409, detail=f"Ambiguous: {len(rows)} projects named '{name_or_path}'. Use full path.")
+    return None
+
+@app.post("/api/projects/{name:path}/hide")
 async def hide_project(name: str) -> dict:
     """Hide a project from default views."""
     conn = _get_taskbean_db_rw()
     if not conn:
         raise HTTPException(status_code=500, detail="database unavailable")
     try:
-        row = conn.execute("SELECT * FROM projects WHERE name = ?", (name,)).fetchone()
+        row = _find_project(conn, name)
         if not row:
             raise HTTPException(status_code=404, detail=f"Project not found: {name}")
-        conn.execute("UPDATE projects SET hidden = 1 WHERE name = ?", (name,))
+        conn.execute("UPDATE projects SET hidden = 1 WHERE id = ?", (row["id"],))
         conn.commit()
-        return {"status": "hidden", "project": name}
+        return {"status": "hidden", "project": row["name"]}
     finally:
         conn.close()
 
-@app.post("/api/projects/{name}/show")
+@app.post("/api/projects/{name:path}/show")
 async def show_project(name: str) -> dict:
     """Un-hide a project."""
     conn = _get_taskbean_db_rw()
     if not conn:
         raise HTTPException(status_code=500, detail="database unavailable")
     try:
-        row = conn.execute("SELECT * FROM projects WHERE name = ?", (name,)).fetchone()
+        row = _find_project(conn, name)
         if not row:
             raise HTTPException(status_code=404, detail=f"Project not found: {name}")
-        conn.execute("UPDATE projects SET hidden = 0 WHERE name = ?", (name,))
+        conn.execute("UPDATE projects SET hidden = 0 WHERE id = ?", (row["id"],))
         conn.commit()
-        return {"status": "visible", "project": name}
+        return {"status": "visible", "project": row["name"]}
     finally:
         conn.close()
 
-@app.post("/api/projects/{name}/category")
+@app.post("/api/projects/{name:path}/category")
 async def set_project_category(name: str, body: ProjectCategoryBody) -> dict:
     """Set or clear a project's category."""
     conn = _get_taskbean_db_rw()
     if not conn:
         raise HTTPException(status_code=500, detail="database unavailable")
     try:
-        row = conn.execute("SELECT * FROM projects WHERE name = ?", (name,)).fetchone()
+        row = _find_project(conn, name)
         if not row:
             raise HTTPException(status_code=404, detail=f"Project not found: {name}")
-        conn.execute("UPDATE projects SET category = ? WHERE name = ?", (body.category, name))
+        conn.execute("UPDATE projects SET category = ? WHERE id = ?", (body.category, row["id"]))
         conn.commit()
-        return {"status": "updated", "project": name, "category": body.category}
+        return {"status": "updated", "project": row["name"], "category": body.category}
     finally:
         conn.close()
 
-@app.delete("/api/projects/{name}")
+@app.delete("/api/projects/{name:path}")
 async def delete_project(name: str) -> dict:
     """Delete a project by shelling out to bean projects delete."""
     _reject_shell_metachars(name, "name")
+    conn = _get_taskbean_db_rw()
+    if not conn:
+        raise HTTPException(status_code=500, detail="database unavailable")
+    try:
+        row = _find_project(conn, name)
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Project not found: {name}")
+        project_path = row["path"]
+    finally:
+        conn.close()
+    _reject_shell_metachars(project_path, "path")
     bean_cmd = "bean.cmd" if sys.platform == "win32" else "bean"
-    args = [bean_cmd, "projects", "delete", name, "--confirm", "--json"]
+    args = [bean_cmd, "projects", "delete", project_path, "--confirm", "--json"]
 
     def _run():
         return subprocess.run(args, capture_output=True, text=True, timeout=60)
@@ -1597,14 +1635,14 @@ async def delete_project(name: str) -> dict:
     except json.JSONDecodeError:
         return {"status": "deleted", "project": name}
 
-@app.post("/api/projects/{name}/untrack")
+@app.post("/api/projects/{name:path}/untrack")
 async def untrack_project(name: str) -> dict:
     """Untrack a project by shelling out to bean untrack."""
     conn = _get_taskbean_db()
     if not conn:
         raise HTTPException(status_code=500, detail="database unavailable")
     try:
-        row = conn.execute("SELECT path FROM projects WHERE name = ?", (name,)).fetchone()
+        row = _find_project(conn, name)
         if not row:
             raise HTTPException(status_code=404, detail=f"Project not found: {name}")
         project_path = row["path"]

@@ -4903,14 +4903,21 @@ function _renderProjectFilterBar(projects) {
     bar.style.display = 'flex';
 
     const cats = [...new Set(projects.map(p => p.category).filter(Boolean))];
-    let html = `<button class="project-filter-chip ${_projectCategoryFilter === 'all' ? 'active' : ''}" onclick="setProjectCategoryFilter('all')">All</button>`;
+    let html = `<button class="project-filter-chip ${_projectCategoryFilter === 'all' ? 'active' : ''}" data-cat-filter="all">All</button>`;
     for (const cat of ['work', 'personal', 'oss', ...cats.filter(c => !['work','personal','oss'].includes(c.toLowerCase()))]) {
         const unique = cat.toLowerCase();
         if (html.includes(`data-cat="${unique}"`)) continue;
-        html += `<button class="project-filter-chip ${_projectCategoryFilter === unique ? 'active' : ''}" data-cat="${unique}" onclick="setProjectCategoryFilter('${esc(unique)}')">${esc(cat)}</button>`;
+        html += `<button class="project-filter-chip ${_projectCategoryFilter === unique ? 'active' : ''}" data-cat="${unique}" data-cat-filter="${esc(unique)}">${esc(cat)}</button>`;
     }
-    html += `<label class="project-hidden-toggle"><input type="checkbox" ${_projectShowHidden ? 'checked' : ''} onchange="toggleProjectShowHidden(this.checked)"> Show hidden</label>`;
+    html += `<label class="project-hidden-toggle"><input type="checkbox" ${_projectShowHidden ? 'checked' : ''} data-show-hidden> Show hidden</label>`;
     bar.innerHTML = html;
+    bar.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-cat-filter]');
+        if (chip) setProjectCategoryFilter(chip.dataset.catFilter);
+    });
+    bar.addEventListener('change', (e) => {
+        if (e.target.dataset.showHidden !== undefined) toggleProjectShowHidden(e.target.checked);
+    });
 }
 
 function setProjectCategoryFilter(cat) {
@@ -4992,13 +4999,13 @@ async function renderProjects() {
                 ? `<span class="project-card-skill installed" title="Skill installed"><i data-lucide="check-circle" class="icon-xs"></i></span>`
                 : `<span class="project-card-skill not-installed" title="Skill not installed"><i data-lucide="alert-circle" class="icon-xs"></i></span>`;
             return `
-            <div class="project-card ${p.hidden ? 'hidden-project' : ''}" onclick="toggleProjectExpand('${esc(p.name)}')" data-project="${esc(p.name)}">
+            <div class="project-card ${p.hidden ? 'hidden-project' : ''}" data-project="${esc(p.name)}">
                 <div class="project-card-header">
                     <i data-lucide="folder-kanban" class="icon-sm" style="color:var(--accent)"></i>
                     <span class="project-card-name">${esc(p.name)}</span>
                     ${catBadge}${hiddenBadge}${skillBadge}
                     <span class="project-card-badge">${p.total} tasks</span>
-                    <button class="project-card-kebab" onclick="event.stopPropagation();showProjectMenu(event,'${esc(p.name)}')" title="Project actions" aria-label="Project actions for ${esc(p.name)}"><i data-lucide="more-vertical" class="icon-sm"></i></button>
+                    <button class="project-card-kebab" data-project-menu="${esc(p.name)}" title="Project actions" aria-label="Project actions for ${esc(p.name)}"><i data-lucide="more-vertical" class="icon-sm"></i></button>
                 </div>
                 <div class="project-card-stats">
                     <span class="project-card-stat"><span class="done-dot"></span> ${p.done} done</span>
@@ -5015,6 +5022,19 @@ async function renderProjects() {
     if (!unchanged) {
         el.innerHTML = html;
         el.dataset.sig = signature;
+        // Delegated event listeners for project cards
+        el.addEventListener('click', (e) => {
+            const kebab = e.target.closest('[data-project-menu]');
+            if (kebab) {
+                e.stopPropagation();
+                showProjectMenu(e, kebab.dataset.projectMenu);
+                return;
+            }
+            const card = e.target.closest('.project-card');
+            if (card && card.dataset.project) {
+                toggleProjectExpand(card.dataset.project);
+            }
+        });
     }
     lucide.createIcons();
     loadUsageStats();
@@ -5295,23 +5315,34 @@ function showProjectMenu(event, name) {
     menu.innerHTML = `
         <div class="project-ctx-submenu">
             <label>Category</label>
-            <select onchange="handleProjectCategoryChange(this,'${esc(name)}')">${catOptions}</select>
+            <select data-category-for="${esc(name)}">${catOptions}</select>
         </div>
         <div class="project-ctx-sep"></div>
-        <div class="project-ctx-item" onclick="projectAction('${proj.hidden ? 'show' : 'hide'}','${esc(name)}')">
+        <div class="project-ctx-item" data-action="${proj.hidden ? 'show' : 'hide'}" data-project-action="${esc(name)}">
             <i data-lucide="${proj.hidden ? 'eye' : 'eye-off'}" class="icon-sm"></i>
             ${proj.hidden ? 'Show project' : 'Hide project'}
         </div>
-        <div class="project-ctx-item" onclick="projectAction('untrack','${esc(name)}')">
+        <div class="project-ctx-item" data-action="untrack" data-project-action="${esc(name)}">
             <i data-lucide="unlink" class="icon-sm"></i>
             Untrack project
         </div>
         <div class="project-ctx-sep"></div>
-        <div class="project-ctx-item danger" onclick="projectAction('delete','${esc(name)}')">
+        <div class="project-ctx-item danger" data-action="delete" data-project-action="${esc(name)}">
             <i data-lucide="trash-2" class="icon-sm"></i>
             Delete project
         </div>
     `;
+    menu.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-action]');
+        if (item) {
+            projectAction(item.dataset.action, item.dataset.projectAction);
+        }
+    });
+    menu.addEventListener('change', (e) => {
+        if (e.target.dataset.categoryFor) {
+            handleProjectCategoryChange(e.target, e.target.dataset.categoryFor);
+        }
+    });
 
     // Position relative to click
     const rect = event.target.closest('.project-card-kebab').getBoundingClientRect();
