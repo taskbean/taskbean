@@ -390,6 +390,47 @@ async def health() -> dict:
     return _health_data()
 
 
+@app.get("/api/launch-errors")
+async def launch_errors(limit: int = 20) -> dict:
+    """Returns a rolling history of launcher errors written by app/launch.ps1.
+
+    The launcher appends a JSON line to %TEMP%\\taskbean-launch.log whenever
+    Write-LaunchError fires (missing prereqs, model never reached ready,
+    venv could not be created, etc.). Entries are capped at 50 in the log
+    file itself; this endpoint returns the most recent `limit` entries.
+
+    Successful launches do NOT clear the log — it is a diagnostic history,
+    surfaced in the PWA's stats-for-nerds Logs tab. Returns an empty list
+    when no log file exists yet.
+    """
+    try:
+        log_path = Path(os.environ.get("TEMP", "")) / "taskbean-launch.log"
+    except Exception:
+        return {"entries": []}
+    if not log_path.is_file():
+        return {"entries": []}
+    try:
+        # PowerShell's `Set-Content -Encoding UTF8` adds a BOM on PS 5.1; use
+        # utf-8-sig so we tolerate either BOM or no-BOM writers.
+        raw = log_path.read_text(encoding="utf-8-sig")
+    except Exception as exc:
+        return {"entries": [], "readError": str(exc)}
+    entries: list[dict] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except Exception:
+            # Skip malformed lines rather than failing the whole response.
+            continue
+    # Most recent first, capped at `limit`.
+    entries.reverse()
+    capped = max(1, min(limit, 50))
+    return {"entries": entries[:capped]}
+
+
 # ── Single-shot inference helper ──────────────────────────────────────────────
 
 _THINK_RE = re.compile(r"<think>[\s\S]*?</think>")
@@ -437,7 +478,7 @@ async def _foundry_complete(system_prompt: str, user_message: str) -> str:
     usage: dict[str, Any] = {}
     chunk: dict[str, Any] = {}
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=300, write=10, pool=10)) as client:
         async with client.stream("POST", url, json=body, headers=headers) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
@@ -446,7 +487,10 @@ async def _foundry_complete(system_prompt: str, user_message: str) -> str:
                 data = line[6:]
                 if data == "[DONE]":
                     break
-                chunk = json.loads(data)
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
                 # Capture usage from the final chunk (Foundry Local includes it)
                 if chunk.get("usage"):
                     usage = chunk["usage"]
@@ -732,33 +776,137 @@ class ConfigPatch(BaseModel):
     speech: SpeechConfig | None = None
 
 
-def _sync_startup_shortcut(enabled: bool) -> None:
-    """Create or remove a Windows Startup folder shortcut for launch.ps1."""
-    launch_ps1 = str(Path(__file__).parent.parent / "launch.ps1")
+def _run_powershell(script: str, timeout: int = 15) -> subprocess.CompletedProcess:
+    """Run a PowerShell command via -EncodedCommand to avoid quoting bugs.
+
+    PowerShell's -EncodedCommand takes a base64-encoded UTF-16LE string,
+    which sidesteps every shell-quoting trap (apostrophes in usernames,
+    spaces in paths, embedded quotes, etc.) — the script bytes go through
+    unmodified.
+    """
+    import base64
+    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+    return subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+        capture_output=True, timeout=timeout, text=True,
+    )
+
+
+def _legacy_shortcut_path() -> Path:
+    """Path to the pre-P3 Startup-folder .lnk we migrate users away from."""
     startup_dir = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
-    shortcut_path = startup_dir / "TaskBean.lnk"
+    return startup_dir / "TaskBean.lnk"
+
+
+def _sync_startup_scheduled_task(enabled: bool) -> dict:
+    """Create or remove a per-user Windows Scheduled Task for launch.ps1.
+
+    Replaces the prior Startup-folder .lnk approach. The Scheduled Task adds
+    three properties the .lnk could not provide:
+
+    1. Restart-on-failure: if the launcher exits non-zero (or the python
+       child crashes), Windows retries up to 3 times at 1-minute intervals.
+       This absorbs the known Foundry EP cold-boot flakiness without any
+       code in the launcher itself. (1 minute is the documented minimum
+       for RestartInterval; values smaller than PT1M are rejected by
+       Register-ScheduledTask.)
+    2. Single-instance: MultipleInstances=IgnoreNew prevents duplicate
+       servers when the user logs in/out repeatedly.
+    3. Hidden: no console window flashes during boot.
+
+    Returns a dict {ok: bool, error: str|None} so the caller can surface
+    failures to the UI instead of silently claiming runOnStartup=true.
+
+    Migration: any pre-existing TaskBean.lnk in the Startup folder is
+    removed regardless of the new enabled state, so users with the old
+    layout get cleaned up automatically.
+    """
+    log = logging.getLogger(__name__)
+    launch_ps1 = Path(__file__).parent.parent / "launch.ps1"
+    working_dir = launch_ps1.parent
+    task_name = "TaskBean"
+
+    # Always migrate away from the legacy shortcut, regardless of the new
+    # enabled value — we never want both mechanisms running at once.
+    legacy = _legacy_shortcut_path()
     try:
-        if enabled:
-            # Create .lnk via WScript.Shell COM
-            ps = (
-                f"$ws = New-Object -ComObject WScript.Shell; "
-                f"$sc = $ws.CreateShortcut('{shortcut_path}'); "
-                f"$sc.TargetPath = 'powershell.exe'; "
-                f"$sc.Arguments = '-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File \"{launch_ps1}\"'; "
-                f"$sc.WorkingDirectory = '{Path(launch_ps1).parent}'; "
-                f"$sc.Description = 'TaskBean — start server and open app'; "
-                f"$sc.Save()"
-            )
-            result = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, timeout=10, text=True)
-            if result.returncode != 0:
-                logging.getLogger(__name__).warning("Startup shortcut creation failed: %s", result.stderr.strip())
-            else:
-                logging.getLogger(__name__).info("Created startup shortcut at %s", shortcut_path)
-        else:
-            shortcut_path.unlink(missing_ok=True)
-            logging.getLogger(__name__).info("Removed startup shortcut")
-    except Exception as e:
-        logging.getLogger(__name__).warning("Startup shortcut sync failed: %s", e)
+        if legacy.is_file():
+            legacy.unlink()
+            log.info("Migrated away from legacy startup shortcut at %s", legacy)
+    except Exception as exc:
+        log.warning("Could not remove legacy startup shortcut: %s", exc)
+
+    if not enabled:
+        # Unregister-ScheduledTask is idempotent when -ErrorAction SilentlyContinue is set.
+        script = (
+            f'Unregister-ScheduledTask -TaskName "{task_name}" -Confirm:$false '
+            f'-ErrorAction SilentlyContinue | Out-Null'
+        )
+        try:
+            res = _run_powershell(script)
+            if res.returncode != 0:
+                return {"ok": False, "error": (res.stderr or "").strip() or "Unregister-ScheduledTask failed"}
+            log.info("Removed scheduled task '%s'", task_name)
+            return {"ok": True, "error": None}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    # Build a Register-ScheduledTask invocation. The launcher is invoked in
+    # background mode so it never prompts and surfaces errors via the
+    # /api/launch-errors file the PWA reads on reconnect.
+    script = (
+        f'$action = New-ScheduledTaskAction `\n'
+        f'    -Execute "powershell.exe" `\n'
+        f'    -Argument \'-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File "{launch_ps1}" -Mode background\' `\n'
+        f'    -WorkingDirectory "{working_dir}";\n'
+        f'$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME;\n'
+        f'$settings = New-ScheduledTaskSettingsSet `\n'
+        f'    -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `\n'
+        f'    -ExecutionTimeLimit ([TimeSpan]::Zero) `\n'
+        f'    -MultipleInstances IgnoreNew `\n'
+        f'    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `\n'
+        f'    -Hidden;\n'
+        f'$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited;\n'
+        f'Register-ScheduledTask -TaskName "{task_name}" -Action $action -Trigger $trigger '
+        f'-Settings $settings -Principal $principal -Force | Out-Null'
+    )
+    try:
+        res = _run_powershell(script, timeout=20)
+        if res.returncode != 0:
+            err = (res.stderr or "").strip() or "Register-ScheduledTask failed"
+            log.warning("Scheduled task registration failed: %s", err)
+            return {"ok": False, "error": err}
+        log.info("Registered scheduled task '%s' for %s", task_name, launch_ps1)
+        return {"ok": True, "error": None}
+    except Exception as exc:
+        log.warning("Scheduled task sync raised: %s", exc)
+        return {"ok": False, "error": str(exc)}
+
+
+# Back-compat alias so any external caller (or stray import) still works.
+_sync_startup_shortcut = _sync_startup_scheduled_task
+
+
+@app.get("/api/port-info")
+async def port_info() -> dict:
+    return {
+        "port": int(app_config.get("port") or 8275),
+        "default": 8275,
+        "conflict": None,
+        "configurable": True,
+    }
+
+
+class PortBody(BaseModel):
+    port: int
+
+
+@app.post("/api/port")
+async def set_port(body: PortBody) -> dict:
+    if body.port < 1024 or body.port > 65535:
+        raise HTTPException(400, "Port must be between 1024 and 65535")
+    app_config.set("port", body.port)
+    return {"ok": True, "port": body.port, "message": f"Port set to {body.port}. Restart taskbean for it to take effect."}
 
 
 @app.get("/api/port-info")
@@ -888,10 +1036,20 @@ async def update_config(patch: ConfigPatch) -> dict:
         app_config.set(key, value)
 
     # Handle side effects after successful persistence
+    startup_warning = None
     if "runOnStartup" in pending:
-        _sync_startup_shortcut(pending["runOnStartup"])
+        result = _sync_startup_scheduled_task(pending["runOnStartup"])
+        if not result.get("ok"):
+            # The persisted setting may now be misleading (UI says enabled,
+            # task isn't actually registered). Flip it back so what the UI
+            # shows matches reality, and surface the error in the response.
+            app_config.set("runOnStartup", not pending["runOnStartup"])
+            startup_warning = result.get("error") or "Failed to update startup task"
 
-    return {**app_config.all_settings(), "hardware": hw_mod.detect_hardware().to_dict()}
+    response = {**app_config.all_settings(), "hardware": hw_mod.detect_hardware().to_dict()}
+    if startup_warning:
+        response["startupWarning"] = startup_warning
+    return response
 
 
 # ── Model switch (atomic, locked, permission-aware) ───────────────────────────
@@ -1200,6 +1358,11 @@ async def delete_todo(todo_id: str) -> dict:
     if idx is None:
         raise HTTPException(404, "Not found")
     state_mod.todos.pop(idx)
+    try:
+        import persistence
+        persistence.delete_todo(todo_id)
+    except Exception as e:
+        logger.warning("Failed to delete todo from DB: %s", e)
     return {"success": True}
 
 
@@ -1212,6 +1375,11 @@ async def todo_action(todo_id: str, action: str | None = None):
 
     if action == "complete":
         todo["completed"] = True
+        try:
+            import persistence
+            persistence.update_todo_fields(todo)
+        except Exception:
+            pass
         return HTMLResponse(
             "<h2>✅ Done!</h2>"
             f"<p>Marked <strong>{todo['title']}</strong> as complete.</p>"
@@ -1223,6 +1391,11 @@ async def todo_action(todo_id: str, action: str | None = None):
         todo["reminder"] = True
         todo["remindAt"] = snooze_until
         todo["reminderFired"] = False
+        try:
+            import persistence
+            persistence.update_todo_fields(todo)
+        except Exception:
+            pass
         return HTMLResponse(
             "<h2>⏰ Snoozed</h2>"
             f"<p><strong>{todo['title']}</strong> will remind you again in 10 minutes.</p>"
@@ -1274,16 +1447,13 @@ async def get_projects() -> list:
     result = []
     for r in rows:
         name = r["name"]
-        project_todos = [t for t in state_mod.todos if t.get("project") == name]
         sc = todo_counts.get(name, {"total": 0, "done": 0})
-        mem_total = len(project_todos)
-        mem_done = sum(1 for t in project_todos if t.get("completed"))
         result.append({
             "name": name,
             "path": r["path"],
-            "total": sc["total"] + mem_total,
-            "done": sc["done"] + mem_done,
-            "pending": (sc["total"] - sc["done"]) + (mem_total - mem_done),
+            "total": sc["total"],
+            "done": sc["done"],
+            "pending": sc["total"] - sc["done"],
         })
     return result
 

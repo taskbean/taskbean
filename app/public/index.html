@@ -1357,6 +1357,110 @@ header {
 }
 .chat-label { font-weight: 600; margin-bottom: 2px; font-size: 11px; }
 
+/* ─── Notice chip ────────────────────────────────────────────────────
+   Warm chalkboard-style alert for launcher / settings warnings.
+   Used by renderLaunchNotice(). Distinct from .error (which is loud
+   red — for failed user actions) and .info (which is silent muted text).
+   .notice = "an earlier background process tried to tell you something
+   important, here's what." */
+.chat-msg.notice {
+  align-self: stretch; max-width: 100%;
+  padding: 0; gap: 0; display: block;
+  background: transparent; border: 0;
+  font-size: 12px;
+}
+.notice-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  grid-template-rows: auto auto auto;
+  column-gap: 10px;
+  row-gap: 4px;
+  padding: 11px 12px 11px 13px;
+  background: var(--orange-soft);
+  border: 1px solid color-mix(in oklch, var(--orange) 22%, transparent);
+  border-left: 3px solid var(--orange);
+  border-radius: 10px;
+  color: var(--text);
+  /* faint inner highlight gives the warm "lit from inside" coffee feel */
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--orange) 14%, transparent);
+}
+.notice-icon {
+  grid-row: 1 / span 2; grid-column: 1;
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in oklch, var(--orange) 22%, transparent);
+  color: var(--orange);
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+.notice-icon svg { width: 14px; height: 14px; }
+.notice-eyebrow {
+  grid-row: 1; grid-column: 2;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--orange);
+  line-height: 1.2;
+  align-self: end;
+}
+.notice-title {
+  grid-row: 2; grid-column: 2;
+  font-size: 12px; line-height: 1.4;
+  color: var(--text);
+  word-wrap: break-word;
+}
+.notice-meta {
+  grid-row: 3; grid-column: 2 / span 2;
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  margin-top: 2px;
+}
+.notice-code {
+  display: inline-flex; align-items: center;
+  padding: 2px 7px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10px; font-weight: 600;
+  color: var(--orange);
+  background: color-mix(in oklch, var(--orange) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--orange) 24%, transparent);
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+}
+.notice-detail-toggle {
+  background: transparent; border: 0; padding: 2px 4px;
+  color: var(--muted); font-size: 10px; font-family: inherit;
+  cursor: pointer; border-radius: 4px;
+  display: inline-flex; align-items: center; gap: 3px;
+  transition: color .12s, background .12s;
+}
+.notice-detail-toggle:hover { color: var(--text); background: color-mix(in oklch, var(--orange) 10%, transparent); }
+.notice-detail-toggle svg { width: 10px; height: 10px; transition: transform .15s; }
+.notice-detail-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.notice-detail {
+  grid-row: 4; grid-column: 2 / span 2;
+  display: none;
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: color-mix(in oklch, var(--bg) 60%, transparent);
+  border-left: 2px solid color-mix(in oklch, var(--orange) 40%, transparent);
+  border-radius: 0 6px 6px 0;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 11px; line-height: 1.45;
+  color: var(--muted);
+  word-wrap: break-word; white-space: pre-wrap;
+}
+.notice-detail.open { display: block; }
+.notice-dismiss {
+  grid-row: 1; grid-column: 3;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 0;
+  color: var(--muted); cursor: pointer;
+  border-radius: 6px;
+  transition: color .12s, background .12s;
+}
+.notice-dismiss:hover { color: var(--text); background: color-mix(in oklch, var(--orange) 14%, transparent); }
+.notice-dismiss svg { width: 13px; height: 13px; }
+
 /* ═══════════════════════════════════════════════════════════════════
    UNIFIED INPUT BAR (multi-line, paste, file drop, voice)
    ═══════════════════════════════════════════════════════════════════ */
@@ -1371,6 +1475,9 @@ header {
 .composer-icon-btn svg { width: 16px; height: 16px; }
 .composer-icon-btn:hover { background: var(--surface2); color: var(--text); }
 .composer-icon-btn.recording { background: var(--red); color: #fff; animation: pulse 1s infinite; border-radius: 50%; }
+@media (prefers-reduced-motion: reduce) {
+  .composer-icon-btn.recording { animation: none; outline: 2px solid var(--red); outline-offset: 1px; }
+}
 @keyframes pulse { 50% { opacity: .7; } }
 .composer-model-pill { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 11px; font-family: inherit; transition: all .15s; white-space: nowrap; }
 .composer-model-pill:hover { background: var(--surface2); color: var(--text); border-color: var(--text); }
@@ -1689,6 +1796,109 @@ header {
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap; align-items: center; flex-shrink: 0;
 }
+
+/* Launch issues panel — collapsed-by-default diagnostic history that lives
+   at the top of the Logs tab. Surfaces the rolling JSONL written by
+   launch.ps1 to %TEMP%\taskbean-launch.log. Most of the time it shows
+   "No prior launch issues" and is silently collapsed. */
+.launch-issues {
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.launch-issues > summary {
+  list-style: none;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); font-weight: 700;
+  cursor: pointer; user-select: none;
+}
+.launch-issues > summary::-webkit-details-marker { display: none; }
+.launch-issues > summary:hover { color: var(--text); }
+.launch-issues-caret {
+  display: inline-flex; width: 10px; transition: transform .15s;
+  color: var(--muted); font-size: 9px;
+}
+.launch-issues:not([open]) .launch-issues-caret { transform: rotate(-90deg); }
+.launch-issues-label { flex: 1; }
+.launch-issues-count {
+  font-size: 10px; font-weight: 700; letter-spacing: 0;
+  color: var(--muted);
+  padding: 1px 7px;
+  background: var(--surface2);
+  border-radius: 99px;
+}
+.launch-issues-count.has-issues {
+  color: var(--orange);
+  background: color-mix(in oklch, var(--orange) 14%, transparent);
+}
+.launch-issues-refresh {
+  background: transparent; border: 0; padding: 3px;
+  color: var(--muted); cursor: pointer; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color .12s, background .12s;
+}
+.launch-issues-refresh:hover { color: var(--text); background: var(--surface2); }
+.launch-issues-refresh svg { width: 11px; height: 11px; }
+.launch-issues-list {
+  max-height: 220px; overflow-y: auto;
+  padding: 0 8px 8px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.launch-issues-empty {
+  font-size: 11px; color: var(--muted); padding: 8px 4px;
+  font-style: italic;
+}
+.launch-issue {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  column-gap: 8px; row-gap: 2px;
+  padding: 7px 9px;
+  background: var(--surface2);
+  border-left: 2px solid var(--orange);
+  border-radius: 0 6px 6px 0;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background .12s;
+}
+.launch-issue:hover { background: color-mix(in oklch, var(--orange) 8%, var(--surface2)); }
+.launch-issue-time {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.launch-issue-code {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--orange);
+  padding: 1px 6px;
+  background: color-mix(in oklch, var(--orange) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--orange) 22%, transparent);
+  border-radius: 3px;
+  align-self: center;
+  white-space: nowrap;
+}
+.launch-issue-msg {
+  color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+}
+.launch-issue.expanded .launch-issue-msg { white-space: normal; word-wrap: break-word; }
+.launch-issue-detail {
+  grid-column: 1 / -1;
+  display: none;
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: color-mix(in oklch, var(--bg) 70%, transparent);
+  border-radius: 4px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10px; line-height: 1.4;
+  color: var(--muted);
+  white-space: pre-wrap; word-wrap: break-word;
+}
+.launch-issue.expanded .launch-issue-detail { display: block; }
+
 .telem-filter-chip {
   font-size: 9px; padding: 2px 8px; border-radius: 10px;
   border: 1px solid var(--border); background: none;
@@ -2066,14 +2276,42 @@ header {
 
 /* ═══════════════════════════════════════════════════════════════════
    ACCESSIBILITY — skip navigation link
+   Hidden off-screen; flies in on keyboard focus only (not on
+   programmatic / PWA-reload focus restoration). WCAG-standard
+   top-left placement, restyled to match the latte aesthetic.
    ═══════════════════════════════════════════════════════════════════ */
 .a11y-skip-link {
   position: absolute; left: -9999px; top: auto; width: 1px; height: 1px; overflow: hidden;
-  z-index: 9999; font-size: 13px; font-weight: 600; text-decoration: none;
-  background: var(--accent); color: #000; padding: 8px 16px; border-radius: 0 0 8px 0;
+  z-index: 9999;
+  font-family: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
+  text-decoration: none; color: var(--bg);
+  background: var(--accent);
+  padding: 9px 16px;
+  border-radius: 0 0 10px 0;
+  box-shadow: 0 6px 18px color-mix(in oklch, var(--accent) 35%, transparent),
+              inset 0 -1px 0 color-mix(in oklch, #000 18%, transparent);
+  display: inline-flex; align-items: center; gap: 8px;
+  transform: translateY(-110%);
+  transition: transform .18s cubic-bezier(.2,.8,.2,1);
 }
-.a11y-skip-link:focus {
+.a11y-skip-link::before {
+  content: ""; width: 14px; height: 14px; flex-shrink: 0;
+  background: currentColor;
+  /* keyboard-tab glyph */
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M5 12h14M13 6l6 6-6 6'/></svg>") center/contain no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M5 12h14M13 6l6 6-6 6'/></svg>") center/contain no-repeat;
+}
+/* :focus-visible only fires for keyboard-driven focus. This prevents the
+   chip from flashing on PWA reload, programmatic .focus() calls, etc. */
+.a11y-skip-link:focus-visible {
   position: fixed; left: 0; top: 0; width: auto; height: auto; overflow: visible;
+  outline: 2px solid var(--bg);
+  outline-offset: -4px;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .a11y-skip-link { transition: none; }
+  .a11y-skip-link:focus-visible { transform: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -2251,6 +2489,9 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       <div class="cmd-hint">
         or run <code>launch.cmd</code>
         <button aria-label="Copy command" onclick="copyOverlayCmd(this)"><i data-lucide="clipboard"></i></button>
+      </div>
+      <div class="cmd-hint" style="font-size:10px;opacity:.75">
+        check launch log: <code>%TEMP%\taskbean-launch.err</code>
       </div>
       <div class="auto-retry-status" id="autoRetryStatus"><span class="auto-retry-dot"></span> Auto-retrying every 3&nbsp;s</div>
     </div>
@@ -2468,6 +2709,19 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       </div>
     </div>
     <div id="nerdLogs" class="nerd-tab-content">
+      <details id="launchIssuesPanel" class="launch-issues" open>
+        <summary>
+          <span class="launch-issues-caret" aria-hidden="true">▾</span>
+          <span class="launch-issues-label">Launch issues</span>
+          <span id="launchIssuesCount" class="launch-issues-count" aria-live="polite">—</span>
+          <button type="button" class="launch-issues-refresh" onclick="event.preventDefault();loadLaunchIssues();" aria-label="Refresh launch issues">
+            <i data-lucide="refresh-cw" aria-hidden="true"></i>
+          </button>
+        </summary>
+        <div id="launchIssuesList" class="launch-issues-list">
+          <div class="launch-issues-empty">Loading…</div>
+        </div>
+      </details>
       <div class="telem-filter-bar" id="logsFilterBar">
         <button class="telem-filter-chip active" data-filter="all" onclick="toggleLogFilter('all')">All</button>
         <button class="telem-filter-chip" data-filter="error" onclick="toggleLogFilter('error')">Error</button>
@@ -3343,6 +3597,10 @@ document.addEventListener('reachability-change', async (e) => {
         if (n > 0) {
             addChat('info', 'cloud-upload', `Synced ${n} offline change${n > 1 ? 's' : ''} to server.`);
         }
+        // Note: prior launch errors are NOT surfaced as chat chips. By the
+        // time we get here the server is up, the launcher's retry loop
+        // already won, and any prescriptive next-step we'd show is moot.
+        // History is available in stats-for-nerds → Logs → Launch issues.
     } finally {
         _reconnectInProgress = false;
     }
@@ -4022,6 +4280,56 @@ function copyMessageText(btn) {
 }
 
 function clearChat() { newChat(); }
+
+// ─── Notice chip ────────────────────────────────────────────────────────────
+// Warm, dismissible alert card for launcher / settings warnings. Used for:
+//   • prior launch failures surfaced on reconnect (/api/launch-errors)
+//   • Run-on-Startup task registration failures (startupWarning from /api/config)
+// {eyebrow, title, code?, detail?} — code and detail are optional and only
+// rendered when present. Returns nothing; appends a .chat-msg.notice to the feed.
+function renderLaunchNotice({ eyebrow = 'Heads up', title, code = '', detail = '', icon = 'alert-triangle' }) {
+    const feed = document.getElementById('chatFeed');
+    if (!feed || !title) return;
+    removeTypingIndicator();
+    const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const div = document.createElement('div');
+    div.className = 'chat-msg notice';
+    // detailId is currently composed entirely of numeric values (Date.now()
+    // + monotonic counter), so injection is impossible today. Escaping it
+    // anyway is defense-in-depth: if the id scheme later includes anything
+    // derived from server data (session ids, error codes), it stays safe.
+    const detailId = esc(`ndtl-${Date.now()}-${(renderLaunchNotice._n = (renderLaunchNotice._n || 0) + 1)}`);
+    const codeChip = code ? `<span class="notice-code">${esc(code)}</span>` : '';
+    const detailToggle = detail
+        ? `<button type="button" class="notice-detail-toggle" aria-expanded="false" aria-controls="${detailId}"><i data-lucide="chevron-right" aria-hidden="true"></i><span class="label">Show detail</span></button>`
+        : '';
+    const detailBlock = detail
+        ? `<div class="notice-detail" id="${detailId}">${esc(detail)}</div>`
+        : '';
+    div.innerHTML = `
+        <div class="notice-card">
+            <div class="notice-icon" aria-hidden="true"><i data-lucide="${esc(icon)}"></i></div>
+            <div class="notice-eyebrow" aria-live="polite">${esc(eyebrow)}</div>
+            <div class="notice-title">${esc(title)}</div>
+            <div class="notice-meta">${codeChip}${detailToggle}</div>
+            ${detailBlock}
+            <button type="button" class="notice-dismiss" aria-label="Dismiss notice"><i data-lucide="x" aria-hidden="true"></i></button>
+        </div>`;
+    div.querySelector('.notice-dismiss')?.addEventListener('click', () => div.remove());
+    const toggle = div.querySelector('.notice-detail-toggle');
+    const detailEl = div.querySelector('.notice-detail');
+    if (toggle && detailEl) {
+        const labelEl = toggle.querySelector('.label');
+        toggle.addEventListener('click', () => {
+            const open = detailEl.classList.toggle('open');
+            toggle.setAttribute('aria-expanded', String(open));
+            if (labelEl) labelEl.textContent = open ? 'Hide detail' : 'Show detail';
+        });
+    }
+    feed.appendChild(div);
+    feed.scrollTop = feed.scrollHeight;
+    lucide.createIcons();
+}
 
 // ─── Update availability ────────────────────────────────────────────────────
 // Triggered when (a) a new service worker has installed and is waiting, or
@@ -7582,7 +7890,68 @@ function switchNerdTab(tab) {
             if (empty) empty.remove();
             for (const log of logBuffer) renderLogEntry(log, false);
         }
+        // Refresh launcher diagnostics whenever Logs is opened.
+        loadLaunchIssues();
     }
+}
+
+// ─── Launch issues panel ────────────────────────────────────────────────────
+// Backs the "Launch issues" <details> at the top of the Logs tab. Reads
+// /api/launch-errors which now returns a rolling JSONL history (capped at
+// 50 in launch.ps1, last `limit` returned). Each entry is one prior call to
+// Write-LaunchError. Successful launches do NOT clear the log — this is
+// purely diagnostic, not an action surface.
+async function loadLaunchIssues() {
+    const list = document.getElementById('launchIssuesList');
+    const counter = document.getElementById('launchIssuesCount');
+    const panel = document.getElementById('launchIssuesPanel');
+    if (!list) return;
+    list.innerHTML = '<div class="launch-issues-empty">Loading…</div>';
+    let entries = [];
+    try {
+        const res = await fetch('/api/launch-errors?limit=20');
+        if (res.ok) {
+            const body = await res.json();
+            entries = Array.isArray(body.entries) ? body.entries : [];
+        }
+    } catch {}
+    if (counter) {
+        counter.textContent = entries.length === 0 ? '0' : String(entries.length);
+        counter.classList.toggle('has-issues', entries.length > 0);
+    }
+    if (entries.length === 0) {
+        list.innerHTML = '<div class="launch-issues-empty">No prior launch issues — your launcher has been clean.</div>';
+        // Auto-collapse when empty so the panel stays out of the way.
+        if (panel) panel.removeAttribute('open');
+        return;
+    }
+    if (panel) panel.setAttribute('open', '');
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const fmtTime = (iso) => {
+        try {
+            const d = new Date(iso);
+            return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(d);
+        } catch { return esc(iso || '?'); }
+    };
+    list.innerHTML = entries.map(e => `
+        <div class="launch-issue" tabindex="0" role="button" aria-expanded="false">
+            <span class="launch-issue-time">${esc(fmtTime(e.timestamp))}</span>
+            <span class="launch-issue-code">${esc(e.code || 'UNKNOWN')}</span>
+            <span class="launch-issue-msg">${esc(e.message || '')}</span>
+            ${e.detail ? `<div class="launch-issue-detail">${esc(e.detail)}</div>` : ''}
+        </div>`).join('');
+    // Click / keyboard expand
+    list.querySelectorAll('.launch-issue').forEach(el => {
+        const toggle = () => {
+            const open = el.classList.toggle('expanded');
+            el.setAttribute('aria-expanded', String(open));
+        };
+        el.addEventListener('click', toggle);
+        el.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); }
+        });
+    });
+    if (window.lucide) lucide.createIcons();
 }
 
 let _telemGeneration = 0; // generation token to prevent stale reconnects
@@ -8946,6 +9315,19 @@ async function updateSettingsConfig(key, value) {
         }
         const updated = await res.json();
         settingsConfig = updated;
+        // Side-effect failures (e.g. /api/config returns 200 but the scheduled
+        // task could not be registered, so the server reverted runOnStartup):
+        // surface a chat error and treat as a logical failure so the caller
+        // flips the toggle back to match the persisted state.
+        if (updated && updated.startupWarning) {
+            renderLaunchNotice({
+                eyebrow: "Couldn't update startup setting",
+                title: updated.startupWarning,
+                code: 'STARTUP_TASK',
+            });
+            if (row) { row.classList.remove('saving'); row.classList.add('save-error'); }
+            return false;
+        }
         if (row) {
             row.classList.remove('saving');
             row.classList.add('saved');
