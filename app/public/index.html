@@ -9684,6 +9684,11 @@ async function initApp() {
     // the offline overlay and so _lastSuccessAt is set correctly for GRACE_PERIOD.
     await ConnectionManager.check();
     updateReachabilityUI();
+    // Show overlay immediately after the health check — before polling, data
+    // fetches, or any other async work that could be interrupted by a SW
+    // controllerchange reload.  Previously this lived ~60 lines later, after
+    // multiple awaits, so a SW update-then-reload could skip it entirely.
+    if (!serverReachable) showOfflineOverlay();
     // Start health polling immediately after the initial check
     ConnectionManager.startPolling();
 
@@ -9740,9 +9745,6 @@ async function initApp() {
             protocolRegistered = null; // will be lazy-checked on first use
         }
     } catch {}
-
-    // If the server was unreachable on startup, show the offline overlay
-    if (!serverReachable) showOfflineOverlay();
 
     // Check for port conflict on startup (doesn't require nerd mode)
     try {
