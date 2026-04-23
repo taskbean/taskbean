@@ -202,8 +202,16 @@ header {
 .offline-overlay .overlay-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px 28px 24px; max-width: 420px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px; box-shadow: 0 8px 32px rgba(0,0,0,.12); }
 .offline-overlay .overlay-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 .offline-overlay .overlay-icon.disconnected { background: var(--orange-soft); color: var(--orange); }
-.offline-overlay .overlay-icon.connecting { background: transparent; }
-.offline-overlay .overlay-icon.connecting img.bean-spin { width: 40px; height: 40px; animation: spin 1.5s linear infinite; }
+.offline-overlay .overlay-icon.connecting { background: transparent; position: relative; width: 56px; height: 56px; }
+.offline-overlay .overlay-icon.connecting img.bean-icon { width: 36px; height: 36px; animation: bean-breathe 2.4s ease-in-out infinite; }
+@keyframes bean-breathe { 0%, 100% { opacity: .85; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
+.offline-overlay .overlay-icon.connecting::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: ring-orbit 1.2s cubic-bezier(.4,.1,.6,.9) infinite;
+}
+@keyframes ring-orbit { to { transform: rotate(360deg); } }
 .offline-overlay .overlay-icon.connected { background: var(--green-soft); color: var(--green); }
 .offline-overlay h2 { font-size: 17px; font-weight: 700; margin: 0; text-wrap: balance; }
 .offline-overlay .overlay-subtitle { font-size: 13px; color: var(--muted); max-width: 360px; line-height: 1.5; margin: 0; }
@@ -235,7 +243,8 @@ header {
 .offline-overlay .tip { font-size: 10px; color: var(--muted); max-width: 360px; line-height: 1.4; display: flex; align-items: flex-start; gap: 5px; }
 .offline-overlay .tip i { width: 12px; height: 12px; flex-shrink: 0; margin-top: 1px; }
 @media (prefers-reduced-motion: reduce) {
-  .offline-overlay .bean-spin { animation: none !important; }
+  .offline-overlay .bean-icon { animation: none !important; }
+  .offline-overlay .overlay-icon.connecting::before { animation: none !important; }
   .offline-overlay .auto-retry-dot { animation: none !important; }
   .offline-overlay .retry-spinner { animation: none !important; }
 }
@@ -2475,7 +2484,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
   <div class="overlay-card">
     <img src="/icons/taskbean-logo.png" alt="taskbean" width="180" height="48" style="margin-bottom:8px;">
     <div class="overlay-icon connecting" id="overlayIcon">
-      <img src="/icons/taskbean-only.png" alt="" width="40" height="40" class="bean-spin">
+      <img src="/icons/taskbean-only.png" alt="" width="36" height="36" class="bean-icon">
     </div>
     <h2 id="overlayTitle">Connecting…</h2>
     <p class="overlay-subtitle" id="overlaySubtitle" aria-live="polite">Looking for the local server</p>
@@ -3896,7 +3905,7 @@ function startServerFromOverlay() {
     const icon = document.getElementById('overlayIcon');
     const title = document.getElementById('overlayTitle');
     const status = document.getElementById('autoRetryStatus');
-    if (icon) { icon.className = 'overlay-icon connecting'; icon.innerHTML = '<img src="/icons/taskbean-only.png" alt="" width="40" height="40" class="bean-spin">'; }
+    if (icon) { icon.className = 'overlay-icon connecting'; icon.innerHTML = '<img src="/icons/taskbean-only.png" alt="" width="36" height="36" class="bean-icon">'; }
     if (title) title.textContent = 'Starting server\u2026';
     if (status) status.innerHTML = '<span class="auto-retry-dot" style="background:var(--green)"></span> Server launching\u2026 auto-retrying every 3\u00a0s';
 }
