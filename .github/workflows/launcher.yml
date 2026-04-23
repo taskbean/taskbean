@@ -1,0 +1,103 @@
+name: Launcher
+
+on:
+  push:
+    paths:
+      - 'app/launch.ps1'
+      - 'app/launch.cmd'
+      - '.gitattributes'
+      - '.editorconfig'
+      - '.github/workflows/launcher.yml'
+  pull_request:
+    paths:
+      - 'app/launch.ps1'
+      - 'app/launch.cmd'
+      - '.gitattributes'
+      - '.editorconfig'
+      - '.github/workflows/launcher.yml'
+
+jobs:
+  invariants:
+    name: launch.ps1 invariants
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert UTF-8 BOM
+        shell: pwsh
+        run: |
+          $bytes = [System.IO.File]::ReadAllBytes('app/launch.ps1')
+          if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+            $hex = ($bytes[0..2] | ForEach-Object { '{0:X2}' -f $_ }) -join ' '
+            Write-Error "app/launch.ps1 must start with a UTF-8 BOM (EF BB BF). Found: $hex. Re-save with UTF-8-BOM encoding (see .editorconfig)."
+            exit 1
+          }
+          Write-Host "✓ BOM present" -ForegroundColor Green
+
+      - name: Assert -UseBasicParsing on every Invoke-WebRequest
+        shell: pwsh
+        run: |
+          $content = Get-Content 'app/launch.ps1' -Raw
+          $matches = [regex]::Matches($content, 'Invoke-WebRequest[^\r\n]*')
+          if ($matches.Count -eq 0) {
+            Write-Host "No Invoke-WebRequest calls found (ok)."
+            exit 0
+          }
+          $bad = $matches | Where-Object { $_.Value -notmatch '-UseBasicParsing' }
+          if ($bad) {
+            Write-Error "Every Invoke-WebRequest in launch.ps1 must include -UseBasicParsing. Offending lines:`n$($bad.Value -join "`n")"
+            exit 1
+          }
+          Write-Host "✓ All $($matches.Count) Invoke-WebRequest call(s) use -UseBasicParsing" -ForegroundColor Green
+
+      - name: Assert WindowsApps filter in Python resolver
+        shell: pwsh
+        run: |
+          $content = Get-Content 'app/launch.ps1' -Raw
+          if ($content -notmatch 'WindowsApps') {
+            Write-Error "launch.ps1 must filter out Microsoft Store App Execution Alias stubs under \WindowsApps\. See Resolve-RealPython."
+            exit 1
+          }
+          Write-Host "✓ WindowsApps filter present" -ForegroundColor Green
+
+  parse-powershell-51:
+    name: Parse under Windows PowerShell 5.1
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse launch.ps1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bom = [System.Text.UTF8Encoding]::new($true)
+          $text = [System.IO.File]::ReadAllText("$PWD/app/launch.ps1", $bom)
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseInput($text, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors -and $errors.Count -gt 0) {
+            Write-Error "Parse errors under Windows PowerShell 5.1:`n$($errors | ForEach-Object { $_.Message } | Out-String)"
+            exit 1
+          }
+          Write-Host "✓ Parses cleanly under Windows PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Green
+
+  parse-pwsh-7:
+    name: Parse under PowerShell 7
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse launch.ps1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bom = [System.Text.UTF8Encoding]::new($true)
+          $text = [System.IO.File]::ReadAllText("$PWD/app/launch.ps1", $bom)
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseInput($text, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors -and $errors.Count -gt 0) {
+            Write-Error "Parse errors under PowerShell 7:`n$($errors | ForEach-Object { $_.Message } | Out-String)"
+            exit 1
+          }
+          Write-Host "✓ Parses cleanly under PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Green
