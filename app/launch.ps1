@@ -1,4 +1,4 @@
-<# taskbean — one-click launcher
+﻿<# taskbean — one-click launcher
    Starts the Python backend (if not already running) and opens the PWA.
    When invoked via the taskbean:// protocol handler, Windows passes the URL
    as the first argument — in that case we only start the server (the user
@@ -26,9 +26,19 @@ try {
 }
 
 # ── Prerequisites check ───────────────────────────────────────────────────────
-$python = if (Get-Command python3 -ErrorAction SilentlyContinue) { "python3" }
-          elseif (Get-Command python -ErrorAction SilentlyContinue) { "python" }
-          else { $null }
+# Resolve a REAL Python interpreter, skipping the Microsoft Store App Execution
+# Alias stubs in %LOCALAPPDATA%\Microsoft\WindowsApps\ (python.exe / python3.exe
+# reparse points that open the Store and exit without running anything).
+function Resolve-RealPython {
+    foreach ($name in 'python','python3') {
+        $hit = Get-Command $name -All -ErrorAction SilentlyContinue |
+               Where-Object { $_.Source -and $_.Source -notmatch '\\WindowsApps\\' } |
+               Select-Object -First 1
+        if ($hit) { return $hit.Source }
+    }
+    return $null
+}
+$python = Resolve-RealPython
 
 if (-not $python) {
     Write-Host ""
@@ -38,9 +48,7 @@ if (-not $python) {
     Write-Host ""
     Start-Process "https://python.org/downloads/"
     Read-Host "Press Enter after installing Python to continue"
-    $python = if (Get-Command python3 -ErrorAction SilentlyContinue) { "python3" }
-              elseif (Get-Command python -ErrorAction SilentlyContinue) { "python" }
-              else { $null }
+    $python = Resolve-RealPython
     if (-not $python) {
         Write-Host "Python still not found. Please install it and try again." -ForegroundColor Red
         exit 1
@@ -71,7 +79,7 @@ if (Test-Path $reqFile) {
 # Already running?
 $alive = $false
 try {
-    $r = Invoke-WebRequest -Uri "http://localhost:$Port/api/health" -TimeoutSec 2 -ErrorAction Stop
+    $r = Invoke-WebRequest -Uri "http://localhost:$Port/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
     if ($r.StatusCode -eq 200) { $alive = $true }
 } catch {}
 
@@ -85,7 +93,7 @@ if (-not $alive) {
     while ((Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 500
         try {
-            $r = Invoke-WebRequest -Uri "http://localhost:$Port/api/health" -TimeoutSec 2 -ErrorAction Stop
+            $r = Invoke-WebRequest -Uri "http://localhost:$Port/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
             if ($r.StatusCode -eq 200) { $ready = $true; break }
         } catch {}
     }
