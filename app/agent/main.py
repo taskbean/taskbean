@@ -1419,15 +1419,34 @@ def _get_taskbean_db():
     return conn
 
 
+def _get_taskbean_db_rw():
+    """Open the shared taskbean SQLite DB (read-write)."""
+    import sqlite3
+    db_path = os.path.join(os.path.expanduser("~"), ".taskbean", "taskbean.db")
+    if not os.path.exists(db_path):
+        return None
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 @app.get("/api/projects")
-async def get_projects() -> list:
+async def get_projects(show_hidden: bool = False, category: str | None = None) -> list:
     """Return tracked projects from CLI's SQLite DB, merged with in-memory todo counts."""
     conn = _get_taskbean_db()
     if not conn:
         return []
     try:
+        where = "WHERE tracked = 1"
+        params_list: list[str] = []
+        if not show_hidden:
+            where += " AND hidden = 0"
+        if category:
+            where += " AND category = ?"
+            params_list.append(category)
         rows = conn.execute(
-            "SELECT name, path FROM projects WHERE tracked = 1 ORDER BY name"
+            f"SELECT name, path, hidden, category, skill_installed FROM projects {where} ORDER BY name",
+            params_list,
         ).fetchall()
         # Batch-fetch todo counts for all tracked projects in one query
         names = [r["name"] for r in rows]
@@ -1451,6 +1470,9 @@ async def get_projects() -> list:
         result.append({
             "name": name,
             "path": r["path"],
+            "hidden": bool(r["hidden"]),
+            "category": r["category"],
+            "skill_installed": bool(r["skill_installed"]),
             "total": sc["total"],
             "done": sc["done"],
             "pending": sc["total"] - sc["done"],
@@ -1487,6 +1509,133 @@ async def get_project_tasks(project: str = "") -> list:
     mem_ids = {t["id"] for t in mem_todos}
     combined = mem_todos + [t for t in db_todos if t["id"] not in mem_ids]
     return combined
+
+
+# ── Project management ────────────────────────────────────────────────────────
+
+class ProjectActionBody(BaseModel):
+    """Body for project hide/show/category actions."""
+    pass
+
+class ProjectCategoryBody(BaseModel):
+    category: str | None = None
+
+@app.post("/api/projects/{name}/hide")
+async def hide_project(name: str) -> dict:
+    """Hide a project from default views."""
+    conn = _get_taskbean_db_rw()
+    if not conn:
+        raise HTTPException(status_code=500, detail="database unavailable")
+    try:
+        row = conn.execute("SELECT * FROM projects WHERE name = ?", (name,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Project not found: {name}")
+        conn.execute("UPDATE projects SET hidden = 1 WHERE name = ?", (name,))
+        conn.commit()
+        return {"status": "hidden", "project": name}
+    finally:
+        conn.close()
+
+@app.post("/api/projects/{name}/show")
+async def show_project(name: str) -> dict:
+    """Un-hide a project."""
+    conn = _get_taskbean_db_rw()
+    if not conn:
+        raise HTTPException(status_code=500, detail="database unavailable")
+    try:
+        row = conn.execute("SELECT * FROM projects WHERE name = ?", (name,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Project not found: {name}")
+        conn.execute("UPDATE projects SET hidden = 0 WHERE name = ?", (name,))
+        conn.commit()
+        return {"status": "visible", "project": name}
+    finally:
+        conn.close()
+
+@app.post("/api/projects/{name}/category")
+async def set_project_category(name: str, body: ProjectCategoryBody) -> dict:
+    """Set or clear a project's category."""
+    conn = _get_taskbean_db_rw()
+    if not conn:
+        raise HTTPException(status_code=500, detail="database unavailable")
+    try:
+        row = conn.execute("SELECT * FROM projects WHERE name = ?", (name,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Project not found: {name}")
+        conn.execute("UPDATE projects SET category = ? WHERE name = ?", (body.category, name))
+        conn.commit()
+        return {"status": "updated", "project": name, "category": body.category}
+    finally:
+        conn.close()
+
+@app.delete("/api/projects/{name}")
+async def delete_project(name: str) -> dict:
+    """Delete a project by shelling out to bean projects delete."""
+    _reject_shell_metachars(name, "name")
+    bean_cmd = "bean.cmd" if sys.platform == "win32" else "bean"
+    args = [bean_cmd, "projects", "delete", name, "--confirm", "--json"]
+
+    def _run():
+        return subprocess.run(args, capture_output=True, text=True, timeout=60)
+
+    try:
+        result = await asyncio.to_thread(_run)
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail=f"'{bean_cmd}' not found on PATH")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="bean projects delete timed out")
+
+    if result.returncode != 0:
+        msg = (result.stderr or result.stdout or "delete failed").strip().splitlines()
+        raise HTTPException(status_code=500, detail=msg[-1] if msg else "delete failed")
+
+    stdout_lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    if not stdout_lines:
+        return {"status": "deleted", "project": name}
+    try:
+        return json.loads(stdout_lines[-1])
+    except json.JSONDecodeError:
+        return {"status": "deleted", "project": name}
+
+@app.post("/api/projects/{name}/untrack")
+async def untrack_project(name: str) -> dict:
+    """Untrack a project by shelling out to bean untrack."""
+    conn = _get_taskbean_db()
+    if not conn:
+        raise HTTPException(status_code=500, detail="database unavailable")
+    try:
+        row = conn.execute("SELECT path FROM projects WHERE name = ?", (name,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Project not found: {name}")
+        project_path = row["path"]
+    finally:
+        conn.close()
+
+    _reject_shell_metachars(project_path, "path")
+    bean_cmd = "bean.cmd" if sys.platform == "win32" else "bean"
+    args = [bean_cmd, "untrack", "--path", project_path, "--json"]
+
+    def _run():
+        return subprocess.run(args, capture_output=True, text=True, timeout=60)
+
+    try:
+        result = await asyncio.to_thread(_run)
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail=f"'{bean_cmd}' not found on PATH")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="bean untrack timed out")
+
+    if result.returncode != 0:
+        msg = (result.stderr or result.stdout or "untrack failed").strip().splitlines()
+        raise HTTPException(status_code=500, detail=msg[-1] if msg else "untrack failed")
+
+    stdout_lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    if stdout_lines:
+        try:
+            return json.loads(stdout_lines[-1])
+        except json.JSONDecodeError:
+            pass
+    return {"status": "untracked", "project": name}
 
 
 # ── Filesystem browser (project picker) ──────────────────────────────────────
