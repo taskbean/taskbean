@@ -123,7 +123,7 @@ def _register_protocol_handler() -> None:
         return
     try:
         launch_ps1 = str(Path(__file__).parent.parent / "launch.ps1")
-        cmd_value = f'powershell.exe -ExecutionPolicy Bypass -NoProfile -File "{launch_ps1}" "%1"'
+        cmd_value = f'powershell.exe -ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File "{launch_ps1}" "%1"'
         ps_script = (
             "New-Item -Path 'HKCU:\\Software\\Classes\\taskbean' -Force | Out-Null; "
             "Set-ItemProperty -Path 'HKCU:\\Software\\Classes\\taskbean' -Name '(Default)' -Value 'URL:TaskBean Protocol'; "
@@ -2665,7 +2665,7 @@ async def register_protocol() -> dict:
     """Register the taskbean:// protocol handler in the current-user registry."""
     launch_ps1 = str(Path(__file__).parent.parent / "launch.ps1")
     command_value = (
-        f'powershell.exe -ExecutionPolicy Bypass -NoProfile -File "{launch_ps1}" "%1"'
+        f'powershell.exe -ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File "{launch_ps1}" "%1"'
     )
     ps_script = (
         "New-Item -Path 'HKCU:\\Software\\Classes\\taskbean' -Force | Out-Null; "
