@@ -909,6 +909,28 @@ async def set_port(body: PortBody) -> dict:
     return {"ok": True, "port": body.port, "message": f"Port set to {body.port}. Restart taskbean for it to take effect."}
 
 
+@app.get("/api/port-info")
+async def port_info() -> dict:
+    return {
+        "port": int(app_config.get("port") or 8275),
+        "default": 8275,
+        "conflict": None,
+        "configurable": True,
+    }
+
+
+class PortBody(BaseModel):
+    port: int
+
+
+@app.post("/api/port")
+async def set_port(body: PortBody) -> dict:
+    if body.port < 1024 or body.port > 65535:
+        raise HTTPException(400, "Port must be between 1024 and 65535")
+    app_config.set("port", body.port)
+    return {"ok": True, "port": body.port, "message": f"Port set to {body.port}. Restart taskbean for it to take effect."}
+
+
 @app.post("/api/config")
 async def update_config(patch: ConfigPatch) -> dict:
     """Persist one or more config fields. Unknown fields are ignored.
