@@ -25,7 +25,8 @@ process.on('exit', maybePrintUpgradeNotice);
 program
   .name('bean')
   .description('🫘 Task management CLI for AI coding agents')
-  .version(VERSION);
+  .version(VERSION)
+  .enablePositionalOptions();
 
 // === Agent Contract (3 commands) ===
 
@@ -99,6 +100,7 @@ program
 const projects = program
   .command('projects')
   .description('List and manage tracked projects')
+  .passThroughOptions()
   .option('--json', 'Output as JSON')
   .option('--all', 'Include hidden projects')
   .option('--hidden', 'Show only hidden projects')
