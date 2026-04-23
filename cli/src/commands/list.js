@@ -5,7 +5,7 @@ export function listCommand(opts) {
   let sql, params;
 
   if (opts.all) {
-    sql = 'SELECT * FROM todos';
+    sql = `SELECT * FROM todos WHERE (project IS NULL OR project NOT IN (SELECT name FROM projects WHERE hidden = 1))`;
     params = [];
   } else {
     const project = resolveProject(opts.project);
