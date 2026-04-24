@@ -125,6 +125,9 @@ function getDateRange(range) {
 }
 
 export function reportCommand(opts) {
+  // --json is shorthand for --format json
+  if (opts.json) opts.format = 'json';
+
   const { since, until, label } = getDateRange(opts.date);
 
   let projectFilter = '';

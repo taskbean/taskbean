@@ -131,6 +131,7 @@ def mark_complete(todo_id: Annotated[str, "Todo ID"]) -> str:
     t = next((t for t in state_mod.todos if t["id"] == todo_id), None)
     if t:
         t["completed"] = True
+        t["status"] = "done"
         return json.dumps({"success": True, "todo": t})
     return json.dumps({"success": False, "error": "Not found"})
 
@@ -142,6 +143,7 @@ def mark_incomplete(todo_id: Annotated[str, "Todo ID"]) -> str:
     t = next((t for t in state_mod.todos if t["id"] == todo_id), None)
     if t:
         t["completed"] = False
+        t["status"] = "pending"
         return json.dumps({"success": True, "todo": t})
     return json.dumps({"success": False, "error": "Not found"})
 

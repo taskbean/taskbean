@@ -120,6 +120,7 @@ program
   .description('Generate a report')
   .option('--date <range>', 'Date range: today, yesterday, week, all', 'today')
   .option('--format <fmt>', 'Output format: md, json, csv', 'md')
+  .option('--json', 'Shorthand for --format json')
   .option('--project <path>', 'Filter to specific project')
   .action(reportCommand);
 
@@ -194,7 +195,7 @@ projects
 program
   .command('package')
   .description('Generate exportable work packages with session context')
-  .argument('[task-id]', 'Task ID (optional — omit for batch mode)')
+  .argument('[id]', 'Task ID (optional — omit for batch mode)')
   .option('--date <range>', 'Date range: today, yesterday, week, all', 'today')
   .option('--format <fmt>', 'Output format: md, json', 'md')
   .option('--json', 'Shorthand for --format json')

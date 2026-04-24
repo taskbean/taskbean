@@ -49,6 +49,7 @@ def add_todo(
         "notes": (notes or "")[:5000] or None,
         "tags": list(set((tags or [])[:10])),
         "project": project,
+        "status": "pending",
         "createdAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     todos.append(todo)
@@ -66,7 +67,7 @@ def update_todo(todo_id: str, **fields: Any) -> dict[str, Any] | None:
     if not todo:
         return None
     allowed = {"title", "dueDate", "dueTime", "emoji", "priority", "notes", "tags",
-               "completed", "reminder", "remindAt", "reminderFired", "project"}
+               "completed", "reminder", "remindAt", "reminderFired", "project", "status"}
     for key, val in fields.items():
         if key in allowed and val is not None:
             if key == "priority" and val not in ("high", "medium", "low", "none"):
