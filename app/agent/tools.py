@@ -151,11 +151,49 @@ def mark_incomplete(todo_id: Annotated[str, "Todo ID"]) -> str:
 @tool
 @_traced_tool
 def remove_task(todo_id: Annotated[str, "Todo ID"]) -> str:
-    """Delete a todo."""
+    """Delete a todo. Do NOT use for marking done — use mark_complete instead."""
     idx = next((i for i, t in enumerate(state_mod.todos) if t["id"] == todo_id), None)
     if idx is not None:
         removed = state_mod.todos.pop(idx)
         return json.dumps({"success": True, "removed": removed})
+    return json.dumps({"success": False, "error": "Not found"})
+
+
+@tool
+@_traced_tool
+def start_task(todo_id: Annotated[str, "Todo ID"]) -> str:
+    """Mark a task as in-progress. Use when the user says 'start working on', 'begin', or 'pick up' a task. Do NOT use for marking done — use mark_complete instead."""
+    t = next((t for t in state_mod.todos if t["id"] == todo_id), None)
+    if t:
+        t["status"] = "in_progress"
+        try:
+            import persistence
+            persistence.update_todo_fields(t)
+        except Exception:
+            pass
+        return json.dumps({"success": True, "todo": t})
+    return json.dumps({"success": False, "error": "Not found"})
+
+
+@tool
+@_traced_tool
+def block_task(
+    todo_id: Annotated[str, "Todo ID"],
+    reason: Annotated[str | None, "Why the task is blocked, e.g. 'waiting on API access'"] = None,
+) -> str:
+    """Mark a task as blocked. Use when the user says 'blocked', 'stuck', or 'waiting on' something. Do NOT use for removing or completing — use remove_task or mark_complete instead."""
+    t = next((t for t in state_mod.todos if t["id"] == todo_id), None)
+    if t:
+        t["status"] = "blocked"
+        if reason:
+            existing_notes = t.get("notes") or ""
+            t["notes"] = f"**Blocked:** {reason}\n{existing_notes}".strip()[:5000]
+        try:
+            import persistence
+            persistence.update_todo_fields(t)
+        except Exception:
+            pass
+        return json.dumps({"success": True, "todo": t})
     return json.dumps({"success": False, "error": "Not found"})
 
 
@@ -248,4 +286,4 @@ async def get_weather(
         return json.dumps({"error": str(e)})
 
 
-ALL_TOOLS = [add_task, set_reminder, mark_complete, mark_incomplete, remove_task, update_task, get_current_datetime, get_weather]
+ALL_TOOLS = [add_task, set_reminder, mark_complete, mark_incomplete, remove_task, start_task, block_task, update_task, get_current_datetime, get_weather]

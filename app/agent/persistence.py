@@ -33,6 +33,7 @@ _TODO_DB_TO_STATE = {
     "notes": "notes",
     "tags": "tags",
     "project": "project",
+    "status": "status",
     "created_at": "createdAt",
 }
 

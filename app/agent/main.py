@@ -1286,6 +1286,7 @@ class TodoCreate(BaseModel):
     priority: str | None = None
     notes: str | None = None
     tags: list[str] | None = None
+    status: str | None = None
 
 
 @app.get("/api/todos/overdue")
@@ -1341,11 +1342,15 @@ class TodoPatch(BaseModel):
     reminder: bool | None = None
     remindAt: str | None = None
     reminderFired: bool | None = None
+    status: str | None = None
 
 
 @app.patch("/api/todos/{todo_id}")
 async def patch_todo(todo_id: str, patch: TodoPatch) -> dict:
     fields = {k: v for k, v in patch.model_dump(exclude_unset=True).items() if v is not None}
+    # Auto-sync status when completed changes (frontend compat)
+    if "completed" in fields and "status" not in fields:
+        fields["status"] = "done" if fields["completed"] else "pending"
     todo = state_mod.update_todo(todo_id, **fields)
     if not todo:
         raise HTTPException(404, "Not found")
@@ -1375,6 +1380,7 @@ async def todo_action(todo_id: str, action: str | None = None):
 
     if action == "complete":
         todo["completed"] = True
+        todo["status"] = "done"
         try:
             import persistence
             persistence.update_todo_fields(todo)
