@@ -1429,7 +1429,7 @@ def _get_taskbean_db():
         return None
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
-    _ensure_projects_schema(conn)
+    return conn
     return conn
 
 
@@ -1452,15 +1452,27 @@ async def get_projects(show_hidden: bool = False, category: str | None = None) -
     if not conn:
         return []
     try:
+        # Detect whether migration has run (columns may not exist on old DBs)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info('projects')").fetchall()}
+        has_hidden = 'hidden' in cols
+        has_category = 'category' in cols
+
         where = "WHERE tracked = 1"
         params_list: list[str] = []
-        if not show_hidden:
+        if not show_hidden and has_hidden:
             where += " AND hidden = 0"
-        if category:
+        if category and has_category:
             where += " AND category = ?"
             params_list.append(category)
+
+        select_cols = "name, path, skill_installed"
+        if has_hidden:
+            select_cols += ", hidden"
+        if has_category:
+            select_cols += ", category"
+
         rows = conn.execute(
-            f"SELECT name, path, hidden, category, skill_installed FROM projects {where} ORDER BY name",
+            f"SELECT {select_cols} FROM projects {where} ORDER BY name",
             params_list,
         ).fetchall()
         # Batch-fetch todo counts for all tracked projects in one query
@@ -1485,8 +1497,8 @@ async def get_projects(show_hidden: bool = False, category: str | None = None) -
         result.append({
             "name": name,
             "path": r["path"],
-            "hidden": bool(r["hidden"]),
-            "category": r["category"],
+            "hidden": bool(r["hidden"]) if has_hidden else False,
+            "category": r["category"] if has_category else None,
             "skill_installed": bool(r["skill_installed"]),
             "total": sc["total"],
             "done": sc["done"],
