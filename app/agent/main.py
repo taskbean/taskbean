@@ -1559,7 +1559,7 @@ def _find_project(conn, name_or_path: str):
         raise HTTPException(status_code=409, detail=f"Ambiguous: {len(rows)} projects named '{name_or_path}'. Use full path.")
     return None
 
-@app.post("/api/projects/{name:path}/hide")
+@app.post("/api/projects/{name}/hide")
 async def hide_project(name: str) -> dict:
     """Hide a project from default views."""
     conn = _get_taskbean_db_rw()
@@ -1575,7 +1575,7 @@ async def hide_project(name: str) -> dict:
     finally:
         conn.close()
 
-@app.post("/api/projects/{name:path}/show")
+@app.post("/api/projects/{name}/show")
 async def show_project(name: str) -> dict:
     """Un-hide a project."""
     conn = _get_taskbean_db_rw()
@@ -1591,7 +1591,7 @@ async def show_project(name: str) -> dict:
     finally:
         conn.close()
 
-@app.post("/api/projects/{name:path}/category")
+@app.post("/api/projects/{name}/category")
 async def set_project_category(name: str, body: ProjectCategoryBody) -> dict:
     """Set or clear a project's category."""
     conn = _get_taskbean_db_rw()
@@ -1607,7 +1607,7 @@ async def set_project_category(name: str, body: ProjectCategoryBody) -> dict:
     finally:
         conn.close()
 
-@app.delete("/api/projects/{name:path}")
+@app.post("/api/projects/{name}/delete")
 async def delete_project(name: str) -> dict:
     """Delete a project by shelling out to bean projects delete."""
     _reject_shell_metachars(name, "name")
@@ -1647,7 +1647,7 @@ async def delete_project(name: str) -> dict:
     except json.JSONDecodeError:
         return {"status": "deleted", "project": name}
 
-@app.post("/api/projects/{name:path}/untrack")
+@app.post("/api/projects/{name}/untrack")
 async def untrack_project(name: str) -> dict:
     """Untrack a project by shelling out to bean untrack."""
     conn = _get_taskbean_db()

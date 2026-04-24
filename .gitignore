@@ -52,3 +52,5 @@ test-results/
 
 # Stray shell-output files that have been accidentally committed before
 datetime
+.taskbean.json
+app/playwright-report/

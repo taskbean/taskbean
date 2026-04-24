@@ -5401,7 +5401,7 @@ async function projectAction(action, name) {
     if (action === 'delete') {
         if (!confirm(`Delete project "${name}"?\n\nThis removes the project entry and cleans up .taskbean.json and skill files.\nTasks are kept as historical records.`)) return;
         try {
-            const res = await fetch(`/api/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+            const res = await fetch(`/api/projects/${encodeURIComponent(name)}/delete`, { method: 'POST' });
             if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.detail || 'Delete failed'); return; }
         } catch (e) { console.error('Delete failed', e); alert('Delete failed'); return; }
     } else if (action === 'untrack') {
