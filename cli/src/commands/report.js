@@ -134,6 +134,8 @@ export function reportCommand(opts) {
     const project = resolveProject(opts.project);
     projectFilter = 'AND project = ?';
     params.push(project.name);
+  } else {
+    projectFilter = 'AND (project IS NULL OR project NOT IN (SELECT name FROM projects WHERE hidden = 1))';
   }
 
   const tasks = allRows(`

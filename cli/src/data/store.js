@@ -84,6 +84,10 @@ export function getDb() {
     )
   `);
 
+  // Migrate: add hidden + category columns for project management
+  try { _db.exec('ALTER TABLE projects ADD COLUMN hidden INTEGER DEFAULT 0'); } catch {}
+  try { _db.exec("ALTER TABLE projects ADD COLUMN category TEXT DEFAULT NULL"); } catch {}
+
   // One-time de-dupe of phantom doubled-segment project rows (e.g. from an
   // older bug where `bean add --project <name>` resolved <name> relative to
   // cwd and wrote `<cwd>/<name>` as project_path). Any row whose path is

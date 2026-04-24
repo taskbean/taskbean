@@ -65,7 +65,7 @@ function Write-LaunchError {
 # ── Self-register taskbean:// protocol handler (best-effort, non-blocking) ────
 try {
     $launchPs1 = Join-Path $PSScriptRoot "launch.ps1"
-    $cmdValue = "powershell.exe -ExecutionPolicy Bypass -NoProfile -File `"$launchPs1`" `"%1`""
+    $cmdValue = "powershell.exe -ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File `"$launchPs1`" `"%1`""
     $regBase = 'HKCU:\Software\Classes\taskbean'
     New-Item -Path $regBase -Force | Out-Null
     Set-ItemProperty -Path $regBase -Name '(Default)' -Value 'URL:taskbean Protocol'

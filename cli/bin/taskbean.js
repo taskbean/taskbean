@@ -12,7 +12,7 @@ import { listCommand } from '../src/commands/list.js';
 import { reportCommand } from '../src/commands/report.js';
 import { trackCommand, untrackCommand } from '../src/commands/track.js';
 import { installCommand } from '../src/commands/install.js';
-import { projectsCommand } from '../src/commands/projects.js';
+import { projectsCommand, hideCommand, showCommand, categorizeCommand, deleteCommand } from '../src/commands/projects.js';
 import { serveCommand } from '../src/commands/serve.js';
 import { packageCommand } from '../src/commands/package.js';
 import { upgradeCommand } from '../src/commands/upgrade.js';
@@ -25,7 +25,8 @@ process.on('exit', maybePrintUpgradeNotice);
 program
   .name('bean')
   .description('🫘 Task management CLI for AI coding agents')
-  .version(VERSION);
+  .version(VERSION)
+  .enablePositionalOptions();
 
 // === Agent Contract (3 commands) ===
 
@@ -96,11 +97,47 @@ program
   .option('--json', 'Output as JSON')
   .action(untrackCommand);
 
-program
+const projects = program
   .command('projects')
-  .description('List tracked projects')
+  .description('List and manage tracked projects')
+  .passThroughOptions()
   .option('--json', 'Output as JSON')
+  .option('--all', 'Include hidden projects')
+  .option('--hidden', 'Show only hidden projects')
+  .option('--category <label>', 'Filter by category')
   .action(projectsCommand);
+
+projects
+  .command('hide')
+  .description('Hide a project from default views')
+  .argument('[name]', 'Project name (default: current project)')
+  .option('--json', 'Output as JSON')
+  .action(hideCommand);
+
+projects
+  .command('show')
+  .description('Show a hidden project')
+  .argument('[name]', 'Project name (default: current project)')
+  .option('--json', 'Output as JSON')
+  .action(showCommand);
+
+projects
+  .command('categorize')
+  .description('Set a category label on a project')
+  .argument('[name]', 'Project name (default: current project)')
+  .option('--category <label>', 'Category label (e.g. work, personal, oss)')
+  .option('--clear', 'Remove the category')
+  .option('--json', 'Output as JSON')
+  .action(categorizeCommand);
+
+projects
+  .command('delete')
+  .description('Delete a project and clean up its artifacts')
+  .argument('[name]', 'Project name (default: current project)')
+  .option('--confirm', 'Required to actually delete')
+  .option('--keep-files', 'Skip filesystem cleanup')
+  .option('--json', 'Output as JSON')
+  .action(deleteCommand);
 
 program
   .command('package')

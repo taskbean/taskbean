@@ -1,5 +1,5 @@
-import { writeFileSync, existsSync } from 'fs';
-import { resolve, basename } from 'path';
+import { writeFileSync, existsSync, rmSync } from 'fs';
+import { resolve, basename, join } from 'path';
 import { run, getRow, ensureProject } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { installCommand } from './install.js';
@@ -62,11 +62,27 @@ export function untrackCommand(opts) {
     return;
   }
 
-  run('UPDATE projects SET tracked = 0 WHERE id = ?', [existing.id]);
+  run('UPDATE projects SET tracked = 0, skill_installed = 0 WHERE id = ?', [existing.id]);
+
+  const skillDirs = [
+    join(project.path, '.agents', 'skills', 'taskbean'),
+    join(project.path, '.github', 'skills', 'taskbean'),
+    join(project.path, '.claude', 'skills', 'taskbean'),
+  ];
+  const removed = [];
+  for (const dir of skillDirs) {
+    if (existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true });
+      removed.push(dir);
+    }
+  }
 
   if (opts.json) {
-    console.log(JSON.stringify({ status: 'untracked', project: project.name }));
+    console.log(JSON.stringify({ status: 'untracked', project: project.name, removed }));
   } else {
     console.log(`📍 Stopped tracking: ${project.name}`);
+    if (removed.length) {
+      console.log(`🧹 Removed skill folders:\n${removed.map(d => `   ${d}`).join('\n')}`);
+    }
   }
 }

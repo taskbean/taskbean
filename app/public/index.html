@@ -779,6 +779,47 @@ header {
 .project-empty p { font-size: 12px; margin-top: 8px; }
 .project-empty code { display: inline-block; margin-top: 8px; padding: 6px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; font-size: 10px; font-family: 'DM Mono', monospace; color: var(--accent); }
 
+/* ── Project filter bar ── */
+.project-filter-bar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+.project-filter-chip { font-size: 10px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: background .15s, color .15s, border-color .15s; font-family: inherit; font-weight: 500; }
+.project-filter-chip:hover { border-color: var(--accent); color: var(--text); background: var(--surface2); }
+.project-filter-chip.active { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in oklch, var(--accent) 40%, transparent); font-weight: 600; }
+.project-filter-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.project-hidden-toggle { font-size: 10px; margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; user-select: none; transition: color .15s; }
+.project-hidden-toggle:hover { color: var(--text); }
+.project-hidden-toggle input { accent-color: var(--accent); width: 13px; height: 13px; }
+
+/* ── Project card enhancements ── */
+.project-card.hidden-project { opacity: 0.55; }
+.project-card-category { font-size: 9px; padding: 2px 7px; border-radius: 99px; font-weight: 600; letter-spacing: .3px; }
+.project-card-category.cat-work { background: var(--accent-soft); color: var(--accent); }
+.project-card-category.cat-personal { background: var(--purple-soft); color: var(--purple); }
+.project-card-category.cat-oss { background: var(--green-soft); color: var(--green); }
+.project-card-category.cat-custom { background: var(--orange-soft); color: var(--orange); }
+.project-card-skill { font-size: 9px; display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.project-card-skill.installed { color: var(--green); }
+.project-card-skill.not-installed { color: var(--orange); }
+.project-card-hidden-badge { font-size: 8px; padding: 1px 6px; border-radius: 99px; background: var(--muted-soft); color: var(--muted); border: 1px solid var(--border); letter-spacing: .3px; }
+.project-card-kebab { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px; border-radius: 4px; display: inline-flex; align-items: center; transition: color .15s, background .15s; flex-shrink: 0; opacity: 0; }
+.project-card:hover .project-card-kebab { opacity: 1; }
+.project-card-kebab:hover { color: var(--text); background: var(--surface); }
+.project-card-kebab:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Project context menu ── */
+.project-ctx-menu { position: fixed; z-index: 9999; min-width: 180px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.35); padding: 4px 0; font-size: 12px; animation: ctx-in .12s ease; overscroll-behavior: contain; }
+@keyframes ctx-in { from { opacity: 0; transform: scale(.96) translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .project-ctx-menu { animation: none; } }
+.project-ctx-item { display: flex; align-items: center; gap: 8px; padding: 8px 14px; cursor: pointer; color: var(--text); transition: background .12s; border-radius: 0; }
+.project-ctx-item:hover { background: var(--surface2); }
+.project-ctx-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--surface2); }
+.project-ctx-item.danger { color: var(--red); }
+.project-ctx-item.danger:hover { background: var(--red-soft); }
+.project-ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
+.project-ctx-submenu { padding: 6px 14px 8px; }
+.project-ctx-submenu label { font-size: 10px; color: var(--muted); display: block; margin-bottom: 4px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
+.project-ctx-submenu select, .project-ctx-submenu input { font-size: 11px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); width: 100%; font-family: inherit; transition: border-color .15s; }
+.project-ctx-submenu select:focus-visible, .project-ctx-submenu input:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+
 /* ── Track-a-project help card (sidebar, Projects tab) ── */
 .track-tip { margin: 6px 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); overflow: hidden; }
 .track-tip-header { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: transparent; border: 0; cursor: pointer; color: var(--text); font: inherit; text-align: left; }
@@ -2588,6 +2629,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         </div>
       </section>
       <div id="trackTipStatus" class="sr-only" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"></div>
+      <div id="projectFilterBar" class="project-filter-bar" style="display:none"></div>
       <div id="projectList" class="project-list-container"></div>
     </div>
   </div>
@@ -4827,6 +4869,8 @@ let _projectsCache = [];
 let _expandedProject = null;
 let _usagePeriod = 'today';
 let _usageAgentFilter = 'all';  // 'all' | canonical agent id
+let _projectCategoryFilter = 'all';  // 'all' | category string
+let _projectShowHidden = false;
 const AGENT_META = {
     copilot:       { label: 'Copilot',     icon: 'github',   install: 'https://github.com/github/gh-copilot' },
     'claude-code': { label: 'Claude Code', icon: 'sparkles', install: 'https://github.com/anthropics/claude-code' },
@@ -4838,26 +4882,89 @@ const AGENT_ORDER = ['copilot', 'claude-code', 'codex', 'opencode'];
 // Lightweight fetch to populate _projectsCache and badge on startup (no full render)
 async function fetchProjectCount() {
     try {
-        const res = await fetch('/api/projects', { cache: 'no-store' });
+        const res = await fetch('/api/projects?show_hidden=true', { cache: 'no-store' });
         _projectsCache = await res.json();
-        document.getElementById('projectCount').textContent = _projectsCache.length || '0';
+        const visible = _projectsCache.filter(p => !p.hidden);
+        document.getElementById('projectCount').textContent = visible.length || '0';
     } catch { /* offline */ }
+}
+
+// Restore filter prefs from localStorage
+try {
+    _projectCategoryFilter = localStorage.getItem('tb_proj_cat_filter') || 'all';
+    _projectShowHidden = localStorage.getItem('tb_proj_show_hidden') === 'true';
+} catch {}
+
+function _categoryClass(cat) {
+    if (!cat) return '';
+    const lower = cat.toLowerCase();
+    if (lower === 'work') return 'cat-work';
+    if (lower === 'personal') return 'cat-personal';
+    if (lower === 'oss') return 'cat-oss';
+    return 'cat-custom';
+}
+
+function _renderProjectFilterBar(projects) {
+    const bar = document.getElementById('projectFilterBar');
+    if (!bar) return;
+    if (projects.length === 0) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+
+    const cats = [...new Set(projects.map(p => p.category).filter(Boolean))];
+    let html = `<button class="project-filter-chip ${_projectCategoryFilter === 'all' ? 'active' : ''}" data-cat-filter="all">All</button>`;
+    for (const cat of ['work', 'personal', 'oss', ...cats.filter(c => !['work','personal','oss'].includes(c.toLowerCase()))]) {
+        const unique = cat.toLowerCase();
+        if (html.includes(`data-cat="${unique}"`)) continue;
+        html += `<button class="project-filter-chip ${_projectCategoryFilter === unique ? 'active' : ''}" data-cat="${unique}" data-cat-filter="${esc(unique)}">${esc(cat)}</button>`;
+    }
+    html += `<label class="project-hidden-toggle"><input type="checkbox" ${_projectShowHidden ? 'checked' : ''} data-show-hidden> Show hidden</label>`;
+    bar.innerHTML = html;
+    bar.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-cat-filter]');
+        if (chip) setProjectCategoryFilter(chip.dataset.catFilter);
+    });
+    bar.addEventListener('change', (e) => {
+        if (e.target.dataset.showHidden !== undefined) toggleProjectShowHidden(e.target.checked);
+    });
+}
+
+function setProjectCategoryFilter(cat) {
+    _projectCategoryFilter = cat;
+    try { localStorage.setItem('tb_proj_cat_filter', cat); } catch {}
+    renderProjects();
+}
+function toggleProjectShowHidden(val) {
+    _projectShowHidden = val;
+    try { localStorage.setItem('tb_proj_show_hidden', String(val)); } catch {}
+    renderProjects();
 }
 
 async function renderProjects() {
     try {
-        const res = await fetch('/api/projects', { cache: 'no-store' });
+        const res = await fetch('/api/projects?show_hidden=true', { cache: 'no-store' });
         _projectsCache = await res.json();
     } catch { /* offline */ }
+
+    // Apply client-side filters
+    let filtered = _projectsCache;
+    if (!_projectShowHidden) filtered = filtered.filter(p => !p.hidden);
+    if (_projectCategoryFilter !== 'all') filtered = filtered.filter(p => (p.category || '').toLowerCase() === _projectCategoryFilter);
+
     const el = document.getElementById('projectList');
-    document.getElementById('projectCount').textContent = _projectsCache.length || '0';
+    const visibleCount = _projectsCache.filter(p => !p.hidden).length;
+    document.getElementById('projectCount').textContent = visibleCount || '0';
+
+    // Render filter bar (uses full cache, not filtered)
+    _renderProjectFilterBar(_projectsCache);
 
     // Signature of project structure — if unchanged, skip rebuilding the list
     // so the user's scroll position and any in-flight interactions survive polling.
     const signature = JSON.stringify({
-        p: _projectsCache.map(p => [p.name, p.total, p.done, p.pending]),
+        p: filtered.map(p => [p.name, p.total, p.done, p.pending, p.hidden, p.category, p.skill_installed]),
         e: _expandedProject,
         u: _usagePeriod,
+        f: _projectCategoryFilter,
+        h: _projectShowHidden,
     });
     const unchanged = el && el.dataset.sig === signature;
 
@@ -4878,24 +4985,35 @@ async function renderProjects() {
     // Projects
     const tip = document.getElementById('trackTip');
     const tipToggle = document.getElementById('trackTipToggle');
-    if (_projectsCache.length === 0) {
+    if (filtered.length === 0) {
         // Auto-open the help card so first-run users see the how-to immediately.
-        if (tip && !_trackTipUserToggled) {
+        if (_projectsCache.length === 0 && tip && !_trackTipUserToggled) {
             tip.dataset.open = 'true';
             if (tipToggle) tipToggle.setAttribute('aria-expanded', 'true');
         }
+        const msg = _projectsCache.length > 0 ? 'No projects match current filters.' : 'No tracked projects yet.';
+        const sub = _projectsCache.length > 0 ? 'Try adjusting the category filter or showing hidden projects.' : 'Use the steps above to add your first one.';
         html += `<div class="project-empty">
             <i data-lucide="folder-open" class="icon-xl" style="color:var(--muted)" aria-hidden="true"></i>
-            <p>No tracked projects yet.</p>
-            <p style="font-size:10px;margin-top:4px">Use the steps above to add your first one.</p>
+            <p>${msg}</p>
+            <p style="font-size:10px;margin-top:4px">${sub}</p>
         </div>`;
     } else {
-        html += _projectsCache.map(p => `
-            <div class="project-card" onclick="toggleProjectExpand('${esc(p.name)}')" data-project="${esc(p.name)}">
+        html += filtered.map(p => {
+            const catClass = _categoryClass(p.category);
+            const catBadge = p.category ? `<span class="project-card-category ${catClass}">${esc(p.category)}</span>` : '';
+            const hiddenBadge = p.hidden ? `<span class="project-card-hidden-badge">hidden</span>` : '';
+            const skillBadge = p.skill_installed
+                ? `<span class="project-card-skill installed" title="Skill installed"><i data-lucide="check-circle" class="icon-xs" aria-hidden="true"></i></span>`
+                : `<span class="project-card-skill not-installed" title="Skill not installed"><i data-lucide="alert-circle" class="icon-xs" aria-hidden="true"></i></span>`;
+            return `
+            <div class="project-card ${p.hidden ? 'hidden-project' : ''}" data-project="${esc(p.name)}">
                 <div class="project-card-header">
-                    <i data-lucide="folder-kanban" class="icon-sm" style="color:var(--accent)"></i>
+                    <i data-lucide="folder-kanban" class="icon-sm" style="color:var(--accent)" aria-hidden="true"></i>
                     <span class="project-card-name">${esc(p.name)}</span>
+                    ${catBadge}${hiddenBadge}${skillBadge}
                     <span class="project-card-badge">${p.total} tasks</span>
+                    <button class="project-card-kebab" data-project-menu="${esc(p.name)}" title="Project actions" aria-label="Project actions for ${esc(p.name)}"><i data-lucide="more-vertical" class="icon-sm" aria-hidden="true"></i></button>
                 </div>
                 <div class="project-card-stats">
                     <span class="project-card-stat"><span class="done-dot"></span> ${p.done} done</span>
@@ -4905,12 +5023,26 @@ async function renderProjects() {
                     <div style="font-size:10px;color:var(--muted);padding:4px 0">Loading…</div>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
     }
 
     if (!unchanged) {
         el.innerHTML = html;
         el.dataset.sig = signature;
+        // Delegated event listeners for project cards
+        el.addEventListener('click', (e) => {
+            const kebab = e.target.closest('[data-project-menu]');
+            if (kebab) {
+                e.stopPropagation();
+                showProjectMenu(e, kebab.dataset.projectMenu);
+                return;
+            }
+            const card = e.target.closest('.project-card');
+            if (card && card.dataset.project) {
+                toggleProjectExpand(card.dataset.project);
+            }
+        });
     }
     lucide.createIcons();
     loadUsageStats();
@@ -5162,6 +5294,128 @@ async function loadProjectTasks(name) {
         container.style.display = 'block';
         lucide.createIcons();
     } catch { container.innerHTML = '<div style="font-size:10px;color:var(--red)">Failed to load</div>'; }
+}
+
+// ── Project context menu ──
+let _projectCtxMenu = null;
+
+function _closeProjectMenu() {
+    if (_projectCtxMenu) { _projectCtxMenu.remove(); _projectCtxMenu = null; }
+    document.removeEventListener('click', _closeProjectMenu);
+}
+
+function showProjectMenu(event, name) {
+    _closeProjectMenu();
+    const proj = _projectsCache.find(p => p.name === name);
+    if (!proj) return;
+
+    const menu = document.createElement('div');
+    menu.className = 'project-ctx-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', `Actions for ${name}`);
+
+    const CATEGORY_PRESETS = ['work', 'personal', 'oss'];
+    const currentCat = (proj.category || '').toLowerCase();
+
+    let catOptions = CATEGORY_PRESETS.map(c =>
+        `<option value="${c}" ${currentCat === c ? 'selected' : ''}>${c}</option>`
+    ).join('');
+    catOptions = `<option value="">— none —</option>${catOptions}<option value="__custom">custom…</option>`;
+
+    menu.innerHTML = `
+        <div class="project-ctx-submenu">
+            <label>Category</label>
+            <select data-category-for="${esc(name)}">${catOptions}</select>
+        </div>
+        <div class="project-ctx-sep" role="separator"></div>
+        <div class="project-ctx-item" role="menuitem" tabindex="0" data-action="${proj.hidden ? 'show' : 'hide'}" data-project-action="${esc(name)}">
+            <i data-lucide="${proj.hidden ? 'eye' : 'eye-off'}" class="icon-sm" aria-hidden="true"></i>
+            ${proj.hidden ? 'Show project' : 'Hide project'}
+        </div>
+        <div class="project-ctx-item" role="menuitem" tabindex="0" data-action="untrack" data-project-action="${esc(name)}">
+            <i data-lucide="unlink" class="icon-sm" aria-hidden="true"></i>
+            Untrack project
+        </div>
+        <div class="project-ctx-sep" role="separator"></div>
+        <div class="project-ctx-item danger" role="menuitem" tabindex="0" data-action="delete" data-project-action="${esc(name)}">
+            <i data-lucide="trash-2" class="icon-sm" aria-hidden="true"></i>
+            Delete project
+        </div>
+    `;
+    menu.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-action]');
+        if (item) {
+            projectAction(item.dataset.action, item.dataset.projectAction);
+        }
+    });
+    menu.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { _closeProjectMenu(); return; }
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const item = e.target.closest('[data-action]');
+            if (item) projectAction(item.dataset.action, item.dataset.projectAction);
+        }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const items = [...menu.querySelectorAll('[role="menuitem"]')];
+            const idx = items.indexOf(e.target);
+            const next = e.key === 'ArrowDown' ? (idx + 1) % items.length : (idx - 1 + items.length) % items.length;
+            items[next]?.focus();
+        }
+    });
+    menu.addEventListener('change', (e) => {
+        if (e.target.dataset.categoryFor) {
+            handleProjectCategoryChange(e.target, e.target.dataset.categoryFor);
+        }
+    });
+
+    // Position relative to click
+    const rect = event.target.closest('.project-card-kebab').getBoundingClientRect();
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.left = `${Math.min(rect.left, window.innerWidth - 200)}px`;
+    document.body.appendChild(menu);
+    _projectCtxMenu = menu;
+    lucide.createIcons();
+    setTimeout(() => document.addEventListener('click', _closeProjectMenu), 0);
+}
+
+async function handleProjectCategoryChange(select, name) {
+    let cat = select.value;
+    if (cat === '__custom') {
+        cat = prompt('Enter a custom category label:');
+        if (!cat) { renderProjects(); return; }
+    }
+    _closeProjectMenu();
+    try {
+        await fetch(`/api/projects/${encodeURIComponent(name)}/category`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category: cat || null }),
+        });
+    } catch (e) { console.error('Failed to set category', e); }
+    renderProjects();
+}
+
+async function projectAction(action, name) {
+    _closeProjectMenu();
+    if (action === 'delete') {
+        if (!confirm(`Delete project "${name}"?\n\nThis removes the project entry and cleans up .taskbean.json and skill files.\nTasks are kept as historical records.`)) return;
+        try {
+            const res = await fetch(`/api/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+            if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.detail || 'Delete failed'); return; }
+        } catch (e) { console.error('Delete failed', e); alert('Delete failed'); return; }
+    } else if (action === 'untrack') {
+        if (!confirm(`Untrack project "${name}"?\n\nThis removes the installed skill files and stops tracking.`)) return;
+        try {
+            const res = await fetch(`/api/projects/${encodeURIComponent(name)}/untrack`, { method: 'POST' });
+            if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.detail || 'Untrack failed'); return; }
+        } catch (e) { console.error('Untrack failed', e); alert('Untrack failed'); return; }
+    } else if (action === 'hide' || action === 'show') {
+        try {
+            await fetch(`/api/projects/${encodeURIComponent(name)}/${action}`, { method: 'POST' });
+        } catch (e) { console.error(`${action} failed`, e); }
+    }
+    renderProjects();
 }
 
 // ── Task Detail Card ──

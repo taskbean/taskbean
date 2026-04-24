@@ -1,7 +1,7 @@
 // NOTE: Bump CACHE_NAME on every deploy that touches user-visible assets so
 // old caches are invalidated on activate. Consider deriving this from a
 // build-time constant in the future.
-const CACHE_NAME = 'taskbean-v20';
+const CACHE_NAME = 'taskbean-v21';
 const SHELL_ASSETS = [
   '/manifest.json',
   '/icons/icon-192.png',
