@@ -781,9 +781,10 @@ header {
 
 /* ── Project filter bar ── */
 .project-filter-bar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
-.project-filter-chip { font-size: 10px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s; font-family: inherit; font-weight: 500; }
+.project-filter-chip { font-size: 10px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: background .15s, color .15s, border-color .15s; font-family: inherit; font-weight: 500; }
 .project-filter-chip:hover { border-color: var(--accent); color: var(--text); background: var(--surface2); }
 .project-filter-chip.active { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in oklch, var(--accent) 40%, transparent); font-weight: 600; }
+.project-filter-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .project-hidden-toggle { font-size: 10px; margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; user-select: none; transition: color .15s; }
 .project-hidden-toggle:hover { color: var(--text); }
 .project-hidden-toggle input { accent-color: var(--accent); width: 13px; height: 13px; }
@@ -802,19 +803,22 @@ header {
 .project-card-kebab { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px; border-radius: 4px; display: inline-flex; align-items: center; transition: color .15s, background .15s; flex-shrink: 0; opacity: 0; }
 .project-card:hover .project-card-kebab { opacity: 1; }
 .project-card-kebab:hover { color: var(--text); background: var(--surface); }
+.project-card-kebab:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ── Project context menu ── */
-.project-ctx-menu { position: fixed; z-index: 9999; min-width: 180px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.35); padding: 4px 0; font-size: 12px; animation: ctx-in .12s ease; }
+.project-ctx-menu { position: fixed; z-index: 9999; min-width: 180px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.35); padding: 4px 0; font-size: 12px; animation: ctx-in .12s ease; overscroll-behavior: contain; }
 @keyframes ctx-in { from { opacity: 0; transform: scale(.96) translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .project-ctx-menu { animation: none; } }
 .project-ctx-item { display: flex; align-items: center; gap: 8px; padding: 8px 14px; cursor: pointer; color: var(--text); transition: background .12s; border-radius: 0; }
 .project-ctx-item:hover { background: var(--surface2); }
+.project-ctx-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--surface2); }
 .project-ctx-item.danger { color: var(--red); }
 .project-ctx-item.danger:hover { background: var(--red-soft); }
 .project-ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
 .project-ctx-submenu { padding: 6px 14px 8px; }
 .project-ctx-submenu label { font-size: 10px; color: var(--muted); display: block; margin-bottom: 4px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
 .project-ctx-submenu select, .project-ctx-submenu input { font-size: 11px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); width: 100%; font-family: inherit; transition: border-color .15s; }
-.project-ctx-submenu select:focus, .project-ctx-submenu input:focus { outline: none; border-color: var(--accent); }
+.project-ctx-submenu select:focus-visible, .project-ctx-submenu input:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
 
 /* ── Track-a-project help card (sidebar, Projects tab) ── */
 .track-tip { margin: 6px 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); overflow: hidden; }
@@ -5000,16 +5004,16 @@ async function renderProjects() {
             const catBadge = p.category ? `<span class="project-card-category ${catClass}">${esc(p.category)}</span>` : '';
             const hiddenBadge = p.hidden ? `<span class="project-card-hidden-badge">hidden</span>` : '';
             const skillBadge = p.skill_installed
-                ? `<span class="project-card-skill installed" title="Skill installed"><i data-lucide="check-circle" class="icon-xs"></i></span>`
-                : `<span class="project-card-skill not-installed" title="Skill not installed"><i data-lucide="alert-circle" class="icon-xs"></i></span>`;
+                ? `<span class="project-card-skill installed" title="Skill installed"><i data-lucide="check-circle" class="icon-xs" aria-hidden="true"></i></span>`
+                : `<span class="project-card-skill not-installed" title="Skill not installed"><i data-lucide="alert-circle" class="icon-xs" aria-hidden="true"></i></span>`;
             return `
             <div class="project-card ${p.hidden ? 'hidden-project' : ''}" data-project="${esc(p.name)}">
                 <div class="project-card-header">
-                    <i data-lucide="folder-kanban" class="icon-sm" style="color:var(--accent)"></i>
+                    <i data-lucide="folder-kanban" class="icon-sm" style="color:var(--accent)" aria-hidden="true"></i>
                     <span class="project-card-name">${esc(p.name)}</span>
                     ${catBadge}${hiddenBadge}${skillBadge}
                     <span class="project-card-badge">${p.total} tasks</span>
-                    <button class="project-card-kebab" data-project-menu="${esc(p.name)}" title="Project actions" aria-label="Project actions for ${esc(p.name)}"><i data-lucide="more-vertical" class="icon-sm"></i></button>
+                    <button class="project-card-kebab" data-project-menu="${esc(p.name)}" title="Project actions" aria-label="Project actions for ${esc(p.name)}"><i data-lucide="more-vertical" class="icon-sm" aria-hidden="true"></i></button>
                 </div>
                 <div class="project-card-stats">
                     <span class="project-card-stat"><span class="done-dot"></span> ${p.done} done</span>
@@ -5307,6 +5311,8 @@ function showProjectMenu(event, name) {
 
     const menu = document.createElement('div');
     menu.className = 'project-ctx-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', `Actions for ${name}`);
 
     const CATEGORY_PRESETS = ['work', 'personal', 'oss'];
     const currentCat = (proj.category || '').toLowerCase();
@@ -5321,18 +5327,18 @@ function showProjectMenu(event, name) {
             <label>Category</label>
             <select data-category-for="${esc(name)}">${catOptions}</select>
         </div>
-        <div class="project-ctx-sep"></div>
-        <div class="project-ctx-item" data-action="${proj.hidden ? 'show' : 'hide'}" data-project-action="${esc(name)}">
-            <i data-lucide="${proj.hidden ? 'eye' : 'eye-off'}" class="icon-sm"></i>
+        <div class="project-ctx-sep" role="separator"></div>
+        <div class="project-ctx-item" role="menuitem" tabindex="0" data-action="${proj.hidden ? 'show' : 'hide'}" data-project-action="${esc(name)}">
+            <i data-lucide="${proj.hidden ? 'eye' : 'eye-off'}" class="icon-sm" aria-hidden="true"></i>
             ${proj.hidden ? 'Show project' : 'Hide project'}
         </div>
-        <div class="project-ctx-item" data-action="untrack" data-project-action="${esc(name)}">
-            <i data-lucide="unlink" class="icon-sm"></i>
+        <div class="project-ctx-item" role="menuitem" tabindex="0" data-action="untrack" data-project-action="${esc(name)}">
+            <i data-lucide="unlink" class="icon-sm" aria-hidden="true"></i>
             Untrack project
         </div>
-        <div class="project-ctx-sep"></div>
-        <div class="project-ctx-item danger" data-action="delete" data-project-action="${esc(name)}">
-            <i data-lucide="trash-2" class="icon-sm"></i>
+        <div class="project-ctx-sep" role="separator"></div>
+        <div class="project-ctx-item danger" role="menuitem" tabindex="0" data-action="delete" data-project-action="${esc(name)}">
+            <i data-lucide="trash-2" class="icon-sm" aria-hidden="true"></i>
             Delete project
         </div>
     `;
@@ -5340,6 +5346,21 @@ function showProjectMenu(event, name) {
         const item = e.target.closest('[data-action]');
         if (item) {
             projectAction(item.dataset.action, item.dataset.projectAction);
+        }
+    });
+    menu.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { _closeProjectMenu(); return; }
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const item = e.target.closest('[data-action]');
+            if (item) projectAction(item.dataset.action, item.dataset.projectAction);
+        }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const items = [...menu.querySelectorAll('[role="menuitem"]')];
+            const idx = items.indexOf(e.target);
+            const next = e.key === 'ArrowDown' ? (idx + 1) % items.length : (idx - 1 + items.length) % items.length;
+            items[next]?.focus();
         }
     });
     menu.addEventListener('change', (e) => {
