@@ -1,12 +1,10 @@
-import { getDb, saveDb, ensureProject } from '../data/store.js';
+import { run } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { resolveTask } from '../data/resolve-task.js';
 
-export async function removeCommand(id, opts) {
-  const db = await getDb();
+export function removeCommand(id, opts) {
   const project = resolveProject(opts.project);
-  const projectId = ensureProject(db, project.path, project.name);
-  const task = resolveTask(db, id, projectId);
+  const task = resolveTask(id, project.name);
 
   if (!task) {
     if (opts.json) {
@@ -18,8 +16,7 @@ export async function removeCommand(id, opts) {
     return;
   }
 
-  db.run('DELETE FROM tasks WHERE id = ?', [task.id]);
-  saveDb();
+  run('DELETE FROM todos WHERE id = ?', [task.id]);
 
   if (opts.json) {
     console.log(JSON.stringify({ deleted: task.id, title: task.title }));

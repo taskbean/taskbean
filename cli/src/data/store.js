@@ -54,6 +54,11 @@ export function getDb() {
   // (the name) is not unique — two "app" repos would collide in backfill —
   // so the Python backfill prefers this column when present.
   try { _db.exec('ALTER TABLE todos ADD COLUMN project_path TEXT'); } catch {}
+  // Task lifecycle status: pending → in_progress → done, or pending → blocked
+  try { _db.exec("ALTER TABLE todos ADD COLUMN status TEXT DEFAULT 'pending'"); } catch {}
+  // Backfill status from completed for existing rows
+  try { _db.exec("UPDATE todos SET status = 'done' WHERE completed = 1 AND (status IS NULL OR status = 'pending')"); } catch {}
+  try { _db.exec("UPDATE todos SET status = 'pending' WHERE completed = 0 AND status IS NULL"); } catch {}
   try { _db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_todos_upsert ON todos(project, upsert_key)'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_todos_agent_session ON todos(agent, agent_session_id)'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_todos_project_path ON todos(project_path)'); } catch {}

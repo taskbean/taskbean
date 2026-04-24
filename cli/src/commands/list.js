@@ -14,10 +14,16 @@ export function listCommand(opts) {
   }
 
   if (opts.status) {
-    const isCompleted = opts.status === 'done';
     sql += params.length ? ' AND' : ' WHERE';
-    sql += ' completed = ?';
-    params.push(isCompleted ? 1 : 0);
+    if (opts.status === 'done') {
+      sql += ' completed = 1';
+    } else if (opts.status === 'pending') {
+      sql += " (status = 'pending' OR (status IS NULL AND completed = 0))";
+    } else {
+      // in_progress, blocked, or any future status value
+      sql += ' status = ?';
+      params.push(opts.status);
+    }
   }
 
   sql += ' ORDER BY created_at DESC';

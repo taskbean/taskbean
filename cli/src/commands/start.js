@@ -1,12 +1,10 @@
-import { getDb, saveDb, getRow, ensureProject } from '../data/store.js';
+import { getRow, run } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { resolveTask } from '../data/resolve-task.js';
 
-export async function startCommand(id, opts) {
-  const db = await getDb();
+export function startCommand(id, opts) {
   const project = resolveProject(opts.project);
-  const projectId = ensureProject(db, project.path, project.name);
-  const task = resolveTask(db, id, projectId);
+  const task = resolveTask(id, project.name);
 
   if (!task) {
     if (opts.json) {
@@ -18,7 +16,6 @@ export async function startCommand(id, opts) {
     return;
   }
 
-  // Idempotent: already in_progress → no-op success
   if (task.status === 'in_progress') {
     if (opts.json) {
       console.log(JSON.stringify(task));
@@ -28,13 +25,12 @@ export async function startCommand(id, opts) {
     return;
   }
 
-  db.run(
-    `UPDATE tasks SET status = 'in_progress', updated_at = datetime('now', 'localtime') WHERE id = ?`,
+  run(
+    `UPDATE todos SET status = 'in_progress' WHERE id = ?`,
     [task.id]
   );
-  saveDb();
 
-  const updated = getRow(db, 'SELECT * FROM tasks WHERE id = ?', [task.id]);
+  const updated = getRow('SELECT * FROM todos WHERE id = ?', [task.id]);
   if (opts.json) {
     console.log(JSON.stringify(updated));
   } else {

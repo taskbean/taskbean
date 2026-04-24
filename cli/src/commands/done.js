@@ -26,7 +26,7 @@ export function doneCommand(id, opts) {
     return;
   }
 
-  run('UPDATE todos SET completed = 1 WHERE id = ?', [task.id]);
+  run('UPDATE todos SET completed = 1, status = \'done\' WHERE id = ?', [task.id]);
 
   const updated = getRow('SELECT * FROM todos WHERE id = ?', [task.id]);
   if (opts.json) {

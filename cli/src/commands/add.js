@@ -39,8 +39,8 @@ export function addCommand(title, opts) {
   const id = randomUUID();
   run(
     `INSERT INTO todos (id, title, completed, source, priority, tags, project, project_path, upsert_key,
-                        session_id, agent, agent_session_id, created_at)
-     VALUES (?, ?, 0, 'agent', 'none', '[]', ?, ?, ?, ?, ?, ?, ?)`,
+                        session_id, agent, agent_session_id, status, created_at)
+     VALUES (?, ?, 0, 'agent', 'none', '[]', ?, ?, ?, ?, ?, ?, 'pending', ?)`,
     [
       id, title, project.name, project.path, opts.key || null,
       opts.sessionId || attribution.nativeId || null,

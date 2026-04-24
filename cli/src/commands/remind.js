@@ -1,22 +1,16 @@
-import { randomBytes } from 'crypto';
-import { getDb, saveDb, ensureProject, getRow } from '../data/store.js';
+import { randomUUID } from 'crypto';
+import { getRow, run, ensureProject } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { parseDate } from '../data/parse-date.js';
 
-function shortId() {
-  // Match the previous nanoid(8) shape with URL-safe base64.
-  return randomBytes(6).toString('base64url').slice(0, 8);
-}
-
-export async function remindCommand(title, when, opts) {
-  const db = await getDb();
+export function remindCommand(title, when, opts) {
   const project = resolveProject(opts.project);
-  const projectId = ensureProject(db, project.path, project.name);
+  ensureProject(project.path, project.name);
 
-  const dueAt = parseDate(when);
-  if (!dueAt) {
+  const remindAt = parseDate(when);
+  if (!remindAt) {
     if (opts.json) {
-      console.log(JSON.stringify({ error: 'invalid_input', message: `Could not parse date: ${when}`, code: 1 }));
+      console.log(JSON.stringify({ error: 'invalid_date', message: `Could not parse date: ${when}`, code: 1 }));
     } else {
       console.error(`❌ Could not parse date: ${when}`);
     }
@@ -24,17 +18,18 @@ export async function remindCommand(title, when, opts) {
     return;
   }
 
-  const id = 't_' + shortId();
-  db.run(
-    `INSERT INTO tasks (id, title, status, project_id, due_at) VALUES (?, ?, 'pending', ?, ?)`,
-    [id, title, projectId, dueAt]
+  const id = randomUUID();
+  run(
+    `INSERT INTO todos (id, title, completed, source, priority, tags, project, project_path,
+                        reminder, remind_at, status, created_at)
+     VALUES (?, ?, 0, 'manual', 'none', '[]', ?, ?, 1, ?, 'pending', ?)`,
+    [id, title, project.name, project.path, remindAt, new Date().toISOString()]
   );
-  saveDb();
 
-  const task = getRow(db, 'SELECT * FROM tasks WHERE id = ?', [id]);
+  const task = getRow('SELECT * FROM todos WHERE id = ?', [id]);
   if (opts.json) {
     console.log(JSON.stringify(task));
   } else {
-    console.log(`⏰ Reminder set: ${title} (due ${dueAt})`);
+    console.log(`⏰ Reminder set: ${title} (${remindAt})`);
   }
 }

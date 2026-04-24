@@ -9,6 +9,11 @@ import { checkForUpdates, maybePrintUpgradeNotice } from '../src/lib/update-noti
 import { addCommand } from '../src/commands/add.js';
 import { doneCommand } from '../src/commands/done.js';
 import { listCommand } from '../src/commands/list.js';
+import { editCommand } from '../src/commands/edit.js';
+import { removeCommand } from '../src/commands/remove.js';
+import { startCommand } from '../src/commands/start.js';
+import { blockCommand } from '../src/commands/block.js';
+import { remindCommand } from '../src/commands/remind.js';
 import { reportCommand } from '../src/commands/report.js';
 import { trackCommand, untrackCommand } from '../src/commands/track.js';
 import { installCommand } from '../src/commands/install.js';
@@ -53,13 +58,60 @@ program
   .command('list')
   .alias('ls')
   .description('List tasks')
-  .option('--status <status>', 'Filter by status (pending, done)')
+  .option('--status <status>', 'Filter by status (pending, in_progress, done, blocked)')
   .option('--all', 'Show tasks across all projects')
   .option('--count', 'Show counts instead of task list')
   .option('--by-project', 'Group by project (use with --all)')
   .option('--json', 'Output as JSON')
   .option('--project <path>', 'Override project path')
   .action(listCommand);
+
+program
+  .command('edit')
+  .description('Edit a task')
+  .argument('<id>', 'Task ID or position number')
+  .option('--title <title>', 'New title')
+  .option('--priority <level>', 'Priority: high, medium, low, none')
+  .option('--notes <text>', 'Notes (markdown)')
+  .option('--due-date <date>', 'Due date (YYYY-MM-DD or "clear")')
+  .option('--tags <tags>', 'Comma-separated tags')
+  .option('--json', 'Output as JSON')
+  .option('--project <path>', 'Override project path')
+  .action(editCommand);
+
+program
+  .command('remove')
+  .alias('rm')
+  .description('Delete a task')
+  .argument('<id>', 'Task ID or position number')
+  .option('--json', 'Output as JSON')
+  .option('--project <path>', 'Override project path')
+  .action(removeCommand);
+
+program
+  .command('start')
+  .description('Mark a task as in-progress')
+  .argument('<id>', 'Task ID or position number')
+  .option('--json', 'Output as JSON')
+  .option('--project <path>', 'Override project path')
+  .action(startCommand);
+
+program
+  .command('block')
+  .description('Mark a task as blocked')
+  .argument('<id>', 'Task ID or position number')
+  .option('--json', 'Output as JSON')
+  .option('--project <path>', 'Override project path')
+  .action(blockCommand);
+
+program
+  .command('remind')
+  .description('Create a task with a reminder')
+  .argument('<title>', 'Reminder text')
+  .argument('<when>', 'When to remind (e.g. "tomorrow", "friday 9am", "in 2 hours")')
+  .option('--json', 'Output as JSON')
+  .option('--project <path>', 'Override project path')
+  .action(remindCommand);
 
 // === Human Contract (2 commands) ===
 
