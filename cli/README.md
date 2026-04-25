@@ -141,6 +141,29 @@ If the signal is ambiguous, attribution is left empty rather than guessing. `bea
 
 SQLite database at `~/.taskbean/taskbean.db`. All data stays local. Usage tracking stores session metadata and aggregate token counts only. Prompts, responses, and tool outputs are never copied into the database.
 
+## Uninstall
+
+```bash
+# Remove skill files + system artifacts (keeps your task data)
+bean uninstall --keep-data
+
+# Also scan for manually installed skill files
+bean uninstall --keep-data --scan ~/projects
+
+# Full removal including task database
+bean uninstall
+
+# Preview what would be removed
+bean uninstall --dry-run
+```
+
+Then remove the CLI itself:
+
+```bash
+npm uninstall -g taskbean          # if installed via npm
+winget uninstall taskbean.taskbean # if installed via winget
+```
+
 ## License
 
 MIT

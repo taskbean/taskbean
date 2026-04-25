@@ -2,6 +2,7 @@ import { existsSync, rmSync } from 'fs';
 import { resolve, join } from 'path';
 import { allRows, getRow, run } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
+import { PROJECT_SKILL_DIRS } from '../data/skill-dirs.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -241,11 +242,7 @@ export function deleteCommand(name, opts) {
       catch (e) { cleanupErrors.push({ path: configFile, error: e.message }); }
     }
 
-    const skillDirs = [
-      join(projectDir, '.agents', 'skills', 'taskbean'),
-      join(projectDir, '.github', 'skills', 'taskbean'),
-      join(projectDir, '.claude', 'skills', 'taskbean'),
-    ];
+    const skillDirs = PROJECT_SKILL_DIRS.map(rel => join(projectDir, rel));
     for (const dir of skillDirs) {
       if (existsSync(dir)) {
         try { rmSync(dir, { recursive: true, force: true }); removed.push(dir); }

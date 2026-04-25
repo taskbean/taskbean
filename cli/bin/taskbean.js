@@ -21,6 +21,7 @@ import { projectsCommand, hideCommand, showCommand, categorizeCommand, deleteCom
 import { serveCommand } from '../src/commands/serve.js';
 import { packageCommand } from '../src/commands/package.js';
 import { upgradeCommand } from '../src/commands/upgrade.js';
+import { uninstallCommand } from '../src/commands/uninstall.js';
 
 // Fire-and-forget update check. Internally throttled to once per 24h, silent
 // in CI / non-TTY / when TASKBEAN_NO_UPGRADE_NOTICE=1.
@@ -217,5 +218,16 @@ program
   .option('--json', 'Output as JSON')
   .option('--force', 'Re-download even if already up to date')
   .action(upgradeCommand);
+
+program
+  .command('uninstall')
+  .description('Remove taskbean artifacts from this system')
+  .option('--keep-data', 'Keep ~/.taskbean/ (preserves your task database)')
+  .option('--scan [dir]', 'Scan filesystem for manually installed skill files')
+  .option('--dry-run', 'Print what would be removed without doing it')
+  .option('-y, --yes', 'Skip confirmation prompt')
+  .option('--force', 'Skip confirmation (alias for --yes)')
+  .option('--json', 'Machine-readable output')
+  .action(uninstallCommand);
 
 program.parse();

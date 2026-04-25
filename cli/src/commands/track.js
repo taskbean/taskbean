@@ -3,6 +3,7 @@ import { resolve, basename, join } from 'path';
 import { run, getRow, ensureProject } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { installCommand } from './install.js';
+import { PROJECT_SKILL_DIRS } from '../data/skill-dirs.js';
 
 export function trackCommand(opts) {
   // --global: install skill globally and return
@@ -64,11 +65,7 @@ export function untrackCommand(opts) {
 
   run('UPDATE projects SET tracked = 0, skill_installed = 0 WHERE id = ?', [existing.id]);
 
-  const skillDirs = [
-    join(project.path, '.agents', 'skills', 'taskbean'),
-    join(project.path, '.github', 'skills', 'taskbean'),
-    join(project.path, '.claude', 'skills', 'taskbean'),
-  ];
+  const skillDirs = PROJECT_SKILL_DIRS.map(rel => join(project.path, rel));
   const removed = [];
   for (const dir of skillDirs) {
     if (existsSync(dir)) {
