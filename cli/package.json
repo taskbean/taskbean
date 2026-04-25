@@ -51,7 +51,7 @@
   "bugs": {
     "url": "https://github.com/taskbean/taskbean/issues"
   },
-  "keywords": ["cli", "task-management", "copilot", "agent-skill", "ai"],
+  "keywords": ["cli", "task-management", "copilot", "agent-skill", "ai", "todo", "productivity", "local-first"],
   "author": "Nick Brady",
   "license": "MIT",
   "dependencies": {

@@ -1,8 +1,8 @@
 # 🫘 taskbean
 
-Task management CLI designed for AI coding agents. Tasks are **pushed** by the agent as it works — not pulled from session data.
+Task management CLI for AI coding agents. Agents push tasks as they work. No session scraping, no post-hoc extraction.
 
-Both `taskbean` and `bean` commands are available — same tool, shorter name.
+Both `taskbean` and `bean` work. Same tool, shorter name.
 
 ## Install
 
@@ -85,7 +85,7 @@ bean serve --port 8080                # custom port
 
 ## How It Works
 
-taskbean is a **dumb, reliable local store**. AI coding agents call simple CLI commands as they work — taskbean just stores what they tell it.
+taskbean is a **dumb, reliable local store**. AI coding agents call CLI commands as they work. taskbean stores what they tell it.
 
 ```
 Agent (Copilot/Claude/etc)     bean CLI              taskbean PWA
@@ -100,7 +100,7 @@ Agent (Copilot/Claude/etc)     bean CLI              taskbean PWA
 
 ## Agent Skill
 
-taskbean ships as an [Agent Skill](https://agentskills.io) — AI agents auto-discover it:
+taskbean ships as an [Agent Skill](https://agentskills.io). AI agents auto-discover it:
 
 ```bash
 bean install --global     # all projects (recommended)
@@ -131,22 +131,15 @@ Tasks auto-group by project. Detection order:
 3. Git repository root
 4. Current directory
 
-## Agent attribution
+## Agent Attribution
 
-When the desktop app is running, taskbean detects sessions from Copilot CLI, Claude Code, Codex, and OpenCode and stamps each `bean add` with the agent + session that created it. Resolution order:
+When the desktop app is running, taskbean detects sessions from Copilot CLI, Claude Code, Codex, and OpenCode and stamps each `bean add` with the agent and session that created it.
 
-1. `--agent=<name> --session-id=<native>` flags
-2. `TASKBEAN_AGENT` + `TASKBEAN_NATIVE_SESSION_ID` env vars (preferred for skill wrappers)
-3. Vendor env vars (`CLAUDECODE`/`CLAUDE_SESSION_ID`, `CODEX_SESSION_ID`, `OPENCODE_SESSION`, `COPILOT_CLI_SESSION_ID`)
-4. CWD + ±30 min heuristic against recently-seen sessions
-
-If the signal is ambiguous, attribution is left empty rather than guessing. `bean report` includes a `## Usage` section (Markdown) / `usage` key (JSON) summarizing sessions, turns, tokens, and tool calls per agent.
-
-Note: the CLI only **reads** `agent_sessions` / `agent_turns`. Those tables are written exclusively by the Python backend's scanners in `app/agent/usage/`.
+If the signal is ambiguous, attribution is left empty rather than guessing. `bean report` includes a usage section with per-agent sessions, turns, tokens, and tool calls.
 
 ## Storage
 
-SQLite database at `~/.taskbean/taskbean.db`. All data stays local. Usage tracking stores only session metadata and aggregate token counts — prompts, responses, and tool outputs are never copied into the database.
+SQLite database at `~/.taskbean/taskbean.db`. All data stays local. Usage tracking stores session metadata and aggregate token counts only. Prompts, responses, and tool outputs are never copied into the database.
 
 ## License
 
