@@ -1,10 +1,8 @@
 """Agent Framework tool definitions — mirrors NL_TOOLS from server.js."""
 
 from __future__ import annotations
-import asyncio
 import json
 import sys
-import time
 from datetime import datetime
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
@@ -14,7 +12,6 @@ from agent_framework import tool
 
 import app_config
 import state as state_mod
-import telemetry as telem
 
 
 def _get_tz() -> ZoneInfo:
@@ -29,71 +26,7 @@ def _get_tz() -> ZoneInfo:
 _DAY_FMT = "%#d" if sys.platform == "win32" else "%-d"
 
 
-def _traced_tool(fn):
-    """Wrap a plain tool function to emit telemetry on each invocation.
-
-    Apply BEFORE the @tool decorator so agent_framework sees a normal
-    function with the correct signature preserved by functools.wraps.
-    """
-    import functools
-    if asyncio.iscoroutinefunction(fn):
-        @functools.wraps(fn)
-        async def async_wrapper(*args, **kwargs):
-            _name = fn.__name__
-            _start = time.time()
-            try:
-                result = await fn(*args, **kwargs)
-                _elapsed = int((time.time() - _start) * 1000)
-                telem.emit("tool.executed", {
-                    "tool": _name,
-                    "args": {k: str(v)[:100] for k, v in kwargs.items()} if kwargs else {},
-                    "durationMs": _elapsed,
-                    "success": True,
-                    "resultPreview": str(result)[:150] if result else "",
-                })
-                return result
-            except Exception as e:
-                _elapsed = int((time.time() - _start) * 1000)
-                telem.emit("tool.executed", {
-                    "tool": _name,
-                    "args": {k: str(v)[:100] for k, v in kwargs.items()} if kwargs else {},
-                    "durationMs": _elapsed,
-                    "success": False,
-                    "error": str(e)[:150],
-                })
-                raise
-        return async_wrapper
-    else:
-        @functools.wraps(fn)
-        def sync_wrapper(*args, **kwargs):
-            _name = fn.__name__
-            _start = time.time()
-            try:
-                result = fn(*args, **kwargs)
-                _elapsed = int((time.time() - _start) * 1000)
-                telem.emit("tool.executed", {
-                    "tool": _name,
-                    "args": {k: str(v)[:100] for k, v in kwargs.items()} if kwargs else {},
-                    "durationMs": _elapsed,
-                    "success": True,
-                    "resultPreview": str(result)[:150] if result else "",
-                })
-                return result
-            except Exception as e:
-                _elapsed = int((time.time() - _start) * 1000)
-                telem.emit("tool.executed", {
-                    "tool": _name,
-                    "args": {k: str(v)[:100] for k, v in kwargs.items()} if kwargs else {},
-                    "durationMs": _elapsed,
-                    "success": False,
-                    "error": str(e)[:150],
-                })
-                raise
-        return sync_wrapper
-
-
 @tool
-@_traced_tool
 def add_task(
     title: Annotated[str, "Task title"],
     due_date: Annotated[str | None, "Due date in YYYY-MM-DD format, e.g. '2026-04-20'"] = None,
@@ -110,7 +43,6 @@ def add_task(
 
 
 @tool
-@_traced_tool
 def set_reminder(
     title: Annotated[str, "Reminder text"],
     remind_at: Annotated[str, 'ISO 8601 datetime with timezone offset, e.g. "2026-04-09T17:00:00-07:00"'],
@@ -125,7 +57,6 @@ def set_reminder(
 
 
 @tool
-@_traced_tool
 def mark_complete(todo_id: Annotated[str, "Todo ID"]) -> str:
     """Mark a todo as done. Match 'done with X' or 'finished X' to the closest todo title."""
     t = next((t for t in state_mod.todos if t["id"] == todo_id), None)
@@ -137,7 +68,6 @@ def mark_complete(todo_id: Annotated[str, "Todo ID"]) -> str:
 
 
 @tool
-@_traced_tool
 def mark_incomplete(todo_id: Annotated[str, "Todo ID"]) -> str:
     """Re-open a completed todo."""
     t = next((t for t in state_mod.todos if t["id"] == todo_id), None)
@@ -149,7 +79,6 @@ def mark_incomplete(todo_id: Annotated[str, "Todo ID"]) -> str:
 
 
 @tool
-@_traced_tool
 def remove_task(todo_id: Annotated[str, "Todo ID"]) -> str:
     """Delete a todo. Do NOT use for marking done — use mark_complete instead."""
     idx = next((i for i, t in enumerate(state_mod.todos) if t["id"] == todo_id), None)
@@ -160,7 +89,6 @@ def remove_task(todo_id: Annotated[str, "Todo ID"]) -> str:
 
 
 @tool
-@_traced_tool
 def start_task(todo_id: Annotated[str, "Todo ID"]) -> str:
     """Mark a task as in-progress. Use when the user says 'start working on', 'begin', or 'pick up' a task. Do NOT use for marking done — use mark_complete instead."""
     t = next((t for t in state_mod.todos if t["id"] == todo_id), None)
@@ -176,7 +104,6 @@ def start_task(todo_id: Annotated[str, "Todo ID"]) -> str:
 
 
 @tool
-@_traced_tool
 def block_task(
     todo_id: Annotated[str, "Todo ID"],
     reason: Annotated[str | None, "Why the task is blocked, e.g. 'waiting on API access'"] = None,
@@ -198,7 +125,6 @@ def block_task(
 
 
 @tool
-@_traced_tool
 def update_task(
     todo_id: Annotated[str, "Todo ID to update"],
     title: Annotated[str | None, "New title"] = None,
@@ -232,7 +158,6 @@ def update_task(
 
 
 @tool
-@_traced_tool
 def get_current_datetime() -> str:
     """Get current date/time in the user's configured timezone. Call when you need to resolve relative times before setting a reminder."""
     now = datetime.now(tz=_get_tz())
@@ -244,7 +169,6 @@ def get_current_datetime() -> str:
 
 
 @tool
-@_traced_tool
 async def get_weather(
     latitude: Annotated[float, "Latitude (default 47.674 for Redmond)"] = 47.674,
     longitude: Annotated[float, "Longitude (default -122.121 for Redmond)"] = -122.121,

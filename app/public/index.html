@@ -7971,6 +7971,8 @@ function nerdSummary(ev) {
     switch (ev.type) {
         case 'ai.response':
             return `← ${ev.durationMs ?? '?'}ms  in:${tokensIn ?? '?'} out:${tokensOut ?? '?'}  ${model?.split(':')[0] ?? ''}`;
+        case 'flow':
+            return `▶ ${ev.spanName?.replace('invoke_agent ', '') ?? 'agent'}  ${ev.durationMs ?? '?'}ms`;
         case 'flow.extract':
             return `📋 extract  ${ev.durationMs ?? '?'}ms`;
         case 'flow.speech':
