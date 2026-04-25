@@ -594,6 +594,32 @@ async def hardware_eps() -> list:
 
 # ── Model management ──────────────────────────────────────────────────────────
 
+def _classify_model_kind(info) -> str:
+    """Classify a Foundry Local SDK ModelInfo as 'chat' or 'speech'.
+
+    Uses the authoritative HuggingFace-style ``task`` field and
+    ``input_modalities`` when available. Falls back to alias substring
+    matching only as a safety net for the CLI catalog path (where the
+    full ModelInfo is not available).
+    """
+    task = (getattr(info, "task", "") or "").lower()
+    in_mods = (getattr(info, "input_modalities", "") or "")
+    if isinstance(in_mods, (list, tuple)):
+        in_mods_str = " ".join(str(x) for x in in_mods).lower()
+    else:
+        in_mods_str = str(in_mods).lower()
+    if (
+        "speech" in task
+        or "audio" in task
+        or "audio" in in_mods_str
+    ):
+        return "speech"
+    alias = (getattr(info, "alias", "") or "").lower()
+    if "whisper" in alias:
+        return "speech"
+    return "chat"
+
+
 def _parse_model_catalog() -> list[dict]:
     """Build the model catalog using the new Foundry Local SDK, with CLI fallback."""
     try:
@@ -627,6 +653,7 @@ def _parse_model_catalog() -> list[dict]:
                 "license": info.license or "",
                 "contextLength": info.context_length,
                 "maxOutputTokens": info.max_output_tokens,
+                "kind": _classify_model_kind(info),
             })
         return result
     except Exception as e:
@@ -686,6 +713,7 @@ def _parse_model_catalog_cli() -> list[dict]:
             "tasks": [t.strip() for t in tasks.split(",") if t.strip()],
             "toolCalling": "tools" in tasks.lower() or "tool" in tasks.lower(),
             "license": license_,
+            "kind": "speech" if "whisper" in alias_lower else "chat",
         })
     return models
 
@@ -761,6 +789,7 @@ class SpeechConfig(BaseModel):
     engine: str | None = None
     fallback: str | None = None
     micDevice: str | None = None
+    model: str | None = None
 
 
 class ConfigPatch(BaseModel):
@@ -1025,6 +1054,22 @@ async def update_config(patch: ConfigPatch) -> dict:
                 current_speech["fallback"] = patch.speech.fallback.lower()
         if patch.speech.micDevice is not None:
             current_speech["micDevice"] = patch.speech.micDevice or None
+        if patch.speech.model is not None:
+            # Empty string clears the default; else must reference a speech model in the catalog.
+            if patch.speech.model == "":
+                current_speech["model"] = None
+            else:
+                catalog = get_model_catalog()
+                entry = next((m for m in catalog if m["modelId"] == patch.speech.model), None)
+                if entry is None:
+                    errors.append(f"speech.model '{patch.speech.model}' not found in catalog")
+                elif entry.get("kind") != "speech":
+                    errors.append(
+                        f"speech.model '{patch.speech.model}' is not a speech model "
+                        f"(kind='{entry.get('kind')}')"
+                    )
+                else:
+                    current_speech["model"] = patch.speech.model
         pending["speech"] = current_speech
 
     # Phase 2: If errors, reject entirely without persisting anything
@@ -1068,6 +1113,19 @@ async def switch_model(body: SwitchRequest) -> StreamingResponse:
     entry = next((m for m in catalog if m["modelId"] == model_id), None)
     if not entry:
         raise HTTPException(404, f'Model "{model_id}" not found in catalog')
+    if entry.get("kind") == "speech":
+        raise HTTPException(
+            400,
+            "Voice/speech models cannot be set as the active chat model. "
+            "Use the Voice tab in the Model Picker to set a default voice model.",
+        )
+    # Refuse switching to a model that is currently downloading — the cache
+    # is incomplete and `model.load()` would fail in confusing ways.
+    if _is_downloading(model_id):
+        raise HTTPException(
+            409,
+            "This model is still downloading. Try again when the download completes.",
+        )
 
     async def _stream():
         def send(type_: str, payload: dict = {}):
@@ -1179,35 +1237,53 @@ async def switch_model(body: SwitchRequest) -> StreamingResponse:
                     "pct": 0,
                     "fileSizeGb": file_size_gb,
                 })
+                # Coordinate with /api/models/download so a concurrent pure
+                # download of the same model_id can't race with the switch's
+                # forceDownload path and corrupt the cache.
+                download_lock = await _acquire_download_slot(model_id)
                 try:
-                    loop = asyncio.get_event_loop()
-                    progress_queue: asyncio.Queue = asyncio.Queue()
-
-                    def _on_progress(pct: float):
-                        loop.call_soon_threadsafe(progress_queue.put_nowait, pct)
-
-                    download_task = asyncio.create_task(
-                        asyncio.to_thread(lambda: target_model.download(_on_progress))
-                    )
-                    last_pct = -1.0
-                    while not download_task.done():
+                  async with download_lock:
+                    # Re-check cache inside the lock: a concurrent
+                    # `/api/models/download` may have finished while we were
+                    # waiting on the slot, in which case there's nothing to do.
+                    if await asyncio.to_thread(lambda: target_model.is_cached):
+                        yield send("progress", {
+                            "message": "Already cached.",
+                            "pct": 100,
+                            "fileSizeGb": file_size_gb,
+                        })
+                    else:
                         try:
-                            pct = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
-                            if pct - last_pct >= 1:  # throttle to every 1%
-                                yield send("progress", {
-                                    "message": f"Downloading {entry['alias']}…",
-                                    "pct": round(pct, 1),
-                                    "fileSizeGb": file_size_gb,
-                                })
-                                last_pct = pct
-                        except asyncio.TimeoutError:
-                            pass
-                    await download_task  # re-raise if download failed
-                except Exception as exc:
-                    span.set_status(trace.StatusCode.ERROR, f"Download failed: {exc}")
-                    span.record_exception(exc)
-                    yield send("error", {"message": f"Download failed: {exc}"})
-                    return
+                            loop = asyncio.get_event_loop()
+                            progress_queue: asyncio.Queue = asyncio.Queue()
+
+                            def _on_progress(pct: float):
+                                loop.call_soon_threadsafe(progress_queue.put_nowait, pct)
+
+                            download_task = asyncio.create_task(
+                                asyncio.to_thread(lambda: target_model.download(_on_progress))
+                            )
+                            last_pct = -1.0
+                            while not download_task.done():
+                                try:
+                                    pct = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
+                                    if pct - last_pct >= 1:  # throttle to every 1%
+                                        yield send("progress", {
+                                            "message": f"Downloading {entry['alias']}…",
+                                            "pct": round(pct, 1),
+                                            "fileSizeGb": file_size_gb,
+                                        })
+                                        last_pct = pct
+                                except asyncio.TimeoutError:
+                                    pass
+                            await download_task  # re-raise if download failed
+                        except Exception as exc:
+                            span.set_status(trace.StatusCode.ERROR, f"Download failed: {exc}")
+                            span.record_exception(exc)
+                            yield send("error", {"message": f"Download failed: {exc}"})
+                            return
+                finally:
+                    await _release_download_slot(model_id)
                 yield send("progress", {"message": "Download complete.", "pct": 100, "fileSizeGb": file_size_gb})
 
             # ── Load via native SDK FFI ────────────────────────────────────────
@@ -1223,6 +1299,255 @@ async def switch_model(body: SwitchRequest) -> StreamingResponse:
             await _commit_switch(target_model)
             span.add_event("switch.done", {"alias": entry["alias"]})
             yield send("done", {"modelId": model_id, "alias": entry["alias"]})
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
+@app.delete("/api/models/cache/{model_id:path}")
+async def delete_model_cache(model_id: str) -> dict:
+    """Remove a cached model variant from local disk.
+
+    Refuses to delete the currently active model — the caller must switch
+    to a different model first. Unloads the variant (best-effort) before
+    removing files to avoid releasing held handles.
+
+    Acquires the switch lock for the full duration so a concurrent model
+    switch cannot re-activate `model_id` between our active-model check
+    and the actual file removal (TOCTOU).
+    """
+    lock = app_config.get_switch_lock()
+    if lock.locked():
+        raise HTTPException(
+            409,
+            "A model switch is already in progress. Try again in a moment.",
+        )
+
+    async with lock:
+        # Re-check under the lock — MODEL_ID may have flipped while we waited.
+        if model_id == agent_mod.MODEL_ID:
+            raise HTTPException(
+                409,
+                "Cannot delete the active model. Switch to a different model first.",
+            )
+        # Protect the configured default voice model.
+        speech_cfg = app_config.speech_config()
+        configured_voice = speech_cfg.get("model")
+        if configured_voice and model_id == configured_voice:
+            raise HTTPException(
+                409,
+                "Cannot delete the configured default voice model. "
+                "Pick a different voice model first, or clear the default.",
+            )
+        # Protect the currently loaded whisper model (even if no explicit default).
+        if _whisper_model is not None and getattr(_whisper_model, "id", None) == model_id:
+            raise HTTPException(
+                409,
+                "Cannot delete the voice model currently loaded for transcription. "
+                "Try again in a moment.",
+            )
+        # Refuse if a transcription is in progress — otherwise we could delete
+        # model files out from under /api/transcribe.
+        if _get_whisper_lock().locked():
+            raise HTTPException(
+                409,
+                "A transcription is in progress. Try again in a moment.",
+            )
+        # Refuse if this model is currently downloading — deleting mid-download
+        # would leave a corrupt cache entry.
+        if _is_downloading(model_id):
+            raise HTTPException(
+                409,
+                "This model is currently downloading. Try again when the download completes.",
+            )
+
+        try:
+            manager = get_fl_manager()
+            target_model = await asyncio.to_thread(
+                lambda: manager.catalog.get_model_variant(model_id)
+                       or manager.catalog.get_model(model_id)
+            )
+        except Exception as e:
+            logger.warning("SDK model lookup failed: %s", e)
+            target_model = None
+
+        if target_model is None:
+            raise HTTPException(404, f'Model "{model_id}" not found in catalog')
+
+        cached = await asyncio.to_thread(lambda: target_model.is_cached)
+        if not cached:
+            raise HTTPException(404, f'Model "{model_id}" is not cached')
+
+        # Invalidate the catalog cache up front so any concurrent /api/models
+        # poll that arrives mid-delete rebuilds from the SDK rather than
+        # returning a stale "cached: true" snapshot. We also invalidate again
+        # after removal for a clean post-state.
+        global _catalog_cache
+        _catalog_cache = None
+
+        # Best-effort unload before removing files.
+        try:
+            if await asyncio.to_thread(lambda: target_model.is_loaded):
+                await asyncio.to_thread(target_model.unload)
+        except Exception as e:
+            logger.warning("Unload before cache removal failed (non-fatal): %s", e)
+
+        try:
+            await asyncio.to_thread(target_model.remove_from_cache)
+        except Exception as e:
+            logger.error("remove_from_cache failed: %s", e)
+            raise HTTPException(500, f"Failed to remove cache: {e}")
+
+        _catalog_cache = None
+        return {"ok": True, "removed": model_id}
+
+
+class DownloadRequest(BaseModel):
+    modelId: str
+
+
+# Per-model-id download locks + active-downloads set. Downloads are I/O-bound
+# and the SDK handles them independently per model variant, so there is no
+# need to hold the global switch/delete lock. Multiple models can download
+# concurrently; a second download request for the same id is rejected.
+_download_locks: dict[str, asyncio.Lock] = {}
+_active_downloads: set[str] = set()
+_downloads_state_lock: asyncio.Lock | None = None
+
+
+def _get_downloads_state_lock() -> asyncio.Lock:
+    global _downloads_state_lock
+    if _downloads_state_lock is None:
+        _downloads_state_lock = asyncio.Lock()
+    return _downloads_state_lock
+
+
+async def _acquire_download_slot(model_id: str) -> asyncio.Lock:
+    """Return the per-id lock and mark the id as actively downloading.
+
+    Caller must `async with` the returned lock, then call
+    `_release_download_slot(model_id)` in a finally block.
+    """
+    async with _get_downloads_state_lock():
+        lock = _download_locks.get(model_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _download_locks[model_id] = lock
+        _active_downloads.add(model_id)
+    return lock
+
+
+async def _release_download_slot(model_id: str) -> None:
+    async with _get_downloads_state_lock():
+        _active_downloads.discard(model_id)
+        # Prune the lock entry if nobody else is currently waiting on it,
+        # otherwise `_download_locks` would accumulate stale Lock objects
+        # over the process lifetime as users download many distinct models.
+        lock = _download_locks.get(model_id)
+        if lock is not None and not lock.locked():
+            _download_locks.pop(model_id, None)
+
+
+def _is_downloading(model_id: str) -> bool:
+    return model_id in _active_downloads
+
+
+@app.post("/api/models/download")
+async def download_model(body: DownloadRequest) -> StreamingResponse:
+    """Download a model variant without activating or loading it.
+
+    Unlike ``/api/models/switch``, this endpoint does **not** mutate
+    ``agent_mod.MODEL_ID``, does **not** unload any currently-loaded
+    model, and does **not** rebuild the agent. It is safe to use for
+    voice/STT models the user wants cached as a default.
+
+    Streams the same progress/error/done events as ``/api/models/switch``.
+    Serialized with the switch/delete lock so downloads can't race other
+    catalog mutations.
+    """
+    model_id = body.modelId
+    catalog = get_model_catalog()
+    entry = next((m for m in catalog if m["modelId"] == model_id), None)
+    if not entry:
+        raise HTTPException(404, f'Model "{model_id}" not found in catalog')
+
+    async def _stream():
+        def send(type_: str, payload: dict = {}):
+            return f"data: {json.dumps({'type': type_, **payload})}\n\n"
+
+        # Reject concurrent downloads of the SAME model id; but allow different
+        # model ids to download in parallel and the chat model to keep serving.
+        if _is_downloading(model_id):
+            yield send("error", {"message": "This model is already downloading."})
+            return
+
+        lock = await _acquire_download_slot(model_id)
+        try:
+            async with lock:
+              with telem.tracer.start_as_current_span("model.download") as span:
+                span.set_attribute("target_model", model_id)
+                target_model = None
+                try:
+                    manager = get_fl_manager()
+                    target_model = await asyncio.to_thread(
+                        lambda: manager.catalog.get_model_variant(model_id)
+                               or manager.catalog.get_model(model_id)
+                    )
+                except Exception as e:
+                    logger.warning("SDK model lookup failed: %s", e)
+
+                if target_model is None:
+                    span.set_status(trace.StatusCode.ERROR, f'Model "{model_id}" not found')
+                    yield send("error", {"message": f'Model "{model_id}" not found in catalog'})
+                    return
+
+                cached = await asyncio.to_thread(lambda: target_model.is_cached)
+                if cached:
+                    yield send("done", {"modelId": model_id, "alias": entry["alias"], "alreadyCached": True})
+                    return
+
+                file_size_gb = entry.get('fileSizeGb')
+                yield send("progress", {
+                    "message": f"Downloading {entry['alias']}…",
+                    "pct": 0,
+                    "fileSizeGb": file_size_gb,
+                })
+                try:
+                    loop = asyncio.get_event_loop()
+                    progress_queue: asyncio.Queue = asyncio.Queue()
+
+                    def _on_progress(pct: float):
+                        loop.call_soon_threadsafe(progress_queue.put_nowait, pct)
+
+                    download_task = asyncio.create_task(
+                        asyncio.to_thread(lambda: target_model.download(_on_progress))
+                    )
+                    last_pct = -1.0
+                    while not download_task.done():
+                        try:
+                            pct = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
+                            if pct - last_pct >= 1:
+                                yield send("progress", {
+                                    "message": f"Downloading {entry['alias']}…",
+                                    "pct": round(pct, 1),
+                                    "fileSizeGb": file_size_gb,
+                                })
+                                last_pct = pct
+                        except asyncio.TimeoutError:
+                            pass
+                    await download_task
+                except Exception as exc:
+                    span.set_status(trace.StatusCode.ERROR, f"Download failed: {exc}")
+                    span.record_exception(exc)
+                    yield send("error", {"message": f"Download failed: {exc}"})
+                    return
+
+                # Invalidate catalog cache so subsequent /api/models reflects cached state.
+                global _catalog_cache
+                _catalog_cache = None
+
+                yield send("done", {"modelId": model_id, "alias": entry["alias"]})
+        finally:
+            await _release_download_slot(model_id)
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
 
@@ -2615,28 +2940,98 @@ async def extract_tasks(request: Request) -> StreamingResponse:
 
 _whisper_model = None
 _whisper_lock: asyncio.Lock | None = None
+_DEFAULT_WHISPER_ALIAS = "whisper-tiny"
 
 
-async def _get_whisper_client():
-    """Lazy-load whisper-tiny and return its AudioClient."""
-    global _whisper_model, _whisper_lock
+def _get_whisper_lock() -> asyncio.Lock:
+    global _whisper_lock
     if _whisper_lock is None:
         _whisper_lock = asyncio.Lock()
+    return _whisper_lock
+
+
+async def _ensure_whisper_loaded():
+    """Load the configured voice model (or default whisper-tiny).
+
+    Caller MUST hold ``_whisper_lock``. If the configured model differs
+    from the currently-loaded one, unloads and reloads. Returns the
+    loaded SDK model.
+    """
+    global _whisper_model
+    configured_id = (app_config.speech_config() or {}).get("model")
+    desired = configured_id or _DEFAULT_WHISPER_ALIAS
+
+    # If a model is already loaded and matches (by id or alias), reuse it.
     if _whisper_model is not None:
-        return _whisper_model.get_audio_client()
-    async with _whisper_lock:
-        if _whisper_model is not None:
-            return _whisper_model.get_audio_client()
-        manager = agent_mod.get_fl_manager()
-        model = await asyncio.to_thread(lambda: manager.catalog.get_model("whisper-tiny"))
+        current_id = getattr(_whisper_model, "id", None)
+        current_alias = getattr(getattr(_whisper_model, "info", None), "alias", None)
+        if current_id == desired or current_alias == desired:
+            return _whisper_model
+        # Configured model changed — unload the old one before loading the new one.
+        try:
+            await asyncio.to_thread(_whisper_model.unload)
+        except Exception as e:
+            logger.warning("Unloading previous whisper model failed (non-fatal): %s", e)
+        _whisper_model = None
+
+    manager = agent_mod.get_fl_manager()
+    # Try as full variant id first, then as alias.
+    model = await asyncio.to_thread(
+        lambda: manager.catalog.get_model_variant(desired)
+               or manager.catalog.get_model(desired)
+    )
+    if model is None:
+        # If a user-configured id disappeared from the catalog, fall back to default.
+        if configured_id:
+            logger.warning("Configured speech.model '%s' not in catalog; falling back to %s",
+                           configured_id, _DEFAULT_WHISPER_ALIAS)
+            model = await asyncio.to_thread(
+                lambda: manager.catalog.get_model(_DEFAULT_WHISPER_ALIAS)
+            )
         if model is None:
-            raise RuntimeError("whisper-tiny model not found in catalog")
-        if not model.is_cached:
+            raise RuntimeError(f"Voice model '{desired}' not found in catalog")
+
+    if not model.is_cached:
+        try:
             await asyncio.to_thread(model.download)
+        except Exception as e:
+            logger.error("Whisper download failed for %s: %s", desired, e)
+            # Fall back to the bundled default if the user-configured model fails.
+            if configured_id and desired != _DEFAULT_WHISPER_ALIAS:
+                logger.warning("Falling back to %s", _DEFAULT_WHISPER_ALIAS)
+                fallback = await asyncio.to_thread(
+                    lambda: manager.catalog.get_model(_DEFAULT_WHISPER_ALIAS)
+                )
+                if fallback is not None:
+                    if not fallback.is_cached:
+                        await asyncio.to_thread(fallback.download)
+                    await asyncio.to_thread(fallback.load)
+                    _whisper_model = fallback
+                    logger.info("Whisper fallback model loaded: %s", fallback.id)
+                    return fallback
+            raise
+    try:
         await asyncio.to_thread(model.load)
-        _whisper_model = model
-        logger.info("Whisper model loaded: %s", model.id)
-        return model.get_audio_client()
+    except Exception as e:
+        logger.error("Whisper load failed for %s: %s", desired, e)
+        if configured_id and desired != _DEFAULT_WHISPER_ALIAS:
+            logger.warning("Falling back to %s", _DEFAULT_WHISPER_ALIAS)
+            fallback = await asyncio.to_thread(
+                lambda: manager.catalog.get_model(_DEFAULT_WHISPER_ALIAS)
+            )
+            if fallback is not None:
+                if not fallback.is_cached:
+                    await asyncio.to_thread(fallback.download)
+                await asyncio.to_thread(fallback.load)
+                _whisper_model = fallback
+                logger.info("Whisper fallback model loaded: %s", fallback.id)
+                return fallback
+        raise
+    _whisper_model = model
+    logger.info("Whisper model loaded: %s", model.id)
+    return model
+
+
 _MAX_AUDIO_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
@@ -2666,10 +3061,14 @@ async def transcribe_audio(
         tmp_path = tmp.name
 
     try:
-        audio_client = await _get_whisper_client()
-        audio_client.settings.language = "en"
-        result = await asyncio.to_thread(audio_client.transcribe, tmp_path)
-        text = result.text.strip()
+        # Hold the whisper lock across the WHOLE transcribe so a concurrent
+        # config change / cache delete cannot unload the model mid-call.
+        async with _get_whisper_lock():
+            model = await _ensure_whisper_loaded()
+            audio_client = model.get_audio_client()
+            audio_client.settings.language = "en"
+            result = await asyncio.to_thread(audio_client.transcribe, tmp_path)
+            text = result.text.strip()
 
         span = trace.get_current_span()
         span.add_event("speech.transcribed", {"length": len(text), "audio_size": total})
