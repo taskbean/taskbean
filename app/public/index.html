@@ -2021,7 +2021,7 @@ header {
 .telem-event.grouped-child { padding-left: 22px; border-left: 2px solid var(--accent); margin-left: 6px; }
 .telem-event.grouped-child .telem-badge { font-size: 8px; }
 .telem-event.group-collapsed { display: none; }
-.telem-group-toggle { font-size: 9px; color: var(--muted); cursor: pointer; margin-left: 4px; flex-shrink: 0; padding: 0 4px; border-radius: 3px; background: var(--surface2); transition: all .15s; }
+.telem-group-toggle { font-size: 9px; color: var(--muted); cursor: pointer; margin-left: 4px; flex-shrink: 0; padding: 0 4px; border-radius: 3px; background: var(--surface2); transition: color .15s, background .15s; }
 .telem-group-toggle:hover { color: var(--text); background: var(--border); }
 
 /* Metrics tab */
@@ -2032,7 +2032,7 @@ header {
 }
 .metric-card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
 .metric-label { font-size: 10px; color: var(--muted); font-family: 'Cascadia Code','Fira Code',monospace; }
-.metric-value { font-size: 14px; font-weight: 700; color: var(--text); display: inline-block; transition: transform .25s ease, opacity .15s; }
+.metric-value { font-size: 14px; font-weight: 700; color: var(--text); display: inline-block; transition: transform .25s ease, opacity .15s; font-variant-numeric: tabular-nums; }
 .metric-value.pulse { transform: scale(1.08); }
 .metric-delta { font-size: 10px; margin-left: 4px; display: inline-block; opacity: 0; transition: opacity .3s ease .1s; }
 .metric-delta.visible { opacity: 1; }
@@ -2051,7 +2051,7 @@ header {
   font-size: 10px; padding: 3px 10px; border-radius: 6px;
   border: 1px solid var(--border); background: var(--surface2);
   color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 4px;
-  transition: all .15s; font-family: inherit;
+  transition: border-color .15s, color .15s; font-family: inherit;
 }
 .trace-toolbar button:hover { border-color: var(--accent); color: var(--accent); }
 .traces-list { flex: 1; overflow-y: auto; padding: 0; }
@@ -2094,6 +2094,7 @@ header {
 .trace-span-duration {
   text-align: right; color: var(--muted);
   font-family: 'Cascadia Code','Fira Code',monospace; font-size: 9px;
+  font-variant-numeric: tabular-nums;
 }
 /* span depth colors */
 :root, [data-theme="dark-roast"] {
