@@ -2,7 +2,7 @@
 //
 // Channel detection:
 //   1. Marker file ~/.taskbean/.install-channel (written by install.sh /
-//      install.ps1 / postinstall.js). Authoritative.
+//      install.ps1 / postinstall.cjs). Authoritative.
 //   2. Heuristics:
 //      - process.versions.bun present AND process.execPath ends in bean* →
 //        compiled standalone binary (Bun-compiled executable).

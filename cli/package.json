@@ -7,15 +7,52 @@
     "taskbean": "./bin/taskbean.js",
     "bean": "./bin/taskbean.js"
   },
+  "files": [
+    "bin/",
+    "src/commands/add.js",
+    "src/commands/block.js",
+    "src/commands/done.js",
+    "src/commands/edit.js",
+    "src/commands/install.js",
+    "src/commands/list.js",
+    "src/commands/package.js",
+    "src/commands/projects.js",
+    "src/commands/remind.js",
+    "src/commands/remove.js",
+    "src/commands/report.js",
+    "src/commands/serve.js",
+    "src/commands/start.js",
+    "src/commands/track.js",
+    "src/commands/upgrade.js",
+    "src/data/attribution.js",
+    "src/data/parse-date.js",
+    "src/data/project.js",
+    "src/data/resolve-task.js",
+    "src/data/store.js",
+    "src/lib/update-notifier.js",
+    "src/version.js",
+    "scripts/postinstall.cjs",
+    "README.md"
+  ],
   "engines": {
     "node": ">=22.5.0"
   },
+  "os": ["win32", "linux", "darwin"],
   "scripts": {
     "test": "node --test src/**/*.test.js",
-    "postinstall": "node scripts/postinstall.js"
+    "postinstall": "node scripts/postinstall.cjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/taskbean/taskbean.git",
+    "directory": "cli"
+  },
+  "homepage": "https://taskbean.ai",
+  "bugs": {
+    "url": "https://github.com/taskbean/taskbean/issues"
   },
   "keywords": ["cli", "task-management", "copilot", "agent-skill", "ai"],
-  "author": "Nicholas Brady",
+  "author": "Nick Brady",
   "license": "MIT",
   "dependencies": {
     "commander": "^13.0.0"
