@@ -8367,7 +8367,7 @@ function routeTelemetryEvent(ev, live) {
         if (ev.type === 'http.request' && (ev['http.route'] === '/api/command' || ev['http.route'] === '/api/extract')) {
             _showThinkingIndicator();
         }
-        if (ev.type === 'ai.response' || ev.type === 'flow.extract' || ev.type === 'flow.speech') {
+        if (ev.type === 'ai.response' || ev.type === 'flow.extract' || ev.type === 'flow.speech' || ev.type === 'ai.error') {
             _removeThinkingIndicator();
         }
     }
@@ -8571,7 +8571,14 @@ function renderTelemetryEvent(ev, scroll) {
     }
 
     // Cap DOM rows at NERD_EVENT_MAX
-    while (feed.children.length > NERD_EVENT_MAX) feed.removeChild(feed.firstChild);
+    while (feed.children.length > NERD_EVENT_MAX) {
+        const removed = feed.firstChild;
+        // Clean up _traceGroups if the removed element was a group parent
+        for (const [tid, group] of _traceGroups.entries()) {
+            if (group.parentEl === removed) { _traceGroups.delete(tid); break; }
+        }
+        feed.removeChild(removed);
+    }
 
     if (scroll && nerdAutoScroll) feed.scrollTop = feed.scrollHeight;
 }
@@ -9089,8 +9096,6 @@ function renderTraceWaterfall(trace) {
     const depth = span.depth || 0;
     const colorIdx = depth % 5;
     const indent = depth * 16;
-    const tagHtml = _tagSummary(span.tags);
-    const tooltipContent = `<div class="tt-row"><span class="tt-key">op</span> <span class="tt-val">${esc(span.operationName || span.name || 'span')}</span></div><div class="tt-row"><span class="tt-key">duration</span> <span class="tt-val">${span.durationMs || 0}ms</span></div>${tagHtml}`;
 
     return `<div class="trace-span" style="padding-left:${8 + indent}px" data-span-idx="${i}" onmouseenter="_showTraceTooltip(event, ${i})" onmouseleave="_hideTraceTooltip(event)">
       <span class="trace-span-name">${'  '.repeat(depth)}${depth > 0 ? '├─ ' : ''}${esc(span.operationName || span.name || 'span')}</span>
