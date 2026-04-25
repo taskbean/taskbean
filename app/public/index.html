@@ -2101,24 +2101,6 @@ header {
 .telem-trace-link { cursor: pointer; flex-shrink: 0; font-size: 10px; margin-left: 4px; opacity: 0.5; }
 .telem-trace-link:hover { opacity: 1; }
 
-/* Health tab */
-#nerdHealth { padding: 8px; gap: 4px; }
-.health-section-title { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; padding: 4px 2px 2px; }
-.health-row {
-  display: flex; align-items: center; gap: 8px; padding: 5px 8px;
-  background: var(--surface2); border-radius: 6px;
-  border: 1px solid var(--border); font-size: 11px;
-}
-.health-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.health-dot.ok   { background: var(--green); }
-.health-dot.warn { background: var(--orange); }
-.health-dot.err  { background: var(--red); }
-.health-dot.unknown { background: var(--muted); }
-.health-name { flex: 1; color: var(--text); }
-.health-status { font-size: 10px; color: var(--muted); font-family: 'Cascadia Code','Fira Code',monospace; }
-.health-uptime { font-size: 10px; color: var(--muted); font-family: 'Cascadia Code','Fira Code',monospace; padding: 4px 8px; }
-.nerd-model-line { font-size: 10px; color: var(--muted); font-family: 'Cascadia Code','Fira Code',monospace; padding: 2px 10px 6px; word-break: break-all; }
-
 /* Jaeger button states */
 #nerdJaegerBtn.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 #nerdBtn.active { background: var(--green-soft); color: var(--green); border-color: var(--green); }
@@ -7914,7 +7896,8 @@ async function testNotification() {
 // ═══════════════════════════════════════════════════════════════════
 
 let nerdModeOpen = localStorage.getItem('nerdMode') === 'true';
-let nerdActiveTab = localStorage.getItem('nerdTab') || 'events';
+const _VALID_NERD_TABS = new Set(['events', 'metrics', 'traces', 'logs']);
+let nerdActiveTab = _VALID_NERD_TABS.has(localStorage.getItem('nerdTab')) ? localStorage.getItem('nerdTab') : 'events';
 let nerdAutoScroll = true;
 let nerdStreamController = null;  // AbortController for the SSE fetch
 let nerdEventBuffer = [];         // last 200 events in-memory
@@ -8140,12 +8123,13 @@ if (document.readyState === 'loading') {
 }
 
 function switchNerdTab(tab) {
+    if (!_VALID_NERD_TABS.has(tab)) tab = 'events';
     nerdActiveTab = tab;
     localStorage.setItem('nerdTab', tab);
     document.querySelectorAll('.nerd-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.nerd-tab-content').forEach(c => c.classList.toggle('active', c.id === `nerd${tab.charAt(0).toUpperCase()+tab.slice(1)}`));
+    if (tab === 'events') rehydrateEventsList();
     if (tab === 'metrics') renderMetricsTab();
-    if (tab === 'health' && nerdLastHealth) renderHealth(nerdLastHealth);
     if (tab === 'logs') {
         const feed = document.getElementById('logsFeed');
         if (feed && !feed.querySelector('.log-entry') && logBuffer.length) {
@@ -8155,6 +8139,32 @@ function switchNerdTab(tab) {
         }
         // Refresh launcher diagnostics whenever Logs is opened.
         loadLaunchIssues();
+    }
+}
+
+function rehydrateEventsList() {
+    const feed = document.getElementById('nerdEventsList');
+    if (!feed) return;
+    const existingCount = feed.querySelectorAll('.telem-event').length;
+    if (existingCount >= nerdEventBuffer.length) return;
+    // Rebuild from buffer
+    feed.querySelectorAll('.telem-event').forEach(el => el.remove());
+    const empty = feed.querySelector('.nerd-events-empty');
+    if (empty) empty.remove();
+    for (const ev of nerdEventBuffer) {
+        renderTelemetryEvent(ev, false);
+        if (ev.spanEvents?.length) {
+            for (const se of ev.spanEvents) {
+                renderTelemetryEvent({
+                    id: ev.id + '_' + se.name,
+                    ts: se.ts,
+                    type: se.name,
+                    ...se.attributes,
+                    parentSpanId: ev.spanId,
+                    traceId: ev.traceId,
+                }, false);
+            }
+        }
     }
 }
 
@@ -8231,7 +8241,7 @@ async function connectTelemetryStream() {
 
     // Pause auto-scroll when the user manually scrolls up in the events pane;
     // resume it when they scroll back to the bottom.
-    const feed = document.getElementById('nerdEvents');
+    const feed = document.getElementById('nerdEventsList');
     if (!feed._scrollListenerAttached) {
         feed._scrollListenerAttached = true;
         feed.addEventListener('scroll', () => {
@@ -8252,8 +8262,8 @@ async function connectTelemetryStream() {
 
     // Clear "Connecting…" if no events arrived from snapshot
     setTimeout(() => {
-        const feed = document.getElementById('nerdEvents');
-        const empty = feed?.querySelector('.nerd-events-empty');
+        const eventsList = document.getElementById('nerdEventsList');
+        const empty = eventsList?.querySelector('.nerd-events-empty');
         if (empty && empty.textContent === 'Connecting…') {
             empty.textContent = 'Waiting for events… interact with the app to generate telemetry.';
         }
@@ -8349,7 +8359,6 @@ function routeTelemetryEvent(ev, live) {
     if (ev.type === 'health.snapshot') {
         nerdLastHealth = ev;
         updateStatusBarHealth(ev);
-        if (nerdActiveTab === 'health') renderHealth(ev);
     }
 
     if (ev.type === 'log.record') {
@@ -8433,7 +8442,7 @@ function dismissParallelSuggestion(btn) {
 }
 
 function renderTelemetryEvent(ev, scroll) {
-    const feed = document.getElementById('nerdEvents');
+    const feed = document.getElementById('nerdEventsList');
     const empty = feed.querySelector('.nerd-events-empty');
     if (empty) empty.remove();
 
@@ -8646,73 +8655,6 @@ function drawSparkline(canvasId, values, color) {
     ctx.fill();
 }
 
-function renderHealth(ev) {
-    const container = document.getElementById('nerdHealth');
-    container.innerHTML = '';
-
-    const title = document.createElement('div');
-    title.className = 'health-section-title';
-    title.textContent = 'Services';
-    container.appendChild(title);
-
-    const services = [
-        { name: 'Foundry Local', ok: ev.foundryReady, status: ev.foundryReady ? 'ready' : (ev.startupError ? 'error' : 'init') },
-        { name: 'Model',         ok: ev.modelReady,   status: ev.modelReady   ? 'loaded' : 'loading' },
-        { name: 'MCP Server',    ok: ev.mcpAvailable, status: ev.mcpAvailable ? 'connected' : 'unavailable' },
-    ];
-    for (const svc of services) {
-        const row = document.createElement('div');
-        row.className = 'health-row';
-        const dotClass = svc.ok ? 'ok' : svc.status === 'error' ? 'err' : 'warn';
-        row.innerHTML = `<span class="health-dot ${dotClass}"></span><span class="health-name">${esc(svc.name)}</span><span class="health-status">${esc(svc.status)}</span>`;
-        container.appendChild(row);
-    }
-
-    if (ev.model) {
-        const modelLine = document.createElement('div');
-        modelLine.className = 'nerd-model-line';
-        modelLine.textContent = ev.modelAlias || ev.model;
-        container.appendChild(modelLine);
-    }
-
-    if (ev.uptimeMs !== undefined) {
-        const uptimeDiv = document.createElement('div');
-        uptimeDiv.className = 'health-uptime';
-        uptimeDiv.textContent = `uptime: ${fmtUptime(ev.uptimeMs)}`;
-        container.appendChild(uptimeDiv);
-    }
-
-    if (ev.startupError) {
-        const errDiv = document.createElement('div');
-        errDiv.className = 'health-uptime';
-        errDiv.style.color = 'var(--red)';
-        errDiv.textContent = `error: ${ev.startupError.slice(0, 80)}`;
-        container.appendChild(errDiv);
-    }
-
-    // Before the fetch, remove any existing EP section
-    const existingEp = document.getElementById('nerdEpSection');
-    if (existingEp) existingEp.remove();
-
-    // Fetch EPs and render
-    fetch('/api/hardware/eps').then(r => r.json()).then(eps => {
-        if (!eps.length) return;
-        const epHtml = eps.map(ep =>
-            `<div class="health-row"><span class="health-label">${esc(ep.name)}</span><span class="health-value ${ep.isRegistered ? 'ok' : 'warn'}">${ep.isRegistered ? 'Registered' : 'Not registered'}</span></div>`
-        ).join('');
-        const section = document.createElement('div');
-        section.id = 'nerdEpSection';
-        section.innerHTML = `<div class="health-section-title">Execution Providers</div>${epHtml}`;
-        document.getElementById('nerdHealth').appendChild(section);
-    });
-}
-
-function fmtUptime(ms) {
-    const s = Math.floor(ms / 1000);
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
-    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
-}
-
 function clearTelemetry() {
     // Clear client-side state
     nerdEventBuffer = [];
@@ -8722,24 +8664,21 @@ function clearTelemetry() {
     tracesCache = [];
 
     // Clear DOM for all tabs
-    const events = document.getElementById('nerdEvents');
-    if (events) {
-        // Preserve the filter bar, only clear events after it
-        events.querySelectorAll('.telem-event').forEach(e => e.remove());
-        const empty = events.querySelector('.nerd-events-empty');
+    const eventsList = document.getElementById('nerdEventsList');
+    if (eventsList) {
+        eventsList.querySelectorAll('.telem-event').forEach(e => e.remove());
+        const empty = eventsList.querySelector('.nerd-events-empty');
         if (!empty) {
             const emptyDiv = document.createElement('div');
             emptyDiv.className = 'nerd-events-empty';
             emptyDiv.textContent = 'Cleared';
-            events.appendChild(emptyDiv);
+            eventsList.appendChild(emptyDiv);
         } else {
             empty.textContent = 'Cleared';
         }
     }
     const metrics = document.getElementById('nerdMetrics');
     if (metrics) metrics.innerHTML = '';
-    const health = document.getElementById('nerdHealth');
-    if (health) health.innerHTML = '';
     const logsFeed = document.getElementById('logsFeed');
     if (logsFeed) logsFeed.innerHTML = '<div class="nerd-events-empty">Cleared</div>';
     const tracesList = document.getElementById('tracesList');
