@@ -104,21 +104,32 @@ function revertCodexConfig() {
 
     if (!content.includes(quoted)) return null;
 
-    // Remove the entry from writable_roots array
-    const updated = content.replace(
-      new RegExp(`(writable_roots\\s*=\\s*\\[)([^\\]]*)\\]`),
-      (match, prefix, inner) => {
-        const entries = inner.split(',')
-          .map(s => s.trim())
-          .filter(s => s.length > 0 && s !== quoted);
-        if (entries.length === 0) return `${prefix}]`;
-        return `${prefix}${entries.join(', ')}]`;
-      }
-    );
+    // Find [sandbox_workspace_write] section — same approach as install.js
+    const headerRe = /^[ \t]*\[sandbox_workspace_write\][ \t]*$/m;
+    const headerMatch = content.match(headerRe);
+    if (!headerMatch) return null;
 
-    if (updated !== content) {
-      return { path: configPath, content: updated };
-    }
+    const sectionStart = headerMatch.index + headerMatch[0].length;
+    const rest = content.slice(sectionStart);
+    const nextHeader = rest.match(/\r?\n[ \t]*\[[^\]]+\][ \t]*(?=\r?\n|$)/);
+    const sectionEnd = nextHeader ? sectionStart + nextHeader.index : content.length;
+
+    const section = content.slice(sectionStart, sectionEnd);
+    const rootsRe = /^([ \t]*writable_roots[ \t]*=[ \t]*)\[([\s\S]*?)\]/m;
+    const rootsMatch = section.match(rootsRe);
+    if (!rootsMatch) return null;
+
+    const entries = rootsMatch[2].split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && s !== quoted);
+
+    const newArray = entries.length === 0
+      ? `${rootsMatch[1]}[]`
+      : `${rootsMatch[1]}[${entries.join(', ')}]`;
+    const newSection = section.replace(rootsRe, newArray);
+    const updated = content.slice(0, sectionStart) + newSection + content.slice(sectionEnd);
+
+    if (updated !== content) return { path: configPath, content: updated };
   } catch { /* ignore */ }
   return null;
 }
@@ -369,7 +380,8 @@ export async function uninstallCommand(opts) {
       }
     } else if (s.type === 'path_entry') {
       try {
-        const cmd = `powershell -NoProfile -Command "$p = [Environment]::GetEnvironmentVariable('PATH', 'User'); $entries = $p -split ';' | Where-Object { $_ -ne '${s.path.replace(/'/g, "''")}' }; [Environment]::SetEnvironmentVariable('PATH', ($entries -join ';'), 'User')"`;
+        const safePath = s.path.replace(/'/g, "''").replace(/\\$/, '');
+        const cmd = `powershell -NoProfile -Command "$target = '${safePath}'.ToLower().TrimEnd('\\'); $p = [Environment]::GetEnvironmentVariable('PATH', 'User'); $entries = ($p -split ';') | Where-Object { $_.ToLower().TrimEnd('\\') -ne $target -and $_ -ne '' }; [Environment]::SetEnvironmentVariable('PATH', ($entries -join ';'), 'User')"`;
         execSync(cmd, { stdio: 'pipe' });
         results.push({ path: s.path, status: 'removed_from_path' });
       } catch (e) {
@@ -387,8 +399,8 @@ export async function uninstallCommand(opts) {
   if (plan.data) {
     // Close DB connection before deleting ~/.taskbean/ to release file locks
     try {
-      const { getDb } = await import('../data/store.js');
-      getDb().close();
+      const { closeDb } = await import('../data/store.js');
+      closeDb();
     } catch { /* DB may not have been opened */ }
     const r = safeRemove(plan.data);
     results.push(r);

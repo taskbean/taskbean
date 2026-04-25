@@ -19,6 +19,7 @@ export function getDb() {
 
   _db = new DatabaseSync(DB_PATH);
   _db.exec('PRAGMA journal_mode = WAL');
+  _db.exec('PRAGMA synchronous = NORMAL');
   _db.exec('PRAGMA foreign_keys = ON');
   _db.exec('PRAGMA busy_timeout = 5000');
 
@@ -205,6 +206,16 @@ export function getDb() {
 
 export function getDbPath() {
   return DB_PATH;
+}
+
+// Graceful shutdown: optimize stats, checkpoint WAL, close, null singleton.
+// Idempotent — safe to call even if DB was never opened.
+export function closeDb() {
+  if (!_db) return;
+  try { _db.exec('PRAGMA optimize'); } catch {}
+  try { _db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch {}
+  _db.close();
+  _db = null;
 }
 
 // Query helpers
