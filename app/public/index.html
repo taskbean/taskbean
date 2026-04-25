@@ -193,6 +193,10 @@ header {
 }
 @media (prefers-reduced-motion: reduce) {
   .nav-item.update-available::after { animation: none; }
+  .thinking-dots span { animation: none; opacity: .6; }
+  .metric-value { transition: none; }
+  .metric-delta { transition: none; }
+  .nerd-live-dot.live { animation: none; }
 }
 
 /* Offline startup overlay — shown when PWA launches without a reachable server */
@@ -2004,6 +2008,22 @@ header {
 .telem-error-detail { padding: 4px 6px; background: var(--red-soft); border-radius: 4px; color: var(--red); font-size: 10px; word-break: break-all; font-family: 'Cascadia Code','Fira Code',monospace; }
 .nerd-events-empty { color: var(--muted); font-size: 11px; text-align: center; padding: 24px 16px; }
 
+/* Thinking indicator — animated row while model is inferring */
+.telem-event.thinking { background: color-mix(in srgb, var(--purple-soft) 40%, transparent); border-left: 2px solid var(--purple); }
+.telem-event.thinking .telem-summary { color: var(--purple); }
+.thinking-dots { display: inline-flex; gap: 2px; margin-left: 2px; }
+.thinking-dots span { width: 3px; height: 3px; border-radius: 50%; background: var(--purple); animation: thinking-dot 1.4s infinite ease-in-out; }
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes thinking-dot { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
+
+/* Event grouping — visual nesting by traceId */
+.telem-event.grouped-child { padding-left: 22px; border-left: 2px solid var(--accent); margin-left: 6px; }
+.telem-event.grouped-child .telem-badge { font-size: 8px; }
+.telem-event.group-collapsed { display: none; }
+.telem-group-toggle { font-size: 9px; color: var(--muted); cursor: pointer; margin-left: 4px; flex-shrink: 0; padding: 0 4px; border-radius: 3px; background: var(--surface2); transition: all .15s; }
+.telem-group-toggle:hover { color: var(--text); background: var(--border); }
+
 /* Metrics tab */
 #nerdMetrics { padding: 8px; gap: 6px; }
 .metric-card {
@@ -2012,12 +2032,15 @@ header {
 }
 .metric-card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
 .metric-label { font-size: 10px; color: var(--muted); font-family: 'Cascadia Code','Fira Code',monospace; }
-.metric-value { font-size: 14px; font-weight: 700; color: var(--text); }
-.metric-delta { font-size: 10px; margin-left: 4px; }
+.metric-value { font-size: 14px; font-weight: 700; color: var(--text); display: inline-block; transition: transform .25s ease, opacity .15s; }
+.metric-value.pulse { transform: scale(1.08); }
+.metric-delta { font-size: 10px; margin-left: 4px; display: inline-block; opacity: 0; transition: opacity .3s ease .1s; }
+.metric-delta.visible { opacity: 1; }
 .metric-delta.up   { color: var(--green); }
 .metric-delta.down { color: var(--red); }
 .metric-delta.flat { color: var(--muted); }
-.metric-canvas { width: 100%; height: 36px; display: block; border-radius: 3px; }
+.metric-canvas { width: 100%; height: 36px; display: block; border-radius: 3px; position: relative; }
+.sparkline-tooltip { position: absolute; z-index: 8; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 9px; font-family: 'Cascadia Code','Fira Code',monospace; color: var(--text); white-space: nowrap; transform: translate(-50%, -100%); margin-top: -6px; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
 
 /* Traces tab */
 .trace-toolbar {
@@ -2049,11 +2072,17 @@ header {
   display: grid; grid-template-columns: minmax(80px, 30%) 1fr 50px;
   align-items: center; padding: 2px 8px; font-size: 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  position: relative;
 }
 .trace-span-name {
   color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-family: 'Cascadia Code','Fira Code',monospace;
 }
+.trace-span-tooltip { position: absolute; z-index: 10; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; font-size: 9px; font-family: 'Cascadia Code','Fira Code',monospace; color: var(--text); white-space: nowrap; pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,.2); margin-bottom: 4px; max-width: 280px; }
+.trace-span-tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 4px solid transparent; border-top-color: var(--border); }
+.trace-span-tooltip .tt-row { display: flex; gap: 6px; line-height: 1.5; }
+.trace-span-tooltip .tt-key { color: var(--muted); }
+.trace-span-tooltip .tt-val { color: var(--text); overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
 .trace-bar-container {
   position: relative; height: 14px;
   background: var(--surface2); border-radius: 3px; overflow: hidden;
@@ -7903,6 +7932,8 @@ let nerdStreamController = null;  // AbortController for the SSE fetch
 let nerdEventBuffer = [];         // last 200 events in-memory
 let nerdMetricsState = {};        // { key: [last 20 values] }
 let nerdLastHealth = null;
+let _thinkingRowEl = null;       // thinking indicator DOM element
+let _traceGroups = new Map();    // traceId → { parentEl, childEls, collapsed }
 
 const NERD_EVENT_MAX = 200;
 const NERD_METRIC_SAMPLES = 20;
@@ -8151,6 +8182,7 @@ function rehydrateEventsList() {
     feed.querySelectorAll('.telem-event').forEach(el => el.remove());
     const empty = feed.querySelector('.nerd-events-empty');
     if (empty) empty.remove();
+    _traceGroups.clear();
     for (const ev of nerdEventBuffer) {
         renderTelemetryEvent(ev, false);
         if (ev.spanEvents?.length) {
@@ -8327,6 +8359,16 @@ function routeTelemetryEvent(ev, live) {
     nerdEventBuffer.push(ev);
     if (nerdEventBuffer.length > NERD_EVENT_MAX) nerdEventBuffer.shift();
 
+    // Thinking indicator: show when an AI inference starts, remove when it completes
+    if (live && nerdActiveTab === 'events') {
+        if (ev.type === 'http.request' && (ev['http.route'] === '/api/command' || ev['http.route'] === '/api/extract')) {
+            _showThinkingIndicator();
+        }
+        if (ev.type === 'ai.response' || ev.type === 'flow.extract' || ev.type === 'flow.speech') {
+            _removeThinkingIndicator();
+        }
+    }
+
     if (nerdActiveTab === 'events') renderTelemetryEvent(ev, live);
 
     // Extract span events (e.g. tool executions) as separate UI events
@@ -8375,6 +8417,33 @@ function routeTelemetryEvent(ev, live) {
     // Port conflict notification
     if (ev.type === 'port.conflict' && live) {
         showPortConflictCard(ev);
+    }
+}
+
+function _showThinkingIndicator() {
+    if (_thinkingRowEl) return;
+    const feed = document.getElementById('nerdEventsList');
+    if (!feed) return;
+    const empty = feed.querySelector('.nerd-events-empty');
+    if (empty) empty.remove();
+    const row = document.createElement('div');
+    row.className = 'telem-event thinking';
+    row.setAttribute('role', 'status');
+    row.setAttribute('aria-label', 'Model is thinking');
+    row.innerHTML = `<div class="telem-event-row">
+      <span class="telem-ts">${fmtTs(new Date().toISOString())}</span>
+      <span class="telem-badge ai">ai</span>
+      <span class="telem-summary">thinking<span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span></span>
+    </div>`;
+    feed.appendChild(row);
+    if (nerdAutoScroll) feed.scrollTop = feed.scrollHeight;
+    _thinkingRowEl = row;
+}
+
+function _removeThinkingIndicator() {
+    if (_thinkingRowEl) {
+        _thinkingRowEl.remove();
+        _thinkingRowEl = null;
     }
 }
 
@@ -8446,6 +8515,11 @@ function renderTelemetryEvent(ev, scroll) {
     const empty = feed.querySelector('.nerd-events-empty');
     if (empty) empty.remove();
 
+    // Remove thinking indicator when a real AI event arrives
+    if (_thinkingRowEl && (ev.type === 'ai.response' || ev.type === 'flow.extract' || ev.type === 'flow.speech')) {
+        _removeThinkingIndicator();
+    }
+
     const badgeClass = NERD_BADGE_CLASS[ev.type] || 'upload';
     const row = document.createElement('div');
     row.className = 'telem-event';
@@ -8458,7 +8532,7 @@ function renderTelemetryEvent(ev, scroll) {
     </div>
     <div class="telem-detail">${detailHtml}</div>`;
     row.addEventListener('click', (e) => {
-        if (e.target.closest('.telem-detail')) return;
+        if (e.target.closest('.telem-detail') || e.target.closest('.telem-group-toggle')) return;
         row.classList.toggle('expanded');
         if (row.classList.contains('expanded')) {
             nerdAutoScroll = false;
@@ -8467,12 +8541,55 @@ function renderTelemetryEvent(ev, scroll) {
             nerdAutoScroll = !feed.querySelector('.telem-event.expanded');
         }
     });
-    feed.appendChild(row);
+
+    // Event grouping by traceId
+    if (ev.traceId && ev.type !== 'health.snapshot' && ev.type !== 'metric.sample') {
+        const group = _traceGroups.get(ev.traceId);
+        if (group) {
+            // This is a child event — nest under the parent
+            row.classList.add('grouped-child');
+            if (group.collapsed) row.classList.add('group-collapsed');
+            group.childEls.push(row);
+            // Add toggle on first child, update count on subsequent
+            if (group.childEls.length === 1) _addGroupToggle(group.parentEl, ev.traceId);
+            const toggle = group.parentEl.querySelector('.telem-group-toggle');
+            if (toggle) toggle.textContent = `${group.collapsed ? '▸' : '▾'} ${group.childEls.length + 1} spans`;
+            // Insert after last child (or after parent if first child)
+            const lastChild = group.childEls.length > 1 ? group.childEls[group.childEls.length - 2] : group.parentEl;
+            if (lastChild.nextSibling) feed.insertBefore(row, lastChild.nextSibling);
+            else feed.appendChild(row);
+        } else {
+            // First event with this traceId — it becomes the parent
+            _traceGroups.set(ev.traceId, { parentEl: row, childEls: [], collapsed: false });
+            feed.appendChild(row);
+        }
+    } else {
+        feed.appendChild(row);
+    }
 
     // Cap DOM rows at NERD_EVENT_MAX
     while (feed.children.length > NERD_EVENT_MAX) feed.removeChild(feed.firstChild);
 
     if (scroll && nerdAutoScroll) feed.scrollTop = feed.scrollHeight;
+}
+
+function _addGroupToggle(parentRow, traceId) {
+    const evRow = parentRow.querySelector('.telem-event-row');
+    if (!evRow || evRow.querySelector('.telem-group-toggle')) return;
+    const toggle = document.createElement('span');
+    toggle.className = 'telem-group-toggle';
+    toggle.textContent = '▸ 2 spans';
+    toggle.setAttribute('role', 'button');
+    toggle.setAttribute('aria-label', 'Toggle span group');
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const group = _traceGroups.get(traceId);
+        if (!group) return;
+        group.collapsed = !group.collapsed;
+        toggle.textContent = `${group.collapsed ? '▸' : '▾'} ${group.childEls.length + 1} spans`;
+        for (const child of group.childEls) child.classList.toggle('group-collapsed', group.collapsed);
+    });
+    evRow.appendChild(toggle);
 }
 
 function buildEventDetail(ev) {
@@ -8606,10 +8723,22 @@ function renderMetricsTab() {
             <span class="metric-label">${meta.label}</span>
             <span><span class="metric-value">${cur}</span><span class="metric-delta ${deltaClass}">${deltaStr}</span></span>
           </div>
-          <canvas id="${canvasId}" class="metric-canvas" height="36"></canvas>`;
+          <div style="position:relative"><canvas id="${canvasId}" class="metric-canvas" height="36"></canvas></div>`;
         container.appendChild(card);
-        // Draw sparkline after DOM insertion
-        requestAnimationFrame(() => drawSparkline(canvasId, samples, getMetricColor(meta)));
+
+        // Animate value pulse + delta fade-in
+        requestAnimationFrame(() => {
+            const valEl = card.querySelector('.metric-value');
+            const deltaEl = card.querySelector('.metric-delta');
+            if (delta !== 0 && valEl) {
+                valEl.classList.add('pulse');
+                setTimeout(() => valEl.classList.remove('pulse'), 300);
+            }
+            if (deltaEl) {
+                requestAnimationFrame(() => deltaEl.classList.add('visible'));
+            }
+            drawSparkline(canvasId, samples, getMetricColor(meta));
+        });
     }
 }
 
@@ -8653,6 +8782,86 @@ function drawSparkline(canvasId, values, color) {
     ctx.arc(last.x, last.y, 2.5, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
+
+    // Sparkline tooltip on hover
+    const wrapper = canvas.parentElement;
+    if (wrapper && !canvas._sparklineTooltipAttached) {
+        canvas._sparklineTooltipAttached = true;
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const idx = Math.round((mx / rect.width) * (values.length - 1));
+            const clamped = Math.max(0, Math.min(values.length - 1, idx));
+            const val = values[clamped];
+            let tooltip = wrapper.querySelector('.sparkline-tooltip');
+            if (!tooltip) {
+                tooltip = document.createElement('div');
+                tooltip.className = 'sparkline-tooltip';
+                tooltip.setAttribute('role', 'tooltip');
+                wrapper.appendChild(tooltip);
+            }
+            tooltip.textContent = String(val);
+            const pt = pts[clamped];
+            tooltip.style.left = pt.x + 'px';
+            tooltip.style.top = pt.y + 'px';
+            // Redraw with crosshair
+            _redrawSparkline(canvas, values, color, pts, clamped, dpr, w, h);
+        });
+        canvas.addEventListener('mouseleave', () => {
+            const tooltip = wrapper.querySelector('.sparkline-tooltip');
+            if (tooltip) tooltip.remove();
+            _redrawSparkline(canvas, values, color, pts, -1, dpr, w, h);
+        });
+    }
+}
+
+function _redrawSparkline(canvas, values, color, pts, hoverIdx, dpr, w, h) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    const min = Math.min(...values), max = Math.max(...values);
+    // Fill
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, h);
+    for (const p of pts) ctx.lineTo(p.x, p.y);
+    ctx.lineTo(pts.at(-1).x, h);
+    ctx.closePath();
+    ctx.fillStyle = color + '28';
+    ctx.fill();
+    // Line
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (const p of pts) ctx.lineTo(p.x, p.y);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    // Hover crosshair + highlight dot
+    if (hoverIdx >= 0 && hoverIdx < pts.length) {
+        const hp = pts[hoverIdx];
+        ctx.beginPath();
+        ctx.moveTo(hp.x, 0);
+        ctx.lineTo(hp.x, h);
+        ctx.strokeStyle = color + '40';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(hp.x, hp.y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = 'var(--bg, #1a1a2e)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    } else {
+        // Last point dot (default)
+        const last = pts.at(-1);
+        ctx.beginPath();
+        ctx.arc(last.x, last.y, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
+    ctx.restore();
 }
 
 function clearTelemetry() {
@@ -8662,6 +8871,8 @@ function clearTelemetry() {
     nerdLastHealth = null;
     logBuffer = [];
     tracesCache = [];
+    _traceGroups.clear();
+    _removeThinkingIndicator();
 
     // Clear DOM for all tabs
     const eventsList = document.getElementById('nerdEventsList');
@@ -8875,8 +9086,10 @@ function renderTraceWaterfall(trace) {
     const depth = span.depth || 0;
     const colorIdx = depth % 5;
     const indent = depth * 16;
+    const tagHtml = _tagSummary(span.tags);
+    const tooltipContent = `<div class="tt-row"><span class="tt-key">op</span> <span class="tt-val">${esc(span.operationName || span.name || 'span')}</span></div><div class="tt-row"><span class="tt-key">duration</span> <span class="tt-val">${span.durationMs || 0}ms</span></div>${tagHtml}`;
 
-    return `<div class="trace-span" style="padding-left:${8 + indent}px">
+    return `<div class="trace-span" style="padding-left:${8 + indent}px" data-span-idx="${i}" onmouseenter="_showTraceTooltip(event, ${i})" onmouseleave="_hideTraceTooltip(event)">
       <span class="trace-span-name">${'  '.repeat(depth)}${depth > 0 ? '├─ ' : ''}${esc(span.operationName || span.name || 'span')}</span>
       <div class="trace-bar-container">
         <div class="trace-bar" style="left:${offset}%;width:${width}%;background:var(--span-color-${colorIdx})"></div>
@@ -8884,6 +9097,39 @@ function renderTraceWaterfall(trace) {
       <span class="trace-span-duration">${span.durationMs || 0}ms</span>
     </div>`;
   }).join('');
+}
+
+function _showTraceTooltip(e, spanIdx) {
+    const spanEl = e.currentTarget;
+    if (spanEl.querySelector('.trace-span-tooltip')) return;
+    // Find the trace data from the parent trace-item
+    const traceItem = spanEl.closest('.trace-item');
+    if (!traceItem) return;
+    const traceId = traceItem.querySelector('.trace-waterfall')?.id?.replace('tw-', '');
+    const trace = tracesCache.find(t => t.traceId === traceId);
+    const span = trace?.spans?.[spanIdx];
+    if (!span) return;
+
+    const tt = document.createElement('div');
+    tt.className = 'trace-span-tooltip';
+    tt.setAttribute('role', 'tooltip');
+    let html = `<div class="tt-row"><span class="tt-key">op</span> <span class="tt-val">${esc(span.operationName || span.name || 'span')}</span></div>`;
+    html += `<div class="tt-row"><span class="tt-key">duration</span> <span class="tt-val">${span.durationMs || 0}ms</span></div>`;
+    if (span.tags) {
+        const interesting = ['gen_ai.request.model', 'gen_ai.usage.input_tokens', 'gen_ai.usage.output_tokens', 'http.status_code', 'gen_ai.response.finish_reason'];
+        for (const key of interesting) {
+            if (span.tags[key] !== undefined) {
+                html += `<div class="tt-row"><span class="tt-key">${esc(key.split('.').pop())}</span> <span class="tt-val">${esc(String(span.tags[key]))}</span></div>`;
+            }
+        }
+    }
+    tt.innerHTML = html;
+    spanEl.appendChild(tt);
+}
+
+function _hideTraceTooltip(e) {
+    const tt = e.currentTarget.querySelector('.trace-span-tooltip');
+    if (tt) tt.remove();
 }
 
 function initNerdMode() {
