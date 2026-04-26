@@ -3295,7 +3295,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       <span id="foundryLabel" class="sb-label">Foundry</span>
     </span>
     <span class="status-chip-sep" aria-hidden="true"></span>
-    <span class="status-chip hw-chip" id="chipCpu" title="CPU usage" aria-label="CPU usage">
+    <span class="status-chip hw-chip" id="chipCpu" title="CPU usage" aria-label="CPU usage" style="display:none">
       <i data-lucide="cpu" class="icon-sm" aria-hidden="true"></i>
       <span id="cpuValue" class="hw-value">—</span>
     </span>
@@ -3312,7 +3312,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       <span id="npuValue" class="hw-value">—</span>
     </span>
     <span class="status-chip-sep" aria-hidden="true"></span>
-    <span class="status-chip status-chip-interactive" id="chipModel" onclick="openModelPicker()" title="Switch model" role="button" tabindex="0" aria-label="Switch model" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openModelPicker();}">
+    <span class="status-chip status-chip-interactive" id="chipModel" onclick="openModelPicker()" title="Switch model" role="button" tabindex="0" aria-label="Switch model" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openModelPicker();}" style="display:none">
       <i data-lucide="cpu" class="icon-sm" id="modelDeviceIcon" aria-hidden="true"></i>
       <span id="modelLabel" class="sb-label"></span>
       <i data-lucide="chevron-down" class="icon-sm" style="opacity:.4;width:10px;height:10px" aria-hidden="true"></i>
@@ -7874,21 +7874,71 @@ function updateStatusBarHealth(ev) {
     }
 
     if (ev.modelAlias || ev.model) {
+        // #chipModel itself is hidden in the status bar (the model alias is
+        // already shown in the composer pill), but #modelLabel must keep its
+        // text up-to-date — syncComposerModelLabel mirrors it into the pill.
         const modelEl = document.getElementById('modelLabel');
-        const chipEl  = document.getElementById('chipModel');
         if (modelEl) modelEl.textContent = ev.modelAlias || ev.model;
-        if (chipEl)  { chipEl.style.removeProperty('display'); }
         _updateModelDeviceIcon(ev.model || '');
+    }
+
+    // Whisper load state drives an additional device chip when its
+    // execution device differs from the chat model's.
+    if (typeof ev.whisperLoaded === 'boolean') {
+        _whisperLoaded = ev.whisperLoaded;
+        _whisperDevice = ev.whisperDevice || null;
+        _updateDeviceChipsVisibility();
     }
 }
 
+// Tracks the device the currently-loaded chat model runs on (CPU/GPU/NPU).
+// Updated by _updateModelDeviceIcon, consumed by _updateDeviceChipsVisibility.
+let _currentModelDevice = null;
+// Tracks whether Whisper-tiny has been lazy-loaded for voice transcription.
+let _whisperLoaded = false;
+let _whisperDevice = null;
+
 function _updateModelDeviceIcon(modelId) {
     const iconEl = document.getElementById('modelDeviceIcon');
-    if (!iconEl) return;
     const device = _inferDeviceFromModelId(modelId);
-    const meta = (typeof DEVICE_META !== 'undefined' && DEVICE_META[device]) || { icon: 'cpu' };
-    iconEl.setAttribute('data-lucide', meta.icon);
-    lucide.createIcons({ nodes: [iconEl.parentElement] });
+    _currentModelDevice = device;
+    if (iconEl) {
+        const meta = (typeof DEVICE_META !== 'undefined' && DEVICE_META[device]) || { icon: 'cpu' };
+        iconEl.setAttribute('data-lucide', meta.icon);
+        lucide.createIcons({ nodes: [iconEl.parentElement] });
+    }
+    _updateDeviceChipsVisibility();
+}
+
+// Show only the device chips relevant to currently-loaded AI workloads:
+// the chat model's device, plus Whisper's if it's loaded on a different one.
+// Other device chips are hidden to declutter the status bar.
+function _updateDeviceChipsVisibility() {
+    const map = { CPU: 'chipCpu', GPU: 'chipGpu', NPU: 'chipNpu' };
+    const active = new Set();
+    if (_currentModelDevice && map[_currentModelDevice]) active.add(_currentModelDevice);
+    if (_whisperLoaded && _whisperDevice && map[_whisperDevice]) active.add(_whisperDevice);
+
+    // Respect user's status-bar item preferences (Settings → Status bar).
+    let enabledKeys = null;
+    try { enabledKeys = new Set(sbReadItems()); } catch {}
+
+    for (const [device, chipId] of Object.entries(map)) {
+        const chip = document.getElementById(chipId);
+        if (!chip) continue;
+        // GPU/NPU chips also depend on the host actually having that hardware
+        // (tracked by updateHardwareChips populating _hwProfile).
+        const hwOk = device === 'CPU'
+            || (device === 'GPU' && window._hwProfile?.gpu)
+            || (device === 'NPU' && window._hwProfile?.npu);
+        // Only chips listed in SB_ITEM_META are user-toggleable (currently
+        // just 'cpu'); GPU/NPU bypass the user-enabled check.
+        const sbKey = device.toLowerCase();
+        const userEnabled = !enabledKeys
+            || (typeof SB_ITEM_META !== 'undefined' && !SB_ITEM_META[sbKey])
+            || enabledKeys.has(sbKey);
+        chip.style.display = (active.has(device) && hwOk && userEnabled) ? '' : 'none';
+    }
 }
 
 function _inferDeviceFromModelId(modelId) {
@@ -8025,13 +8075,15 @@ function toggleNerdMode(forceOpen) {
 
 // ═══════════════════════════════════════════════════════════════════
 // Status Bar preferences
-// ═══════════════════════════════════════════════════════════════════
-const SB_DEFAULT_ITEMS = ['foundry','cpu','ram','model','clock','theme','nerd'];
+// Note: 'model' was retired — the chip is hidden permanently because the
+// composer pill already shows the model alias right above the status bar.
+// 'cpu'/'gpu'/'npu' chips remain user-orderable but their *visibility* is
+// driven by which AI workloads are loaded (see _updateDeviceChipsVisibility).
+const SB_DEFAULT_ITEMS = ['foundry','cpu','ram','clock','theme','nerd'];
 const SB_ITEM_META = {
   foundry: { sel: '#chipFoundry', label: 'Foundry service', icon: 'activity' },
   cpu:     { sel: '#chipCpu',     label: 'CPU',             icon: 'cpu' },
   ram:     { sel: '#chipRam',     label: 'Memory',          icon: 'memory-stick' },
-  model:   { sel: '#chipModel',   label: 'Model',           icon: 'layers' },
   clock:   { sel: '#chipClock',   label: 'Clock',           icon: 'clock-3' },
   theme:   { sel: '#themeChip',   label: 'Theme',           icon: 'palette' },
   nerd:    { sel: '#statusLeftArea', label: 'Stats for nerds', icon: 'gauge' },
@@ -8039,7 +8091,12 @@ const SB_ITEM_META = {
 function sbReadItems() {
   try {
     const raw = JSON.parse(localStorage.getItem('taskbean-statusbar-items') || 'null');
-    if (Array.isArray(raw) && raw.every(k => SB_ITEM_META[k])) return raw;
+    // Filter unknown keys (e.g. legacy 'model') instead of rejecting the
+    // whole stored order — preserves user customization across upgrades.
+    if (Array.isArray(raw)) {
+      const kept = raw.filter(k => SB_ITEM_META[k]);
+      if (kept.length) return kept;
+    }
   } catch {}
   return SB_DEFAULT_ITEMS.slice();
 }
@@ -8056,9 +8113,12 @@ function applyStatusBarPrefs() {
   for (const [key, meta] of Object.entries(SB_ITEM_META)) {
     const el = document.querySelector(meta.sel);
     if (!el) continue;
-    // Honor hardware-detection hides (GPU/NPU) by only unhiding what was enabled.
+    // Honor smart-managed visibility: device chips (CPU/GPU/NPU) are shown
+    // only when their device is actually doing AI work — see
+    // _updateDeviceChipsVisibility. applyStatusBarPrefs only handles the
+    // user's enable/disable + ordering; it must not unhide them.
     if (!enabled.has(key)) el.style.display = 'none';
-    else if (el.style.display === 'none' && !['chipGpu','chipNpu'].includes(el.id)) {
+    else if (el.style.display === 'none' && !['chipCpu','chipGpu','chipNpu'].includes(el.id)) {
       el.style.removeProperty('display');
     }
   }
@@ -9972,23 +10032,26 @@ async function updateHardwareChips() {
         if (hw.gpu) {
             const gpuChip = document.getElementById('chipGpu');
             const gpuEl = document.getElementById('gpuValue');
-            if (gpuChip) gpuChip.style.display = '';
             if (gpuEl) gpuEl.textContent = `${hw.gpu.vramGb}GB`;
-            gpuChip.title = hw.gpu.name;
+            if (gpuChip) gpuChip.title = hw.gpu.name;
         }
 
         // NPU
         if (hw.npu) {
             const npuChip = document.getElementById('chipNpu');
             const npuEl = document.getElementById('npuValue');
-            if (npuChip) npuChip.style.display = '';
             if (npuEl) npuEl.textContent = hw.npu.usagePercent != null ? `${hw.npu.usagePercent}%` : 'NPU';
             if (npuChip) {
                 npuChip.className = 'status-chip hw-chip' +
                     (hw.npu.usagePercent > 85 ? ' hw-crit' : hw.npu.usagePercent > 60 ? ' hw-warn' : '');
+                npuChip.title = hw.npu.name;
             }
-            npuChip.title = hw.npu.name;
         }
+
+        // Visibility of CPU/GPU/NPU chips is owned by _updateDeviceChipsVisibility
+        // (driven by which AI workloads are loaded), not by hardware presence —
+        // having a GPU doesn't mean the loaded model is using it.
+        if (typeof _updateDeviceChipsVisibility === 'function') _updateDeviceChipsVisibility();
     } catch {}
 }
 

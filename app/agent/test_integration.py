@@ -27,6 +27,11 @@ async def test_health_ready(client: httpx.AsyncClient) -> None:
     assert data["foundryReady"] is True,  f"foundryReady is False — startupError: {data.get('startupError')}"
     assert data["modelReady"]   is True,  "modelReady is False after startup wait"
     assert data["model"],                 "model field is empty"
+    # Whisper-tiny is lazy-loaded only when the user picks the Whisper engine.
+    # The status bar uses these fields to decide whether to surface its
+    # device chip; default state (before any voice input) is unloaded.
+    assert data["whisperLoaded"] is False, "whisperLoaded should default to False"
+    assert data["whisperDevice"] is None,  "whisperDevice should be None when whisper is not loaded"
 
 
 # ── 2. Models list ────────────────────────────────────────────────────────────

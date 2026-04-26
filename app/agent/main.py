@@ -348,6 +348,7 @@ async def _npu_usage_sampler() -> None:
 # ── Health ────────────────────────────────────────────────────────────────────
 
 def _health_data() -> dict[str, Any]:
+    whisper_loaded = _whisper_model is not None
     return {
         "type": "health.snapshot",
         "model": agent_mod.MODEL_ID,
@@ -357,6 +358,12 @@ def _health_data() -> dict[str, Any]:
         "startupError": agent_mod.startup_error,
         "mcpAvailable": _markitdown_available(),
         "uptimeMs": int(time.time() * 1000) - telem.SERVER_START,
+        # Voice transcription model — lazy-loaded the first time the user
+        # picks the Whisper engine. The status bar uses this to decide
+        # whether to surface its execution device chip alongside the chat
+        # model's. Whisper-tiny ships as a CPU build today.
+        "whisperLoaded": whisper_loaded,
+        "whisperDevice": "CPU" if whisper_loaded else None,
     }
 
 
