@@ -1542,6 +1542,7 @@ header {
 .composer-model-status { display: none; flex-shrink: 0; width: 8px; height: 8px; align-items: center; justify-content: center; }
 .composer-model-status::before { content: ''; display: block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .composer-model-pill[data-status="loading"] { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 55%, transparent); background: color-mix(in oklch, var(--accent) 8%, var(--surface)); box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 40%, transparent); animation: composerPillPulse 1.6s ease-in-out infinite; }
+.composer-model-pill[data-status="loading"]:hover { background: color-mix(in oklch, var(--accent) 14%, var(--surface)); border-color: var(--accent); }
 .composer-model-pill[data-status="loading"] .composer-model-status { display: inline-flex; animation: composerDotBlink 1s ease-in-out infinite; }
 .composer-model-pill[data-status="error"] { color: var(--red); border-color: color-mix(in oklch, var(--red) 50%, transparent); background: color-mix(in oklch, var(--red) 9%, var(--surface)); }
 .composer-model-pill[data-status="error"]:hover { background: color-mix(in oklch, var(--red) 14%, var(--surface)); }
@@ -10856,10 +10857,13 @@ async function switchModel(modelId) {
                     setComposerModelStatus('loading', _shortModelLabel(modelId),
                         evt.pct != null ? `${evt.message} · ${evt.pct.toFixed(0)}%` : evt.message);
                 } else if (evt.type === 'done') {
+                    // Clear the loading badge BEFORE writing the new alias so
+                    // any timer/observer that fires between the two writes
+                    // doesn't see stale status and skip the sync.
+                    setComposerModelStatus(null);
                     const lbl = document.getElementById('modelLabel');
                     if (lbl) lbl.textContent = evt.alias || evt.modelId;
                     _updateModelDeviceIcon(evt.modelId || modelId);
-                    setComposerModelStatus(null);
                     addChat('info', 'cpu', `Switched to <strong>${esc(evt.alias || evt.modelId)}</strong>.`);
                 } else if (evt.type === 'recommendation') {
                     // Model isn't downloaded locally — offer to download it
@@ -10921,10 +10925,12 @@ async function switchModelForced(modelId) {
                     setComposerModelStatus('loading', _shortModelLabel(modelId),
                         evt.pct != null ? `${evt.message} · ${evt.pct.toFixed(0)}%` : evt.message);
                 } else if (evt.type === 'done') {
+                    // Clear loading badge first to close the race window
+                    // between writing #modelLabel and clearing dataset.status.
+                    setComposerModelStatus(null);
                     const lbl = document.getElementById('modelLabel');
                     if (lbl) lbl.textContent = evt.alias || evt.modelId;
                     _updateModelDeviceIcon(evt.modelId || modelId);
-                    setComposerModelStatus(null);
                     addChat('info', 'check-circle', `Downloaded &amp; switched to <strong>${esc(evt.alias || evt.modelId)}</strong>.`);
                 } else if (evt.type === 'error') {
                     setComposerModelStatus('error', _shortModelLabel(modelId), `Download failed: ${evt.message}`);
