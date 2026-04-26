@@ -1,6 +1,17 @@
 # ── Agent Framework + AG-UI ───────────────────────────────────────────────────
-agent-framework
-agent-framework-ag-ui
+# Versions are pinned because _NormalizingChatClient (in agent.py) overrides
+# private framework internals (_inner_get_response, _parse_response_update_from_openai,
+# _build_response_stream, _prepare_options) to work around Foundry-Local#422.
+# A version bump can silently break the streaming wrapper. Re-verify before unpinning:
+# 1. Read agent_framework_openai._chat_completion_client to confirm the method
+#    signatures are unchanged.
+# 2. Run pytest test_phase0_fixes.py — the wrapper unit tests use real framework
+#    types and will fail-fast on shape changes.
+# 3. Manual E2E: send a chat through /api/command and watch /api/telemetry/snapshot
+#    for ai.response + flow + http.request spans.
+agent-framework==1.0.1
+agent-framework-openai==1.0.1
+agent-framework-ag-ui==1.0.0b260409
 
 # ── Foundry Local (Windows NPU) ───────────────────────────────────────────────
 foundry-local-sdk-winml

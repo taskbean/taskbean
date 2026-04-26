@@ -477,13 +477,28 @@ async def _smoke_test_inference(model_id: str, timeout_s: float = 90.0) -> str |
     # an NPU model that will crash on the first real chat.
     try:
         from tools import ALL_TOOLS as _all_tools
-        from agent_framework_openai._chat_completion_client import RawOpenAIChatCompletionClient
+        from agent_framework_openai._chat_completion_client import RawOpenAIChatCompletionClient  # noqa: F401
 
         # Reuse agent-framework's tool serialization so the wire shape matches
-        # exactly what the real chat will send. Falls back to a tiny synthesized
-        # tool list if anything in the import chain fails.
+        # exactly what the real chat will send.
         probe_tools = _serialize_tools_for_smoke(_all_tools)
-    except Exception:
+        if not probe_tools:
+            # _serialize_tools_for_smoke returned empty — every tool failed to
+            # serialize. Fall through to the warning + fallback path.
+            raise RuntimeError("No tools could be serialized from ALL_TOOLS")
+    except Exception as exc:
+        # Fallback to a 1-tool probe so the smoke test can still run if the
+        # tool import chain is broken. Log a warning so this doesn't silently
+        # mask real bugs — a broken tool import is itself a critical defect
+        # the user should investigate.
+        logger.warning(
+            "Failed to serialize ALL_TOOLS for smoke test (%s: %s) — "
+            "falling back to a 1-tool probe. The smoke test will pass on "
+            "models that would actually fail with the real %d-tool payload. "
+            "Investigate the import error before relying on smoke results.",
+            type(exc).__name__, exc,
+            len(getattr(__import__('tools'), 'ALL_TOOLS', []) or []),
+        )
         probe_tools = _agent_smoke_tools_fallback()
 
     instructions = agent_mod._build_instructions() if hasattr(agent_mod, "_build_instructions") else (
@@ -1444,7 +1459,15 @@ async def switch_model(body: SwitchRequest) -> StreamingResponse:
             commit_error = await _commit_switch(target_model)
             if commit_error:
                 span.set_status(trace.StatusCode.ERROR, commit_error)
-                _clear_preferred_if_matches(model_id)
+                # Note: we do NOT call _clear_preferred_if_matches here.
+                # Smoke test failures can be transient — Foundry NPU runtimes
+                # crash intermittently on agent payloads (Foundry-Local#506),
+                # but a fresh process restart often recovers. Clearing the
+                # preference here would silently revert a user's explicit
+                # model choice on a transient hiccup. The user can clear it
+                # manually via Settings if they want a different default.
+                # Load failures (above) are different — those mean the model
+                # fundamentally cannot load, so clearing preference is correct.
                 yield send("error", {"message": commit_error})
                 return
             span.add_event("switch.done", {"alias": entry["alias"]})
