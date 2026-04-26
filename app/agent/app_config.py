@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone as _tz
 from pathlib import Path
 from typing import Literal
 
@@ -106,7 +106,7 @@ def save() -> None:
     """Persist current in-memory config to disk."""
     try:
         _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        out = {**_config, "lastUpdated": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}
+        out = {**_config, "lastUpdated": datetime.now(_tz.utc).isoformat().replace("+00:00", "Z")}
         _CONFIG_FILE.write_text(json.dumps(out, indent=2), encoding="utf-8")
     except Exception as exc:
         logger.warning("Could not save config: %s", exc)

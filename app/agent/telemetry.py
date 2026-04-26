@@ -67,6 +67,13 @@ _SPAN_EVENT_MAP: dict[str, str] = {
     "gen_ai.suggest": "ai.response",
 }
 
+# Prefixes emitted by agent-framework native instrumentation
+_NATIVE_SPAN_PREFIXES: tuple[str, ...] = (
+    "execute_tool ",   # FunctionTool.invoke() → tool execution
+    "chat ",           # ChatTelemetryLayer → chat completion
+    "invoke_agent ",   # AgentTelemetryLayer → agent invocation
+)
+
 _HTTP_METHODS = ("GET ", "POST ", "PUT ", "PATCH ", "DELETE ", "HEAD ", "OPTIONS ")
 
 
@@ -74,6 +81,13 @@ def _span_to_event_type(span: ReadableSpan) -> str:
     name = span.name
     if name in _SPAN_EVENT_MAP:
         return _SPAN_EVENT_MAP[name]
+    # Native agent-framework spans
+    if name.startswith("execute_tool "):
+        return "tool.executed"
+    if name.startswith("chat "):
+        return "ai.response"
+    if name.startswith("invoke_agent "):
+        return "flow"
     # Auto-instrumentation HTTP spans
     attrs = span.attributes or {}
     if name.startswith(_HTTP_METHODS) or "http.route" in attrs:
@@ -99,17 +113,30 @@ class UISpanExporter(SpanExporter):
             attrs = dict(span.attributes or {})
             event_type = _span_to_event_type(span)
 
+            # Compute duration from span timestamps
+            duration_ms = None
+            if span.start_time and span.end_time:
+                duration_ms = int((span.end_time - span.start_time) / 1e6)
+
             event: dict[str, Any] = {
                 "id": _next_seq(),
                 "ts": _now_iso(),
                 "type": event_type,
                 "spanId": format(span.context.span_id, "016x"),
                 "traceId": format(span.context.trace_id, "032x"),
+                "spanName": span.name,
             }
+            if duration_ms is not None:
+                event["durationMs"] = duration_ms
+
             # Flatten remaining span attributes into the event
             for k, v in attrs.items():
                 if not k.startswith("_"):
                     event[k] = v
+
+            # Normalize native agent-framework attribute keys for the frontend
+            if "gen_ai.tool.name" in attrs and "tool.name" not in attrs:
+                event["tool.name"] = attrs["gen_ai.tool.name"]
 
             self._buffer.append(event)
             _push_event(event)
@@ -122,6 +149,9 @@ class UISpanExporter(SpanExporter):
         name = span.name
         # Always keep manual app spans
         if name in _SPAN_EVENT_MAP:
+            return False
+        # Keep native agent-framework spans (tool execution, chat, agent invocation)
+        if any(name.startswith(p) for p in _NATIVE_SPAN_PREFIXES):
             return False
         # Keep user-facing API route spans
         attrs = dict(span.attributes or {})
@@ -180,10 +210,23 @@ class UILogExporter(LogExporter):
 # ── OTel provider setup ──────────────────────────────────────────────────────
 
 _ui_span_exporter: UISpanExporter | None = None
+_otel_initialized: bool = False
 
 
 def init_otel(service_name: str = "taskbean") -> None:
-    global _ui_span_exporter
+    """Initialize OpenTelemetry provider and exporters.
+
+    Idempotent — safe to call multiple times. OpenTelemetry refuses to
+    replace an existing TracerProvider, so a second call would leave the
+    module-level ``_ui_span_exporter`` pointing at a NEW exporter that
+    isn't wired to the active provider — and ``/api/telemetry/snapshot``
+    would silently return zero events even though spans are flowing.
+    The early-return below avoids that footgun.
+    """
+    global _ui_span_exporter, _otel_initialized
+    if _otel_initialized:
+        logger.debug("init_otel called again — already initialized, skipping")
+        return
 
     endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
@@ -233,6 +276,20 @@ def init_otel(service_name: str = "taskbean") -> None:
     except ImportError:
         logger.info("opentelemetry-instrumentation-httpx not installed — httpx calls won't be traced")
 
+    # ── Enable agent-framework native instrumentation ─────────────────────
+    # AgentTelemetryLayer, ChatTelemetryLayer, and FunctionTool.invoke() all
+    # emit OTel spans gated behind OBSERVABILITY_SETTINGS.ENABLED. Our custom
+    # providers (above) are already set; this just flips the flag so native
+    # agent/chat/tool spans flow through UISpanExporter → SSE + OTLP → Jaeger.
+    try:
+        from agent_framework.observability import enable_instrumentation
+        enable_instrumentation(enable_sensitive_data=False)
+        logger.info("agent-framework native OTel instrumentation enabled")
+    except ImportError:
+        logger.info("agent-framework observability not available — native spans disabled")
+
+    _otel_initialized = True
+
 
 # ── Module-level instruments ──────────────────────────────────────────────────
 
@@ -272,6 +329,18 @@ def subscribe() -> asyncio.Queue[dict[str, Any]]:
 
 def unsubscribe(q: asyncio.Queue[dict[str, Any]]) -> None:
     _listeners.discard(q)
+
+
+def emit(event_type: str, data: dict[str, Any]) -> None:
+    """Emit a custom event directly to the SSE stream (bypasses OTel spans).
+
+    Use for lightweight, ad-hoc events that don't warrant full span overhead
+    (e.g., tool execution previews, reminder notifications).
+    """
+    event = {"id": _next_seq(), "ts": _now_iso(), "type": event_type, **data}
+    if _ui_span_exporter is not None:
+        _ui_span_exporter.buffer.append(event)
+    _push_event(event)
 
 
 # ── FastAPI instrumentation ───────────────────────────────────────────────────

@@ -170,7 +170,25 @@ $venvOk = Test-Path $VenvPython
 if ($venvOk -and (Test-Path $reqFile)) {
     $stamp = Join-Path $VenvDir ".deps-stamp"
     $legacyMarker = Join-Path $AgentDir ".deps-installed"
-    $reqHash = (Get-FileHash -Path $reqFile -Algorithm SHA256).Hash
+    $reqHash = $null
+    try {
+        $reqHash = (Get-FileHash -Path $reqFile -Algorithm SHA256).Hash
+    } catch {
+        # Get-FileHash lives in Microsoft.PowerShell.Utility; on rare PS 5.1
+        # configurations the module isn't auto-imported when launch.ps1 runs
+        # via the taskbean:// protocol handler. Fall back to a manual SHA256
+        # so the dep-install gating still works.
+        try {
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            $stream = [System.IO.File]::OpenRead($reqFile)
+            try { $reqHash = -join (($sha.ComputeHash($stream)) | ForEach-Object { $_.ToString('x2') }) }
+            finally { $stream.Dispose(); $sha.Dispose() }
+        } catch {
+            # If even the manual hash fails, force a reinstall (correctness
+            # over speed) but don't surface a confusing error to the user.
+            $reqHash = "unknown-$(Get-Random)"
+        }
+    }
     $needInstall = $true
     if (Test-Path $stamp) {
         $existing = ((Get-Content $stamp -Raw -ErrorAction SilentlyContinue) -as [string]).Trim()

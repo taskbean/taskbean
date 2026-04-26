@@ -106,6 +106,20 @@ Chat submission uses `handleSend()` triggered by Enter key on `#chatInput` texta
 
 ## Build & Run
 
+There is **no build step** for the CLI or the frontend. No bundler, no transpiler, no `npm run build`. The CLI is plain Node.js (ESM); the frontend is a single vanilla JS file served as-is.
+
+There is **no linter** configured for either half. Don't look for `npm run lint` or `eslint`.
+
+### CLI
+
+Requires **Node.js ≥ 22.5.0** (uses experimental SQLite). No other dependencies beyond `commander`.
+
+```bash
+cd cli
+npm install                       # install deps (just commander)
+node bin/taskbean.js --help       # run locally without global install
+```
+
 ### Python backend
 
 ```bash
@@ -123,6 +137,17 @@ python main.py                    # starts on :8275, auto-starts Jaeger
 `docker-compose.yml` runs Jaeger v2.17 (OTel Collector-based). Config in `jaeger-config.yaml`. Includes SpanMetrics connector for R.E.D. metrics with `gen_ai.request.model` dimension. UI at `http://localhost:16686`.
 
 ## Testing
+
+### CLI tests
+
+```bash
+cd cli
+npm test                                               # all tests
+node --test --test-name-pattern="pattern" src/**/*.test.js  # single test by name
+node --test src/tests/v4-integration.test.js           # single test file
+```
+
+Integration-style tests that hit a real SQLite database. Must run from the `cli/` directory.
 
 ### Python integration tests
 
@@ -268,3 +293,45 @@ Only **metadata** (session ids, timestamps, model/provider, cwd, git branch) and
 ### `bean report`
 
 Reports now include a `## Usage` section (Markdown) / `usage` key (JSON) with per-agent sessions / turns / tokens / tool calls.
+
+## Playwright MCP (browser testing)
+
+The project has a Playwright MCP server configured in `.mcp.json` using `--extension` mode, which connects to an already-running Microsoft Edge instance via the [Playwright MCP Bridge extension](https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm). This lets you interact with the app at `http://localhost:8275` using your real browser state.
+
+### Workflow
+
+1. **Always snapshot before acting.** `browser_snapshot` returns an accessibility tree with `ref` identifiers. Use these refs in `browser_click`, `browser_type`, `browser_hover`, etc. Never guess element selectors.
+2. **Snapshot after navigation too.** After `browser_navigate`, take a snapshot to confirm the page loaded before interacting.
+3. **Snapshot → act → snapshot.** After each meaningful interaction, snapshot again to verify the result and get fresh refs.
+4. **Never use screenshots for element targeting.** `browser_take_screenshot` is for visual verification only — it does not provide actionable refs. The snapshot tool description says: *"this is better than screenshot."*
+5. **Use `element` descriptions for clarity.** When calling action tools, fill in the `element` parameter with a human-readable description (e.g., "the Send button") alongside the `ref`.
+
+### Recovering from stale connections
+
+The Playwright MCP uses `--extension` mode, which connects to Edge via a WebSocket from the browser's MCP Bridge extension. This connection can break when:
+
+- Edge crashes or is closed and reopened
+- The Python backend crashes mid-request (causes page navigation to fail, which can kill the bridge's page reference)
+- The MCP server process caches a dead browser/page reference and never recovers on its own
+
+**Symptoms:** Every MCP tool call returns `Error: browserBackend.callTool: Target page, context or browser has been closed`.
+
+**Fix — restart the Playwright MCP server** so it establishes a fresh WebSocket to the bridge extension:
+
+1. Use the `configure-copilot` **task agent** (`agent_type: "configure-copilot"`) to reload the MCP server. This restarts the server process without changing config. Ask it to "reload/restart the playwright MCP server" and specify not to change configuration.
+2. After restart, the bridge extension needs to reconnect. The error changes from `"Target page, context or browser has been closed"` to `"Not connected"` — this confirms the restart worked. You **cannot** navigate to `extension://mmlmfjhmonkocbjadbfplnigmagldckm/status.html` yourself because all browser tools are dead until the extension connects. Ask the user to click the Playwright MCP Bridge extension icon in Edge to re-establish the WebSocket.
+3. If that doesn't work, ask the user to run `/mcp` and restart the `playwright` server manually, or restart Copilot CLI entirely.
+4. After the extension connects, verify with `browser_snapshot` — you should see the extension's connect/status page, then navigate to `http://localhost:8275`.
+
+**Do NOT** try to work around the stale connection by:
+- Launching a separate browser via `playwright-cli open` (creates a second browser instance disconnected from the MCP tools)
+- Repeatedly retrying `browser_navigate` (the cached reference never self-heals)
+- Killing individual node processes (the MCP server is managed by Copilot CLI's process lifecycle)
+- Using the `customize-cloud-agent` skill (that's for the cloud coding agent CI/CD, not local MCP servers)
+
+### App-specific notes
+
+- The app runs on **`http://localhost:8275`** — the Python backend must be running first (`cd app/agent && python main.py`).
+- Chat is submitted via **Enter key** on the `#chatInput` textarea — there is no submit button. Use `browser_press_key` with `Enter` after typing.
+- The app has a **service worker** (`sw.js`). If it interferes with testing, add `--block-service-workers` to the MCP server args.
+- The frontend is a **single-file SPA** (`public/index.html`, ~7900 lines). Snapshots may be large — use the `depth` parameter to limit the tree when you only need top-level structure.
