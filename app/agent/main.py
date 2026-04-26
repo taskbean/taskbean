@@ -540,6 +540,21 @@ async def _smoke_test_inference(model_id: str, timeout_s: float = 90.0) -> str |
         "max_tokens": 16,
         "stream": False,
     }
+    # Qwen3 thinking-mode suppression — see agent.qwen3_extra_body /
+    # prepend_qwen3_no_think_message. The /no_think system message is the
+    # primary mechanism (works regardless of whether the runtime forwards
+    # chat_template_kwargs); extra_body is belt-and-suspenders.
+    body["messages"] = agent_mod.prepend_qwen3_no_think_message(body["messages"], model_id)
+    extra = agent_mod.qwen3_extra_body(model_id)
+    if extra:
+        body.update(extra)
+    # First inference on a freshly-loaded model can be substantially slower
+    # than steady-state because Foundry's ONNX EP JITs kernels for the
+    # specific input shapes. Give Qwen3 (and any other freshly-loaded model)
+    # a generous budget; only models that genuinely can't serve the agent
+    # payload will fail.
+    if agent_mod.is_qwen3_model(model_id) and timeout_s < 180:
+        timeout_s = 180.0
     try:
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(connect=5, read=timeout_s, write=5, pool=5)
@@ -672,6 +687,11 @@ async def _foundry_complete(system_prompt: str, user_message: str) -> str:
         "max_tokens": min(2000, max_out) if max_out else 2000,
         "temperature": 0.7,
     }
+    # Qwen3 thinking-mode suppression — same dual approach as the smoke test.
+    body["messages"] = agent_mod.prepend_qwen3_no_think_message(body["messages"], agent_mod.MODEL_ID)
+    extra = agent_mod.qwen3_extra_body(agent_mod.MODEL_ID)
+    if extra:
+        body.update(extra)
 
     span = trace.get_current_span()
     span.set_attribute("gen_ai.system", "foundry-local")
