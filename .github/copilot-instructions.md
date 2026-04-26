@@ -106,6 +106,20 @@ Chat submission uses `handleSend()` triggered by Enter key on `#chatInput` texta
 
 ## Build & Run
 
+There is **no build step** for the CLI or the frontend. No bundler, no transpiler, no `npm run build`. The CLI is plain Node.js (ESM); the frontend is a single vanilla JS file served as-is.
+
+There is **no linter** configured for either half. Don't look for `npm run lint` or `eslint`.
+
+### CLI
+
+Requires **Node.js ≥ 22.5.0** (uses experimental SQLite). No other dependencies beyond `commander`.
+
+```bash
+cd cli
+npm install                       # install deps (just commander)
+node bin/taskbean.js --help       # run locally without global install
+```
+
 ### Python backend
 
 ```bash
@@ -123,6 +137,17 @@ python main.py                    # starts on :8275, auto-starts Jaeger
 `docker-compose.yml` runs Jaeger v2.17 (OTel Collector-based). Config in `jaeger-config.yaml`. Includes SpanMetrics connector for R.E.D. metrics with `gen_ai.request.model` dimension. UI at `http://localhost:16686`.
 
 ## Testing
+
+### CLI tests
+
+```bash
+cd cli
+npm test                                               # all tests
+node --test --test-name-pattern="pattern" src/**/*.test.js  # single test by name
+node --test src/tests/v4-integration.test.js           # single test file
+```
+
+Integration-style tests that hit a real SQLite database. Must run from the `cli/` directory.
 
 ### Python integration tests
 
