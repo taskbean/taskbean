@@ -210,10 +210,23 @@ class UILogExporter(LogExporter):
 # ── OTel provider setup ──────────────────────────────────────────────────────
 
 _ui_span_exporter: UISpanExporter | None = None
+_otel_initialized: bool = False
 
 
 def init_otel(service_name: str = "taskbean") -> None:
-    global _ui_span_exporter
+    """Initialize OpenTelemetry provider and exporters.
+
+    Idempotent — safe to call multiple times. OpenTelemetry refuses to
+    replace an existing TracerProvider, so a second call would leave the
+    module-level ``_ui_span_exporter`` pointing at a NEW exporter that
+    isn't wired to the active provider — and ``/api/telemetry/snapshot``
+    would silently return zero events even though spans are flowing.
+    The early-return below avoids that footgun.
+    """
+    global _ui_span_exporter, _otel_initialized
+    if _otel_initialized:
+        logger.debug("init_otel called again — already initialized, skipping")
+        return
 
     endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
@@ -274,6 +287,8 @@ def init_otel(service_name: str = "taskbean") -> None:
         logger.info("agent-framework native OTel instrumentation enabled")
     except ImportError:
         logger.info("agent-framework observability not available — native spans disabled")
+
+    _otel_initialized = True
 
 
 # ── Module-level instruments ──────────────────────────────────────────────────

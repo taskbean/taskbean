@@ -441,11 +441,181 @@ def _strip_reasoning_tags(text: str) -> str:
     return _THINK_RE.sub("", text).strip()
 
 
+async def _smoke_test_inference(model_id: str, timeout_s: float = 90.0) -> str | None:
+    """Verify a model can serve an agent-shaped inference request.
+
+    Used by /api/models/switch's _commit_switch to catch Foundry-side
+    failures (model loaded but ONNX session broken, EP missing, context
+    too large, runtime crashes on tool-call payloads, etc.) at switch time
+    rather than at chat time.
+
+    The probe sends the **exact** payload shape the real agent will send:
+    the full agent instructions (with embedded todo list) plus all
+    ``ALL_TOOLS`` definitions. This is critical because Foundry NPU
+    runtimes can crash on full agent payloads even when smaller probes
+    succeed (Foundry-Local#506). A "minimal" smoke test would let those
+    models through and the first real chat would crash the server.
+
+    Args:
+        model_id: Full Foundry model variant ID, e.g.
+            "qwen2.5-coder-0.5b-instruct-generic-cpu:4".
+        timeout_s: Total deadline for the smoke test. Default is generous
+            because NPU loads a fresh ONNX session on first inference and
+            larger models can take 60+ seconds for even a short response.
+
+    Returns:
+        ``None`` if the smoke test succeeded.
+        Otherwise an error message describing why it failed.
+    """
+    if not agent_mod.SERVICE_BASE_URL:
+        return "Smoke test failed: Foundry web service URL is not set"
+
+    url = f"{agent_mod.SERVICE_BASE_URL}/v1/chat/completions"
+
+    # Build the agent-shaped probe. We use the LIVE agent instructions and
+    # the full ``ALL_TOOLS`` list — anything smaller risks letting through
+    # an NPU model that will crash on the first real chat.
+    try:
+        from tools import ALL_TOOLS as _all_tools
+        from agent_framework_openai._chat_completion_client import RawOpenAIChatCompletionClient
+
+        # Reuse agent-framework's tool serialization so the wire shape matches
+        # exactly what the real chat will send. Falls back to a tiny synthesized
+        # tool list if anything in the import chain fails.
+        probe_tools = _serialize_tools_for_smoke(_all_tools)
+    except Exception:
+        probe_tools = _agent_smoke_tools_fallback()
+
+    instructions = agent_mod._build_instructions() if hasattr(agent_mod, "_build_instructions") else (
+        "You are a todo list assistant. Reply with one short word."
+    )
+
+    body = {
+        "model": model_id,
+        "messages": [
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": "ok"},
+        ],
+        "tools": probe_tools,
+        "tool_choice": "auto",
+        "max_tokens": 16,
+        "stream": False,
+    }
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=5, read=timeout_s, write=5, pool=5)
+        ) as client:
+            resp = await client.post(url, json=body)
+        if resp.status_code != 200:
+            body_preview = (resp.text or "")[:200]
+            return (
+                f"Smoke test failed: HTTP {resp.status_code} from "
+                f"{model_id}. Body: {body_preview!r}"
+            )
+        # Foundry occasionally returns 200 with an empty/error JSON.
+        try:
+            data = resp.json()
+        except ValueError:
+            return f"Smoke test failed: non-JSON response from {model_id}"
+        if not data.get("choices"):
+            return f"Smoke test failed: no choices in response from {model_id}"
+    except httpx.TimeoutException:
+        return f"Smoke test failed: timed out after {timeout_s}s on {model_id}"
+    except (httpx.RemoteProtocolError, httpx.ReadError, httpx.ConnectError) as exc:
+        # Foundry crashed mid-request — common NPU failure mode (#506).
+        # Surface a clear message so the user knows to switch back to a
+        # CPU/GPU model rather than blaming our wrapper.
+        return (
+            f"Smoke test failed: Foundry closed the connection on {model_id}. "
+            f"This usually means the model can't handle agent-shaped "
+            f"requests (system prompt + tools). NPU models are particularly "
+            f"prone to this — see Foundry-Local#506. Underlying error: "
+            f"{type(exc).__name__}: {exc}"
+        )
+    except Exception as exc:
+        return f"Smoke test failed: {type(exc).__name__}: {exc}"
+    return None
+
+
+def _serialize_tools_for_smoke(tools: list) -> list[dict]:
+    """Convert agent-framework ``@tool``-decorated callables into the
+    OpenAI ``tools=[...]`` wire shape the smoke test sends. Mirrors the
+    serialization agent-framework's ``OpenAIChatCompletionClient`` does
+    internally so we don't introduce divergence between the smoke probe
+    and the real chat payload.
+    """
+    out: list[dict] = []
+    for t in tools:
+        # FunctionTool exposes to_json_schema_spec() which returns the
+        # exact wire shape agent-framework sends to the OpenAI client.
+        spec = getattr(t, "to_json_schema_spec", None)
+        if callable(spec):
+            try:
+                out.append(spec())
+                continue
+            except Exception:
+                pass
+        # Fallback: try to assemble manually
+        name = getattr(t, "name", None) or getattr(t, "__name__", None)
+        if not name:
+            continue
+        description = getattr(t, "description", "") or (getattr(t, "__doc__", "") or "")
+        params_fn = getattr(t, "parameters", None)
+        if callable(params_fn):
+            try:
+                params = params_fn()
+            except Exception:
+                params = {"type": "object", "properties": {}}
+        else:
+            params = {"type": "object", "properties": {}}
+        out.append({
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": description,
+                "parameters": params,
+            },
+        })
+    return out
+
+
+def _agent_smoke_tools_fallback() -> list[dict]:
+    """Fallback tool list if real ALL_TOOLS can't be loaded for any reason.
+
+    Should never be hit in production — exists only so the smoke test can
+    still run if the import chain breaks for some reason.
+    """
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "add_task",
+                "description": "Add a plain task or todo item.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Task title"},
+                    },
+                    "required": ["title"],
+                },
+            },
+        },
+    ]
+
+
+
 async def _foundry_complete(system_prompt: str, user_message: str) -> str:
     """Single-shot LLM inference via the Foundry Local web service.
 
-    Uses streaming to be NPU-safe (NPU models return HTTP 500 on
-    non-streaming requests). Returns the accumulated text response.
+    Uses streaming because that's what worked when this code was written.
+    The non-streaming path also works for CPU/GPU models (verified
+    2026-04-26); NPU non-streaming is unverified. The AG-UI agent path
+    uses a non-streaming wrapper (see ``_NormalizingChatClient`` in
+    agent.py) to work around Foundry-Local#422; this helper is independent
+    of that and stays on streaming until we have time to switch to the
+    same wrapped pattern.
+
+    Returns the accumulated text response.
     """
     if not agent_mod.model_ready:
         raise HTTPException(status_code=503, detail="Model not ready")
@@ -1073,8 +1243,23 @@ async def switch_model(body: SwitchRequest) -> StreamingResponse:
         def send(type_: str, payload: dict = {}):
             return f"data: {json.dumps({'type': type_, **payload})}\n\n"
 
-        async def _commit_switch(target_model: Any):
-            """Atomically update all module-level state and rebuild the agent."""
+        async def _commit_switch(target_model: Any) -> str | None:
+            """Atomically update all module-level state and rebuild the agent.
+
+            Runs an inference smoke test against the new model BEFORE
+            declaring success. If the smoke test fails, all module state is
+            rolled back so /api/health doesn't lie about model_ready.
+
+            Returns:
+                Error message if the smoke test failed, or None on success.
+            """
+            # Snapshot prior state for rollback on smoke-test failure
+            prev_model_id = agent_mod.MODEL_ID
+            prev_model_alias = agent_mod.MODEL_ALIAS
+            prev_model_context = dict(agent_mod.MODEL_CONTEXT)
+            prev_model_ready = agent_mod.model_ready
+            prev_startup_error = agent_mod.startup_error
+
             agent_mod.MODEL_ID = target_model.id
             agent_mod.MODEL_ALIAS = target_model.alias
             agent_mod._update_model_context(target_model)
@@ -1083,9 +1268,41 @@ async def switch_model(body: SwitchRequest) -> StreamingResponse:
             # Ensure the web service is running (may not be if default model
             # failed at startup).
             await agent_mod._ensure_web_service()
+
+            # ── Smoke test ─────────────────────────────────────────────
+            # Verify the model can actually serve a non-streaming inference
+            # request before declaring it ready. Catches Foundry-side
+            # failures (model loaded but ONNX session broken, EP missing,
+            # context-length issues, etc.) at switch time rather than at
+            # chat time.
+            smoke_error = await _smoke_test_inference(target_model.id)
+            if smoke_error:
+                # Roll back module state so /api/health reflects reality
+                agent_mod.MODEL_ID = prev_model_id
+                agent_mod.MODEL_ALIAS = prev_model_alias
+                agent_mod.MODEL_CONTEXT.clear()
+                agent_mod.MODEL_CONTEXT.update(prev_model_context)
+                agent_mod.model_ready = prev_model_ready
+                agent_mod.startup_error = prev_startup_error
+                logger.warning(
+                    "Smoke test failed for %s; rolled back to %s",
+                    target_model.id, prev_model_id or "(none)",
+                )
+                return smoke_error
+
             agent_mod.model_ready = True
             agent_mod.startup_error = None
             agent_mod.build_agent()
+
+            # Persist as full model ID, not alias. Alias persistence would
+            # re-trigger device-variant selection on restart and could bounce
+            # us back onto a broken NPU model. Locking in the exact variant
+            # ensures the same model loads on next startup.
+            try:
+                app_config.set("preferredModel", target_model.id)
+            except Exception as exc:  # config write should not fail the switch
+                logger.warning("Failed to persist preferredModel: %s", exc)
+            return None
 
         # ── Acquire switch lock ────────────────────────────────────────────────
         lock = app_config.get_switch_lock()
@@ -1217,14 +1434,37 @@ async def switch_model(body: SwitchRequest) -> StreamingResponse:
             except Exception as exc:
                 span.set_status(trace.StatusCode.ERROR, f"Load failed: {exc}")
                 span.record_exception(exc)
+                # Clear preference if it was pointing at this broken model so
+                # the user isn't stuck loading the same failing model on next
+                # restart.
+                _clear_preferred_if_matches(model_id)
                 yield send("error", {"message": f"Load failed: {exc}"})
                 return
 
-            await _commit_switch(target_model)
+            commit_error = await _commit_switch(target_model)
+            if commit_error:
+                span.set_status(trace.StatusCode.ERROR, commit_error)
+                _clear_preferred_if_matches(model_id)
+                yield send("error", {"message": commit_error})
+                return
             span.add_event("switch.done", {"alias": entry["alias"]})
             yield send("done", {"modelId": model_id, "alias": entry["alias"]})
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
+def _clear_preferred_if_matches(model_id: str) -> None:
+    """Clear preferredModel if it currently equals ``model_id``.
+
+    Called after a failed switch so the user isn't stuck attempting to
+    load the same broken model on every restart.
+    """
+    try:
+        if app_config.preferred_model() == model_id:
+            app_config.set("preferredModel", None)
+            logger.info("Cleared stale preferredModel=%s", model_id)
+    except Exception as exc:
+        logger.warning("Failed to clear preferredModel: %s", exc)
 
 
 # ── Todo CRUD ─────────────────────────────────────────────────────────────────

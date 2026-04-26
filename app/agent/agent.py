@@ -60,6 +60,18 @@ def _update_model_context(model: Any) -> None:
     )
 
 
+def _model_ep(model: Any) -> str:
+    """Return the execution provider a model requires, e.g.
+    ``CPUExecutionProvider`` or ``VitisAIExecutionProvider``.
+
+    Returns the empty string if the EP can't be determined; callers should
+    treat that as "skip this model" since they can't know if it's safe.
+    """
+    info = getattr(model, "info", None)
+    runtime = getattr(info, "runtime", None) if info else None
+    return getattr(runtime, "execution_provider", "") if runtime else ""
+
+
 # ── Initialization ────────────────────────────────────────────────────────────
 
 async def _ensure_web_service() -> None:
@@ -109,8 +121,20 @@ async def initialize_foundry(
 
         # Download and register hardware execution providers (VITIS/QNN for NPU,
         # CUDA/TensorRT for GPU, etc.). This is a no-op when already registered.
+        # Capture the result so we can filter cached models below.
         logger.info("Registering execution providers…")
         await asyncio.to_thread(manager.download_and_register_eps)
+        # Build the set of EPs that are actually usable. CPU and WebGPU are
+        # always built in. discover_eps returns explicit EPs (VitisAI, QNN,
+        # MIGraphX, TensorRT, etc.) with their current registration state.
+        registered_eps = {"CPUExecutionProvider", "WebGpuExecutionProvider"}
+        try:
+            for ep in await asyncio.to_thread(manager.discover_eps):
+                if ep.is_registered:
+                    registered_eps.add(ep.name)
+        except Exception as exc:
+            logger.warning("Failed to enumerate execution providers: %s", exc)
+        logger.info("Registered execution providers: %s", sorted(registered_eps))
         foundry_ready = True
         logger.info("Foundry Local SDK initialized")
 
@@ -140,13 +164,43 @@ async def initialize_foundry(
                     pass
 
         if model is None:
-            # No explicit preference — pick the best cached (downloaded) model.
+            # No explicit preference — pick the best cached (downloaded) model
+            # whose execution provider is actually registered. Without this
+            # filter, cached[0] can land on an NPU model when the VitisAI EP
+            # failed to register, leaving the agent unusable until manual
+            # intervention. EP filter is a necessary first cut; the smoke
+            # test in /api/models/switch is the real readiness check.
             cached = await asyncio.to_thread(
                 lambda: list(manager.catalog.get_cached_models())
             )
-            if cached:
-                model = cached[0]
-                logger.info("Auto-selected cached model: %s", model.alias)
+            compatible = [
+                m for m in cached
+                if _model_ep(m) in registered_eps
+            ]
+            if compatible:
+                model = compatible[0]
+                logger.info(
+                    "Auto-selected cached model: %s (ep=%s)",
+                    model.alias, _model_ep(model),
+                )
+                if len(compatible) < len(cached):
+                    skipped = [m.alias for m in cached if m not in compatible]
+                    logger.info(
+                        "Skipped %d cached model(s) with unregistered EPs: %s",
+                        len(skipped), skipped,
+                    )
+            elif cached:
+                # Cached models exist but none are EP-compatible — log a
+                # clear warning so the user knows to restore the EP (e.g.
+                # via Foundry-Local#558 PowerShell cleanup) or download a
+                # CPU/GPU model.
+                ep_summary = sorted({_model_ep(m) for m in cached})
+                raise RuntimeError(
+                    f"No cached models compatible with registered EPs "
+                    f"{sorted(registered_eps)}. Cached models require: {ep_summary}. "
+                    "Either restore the missing execution provider or download "
+                    "a CPU/GPU model variant."
+                )
             else:
                 raise RuntimeError(
                     "No cached models available. Download a model first: "
@@ -229,6 +283,18 @@ class _NormalizingChatClient(OpenAIChatCompletionClient):
 
     For models that already return native ``tool_calls`` the XML regex won't
     match, making this a transparent no-op.
+
+    **Known limitation: NPU models often crash Foundry on agent payloads.**
+    Foundry NPU runtimes (VitisAI, QNN) crash when handed a request with the
+    full system prompt + 10-tool definition list — see
+    https://github.com/microsoft/Foundry-Local/issues/506. The crash kills
+    Foundry's HTTP server, which in turn drops our connection and causes
+    httpx.RemoteProtocolError. The `_smoke_test_inference` in main.py probes
+    this BEFORE declaring a model switch successful, using the exact same
+    payload shape (full instructions + ALL_TOOLS). NPU models that can't
+    handle the agent payload get rolled back at switch time with a clear
+    error message instead of silently dying on the first chat. CPU and GPU
+    models are unaffected.
     """
 
     def _parse_tool_calls_from_openai(self, choice):  # type: ignore[override]
@@ -267,6 +333,164 @@ class _NormalizingChatClient(OpenAIChatCompletionClient):
             stripped = _TOOL_CALL_RE.sub("", content).strip()
             return Content.from_text(text=stripped, raw_representation=choice) if stripped else None
         return super()._parse_text_from_openai(choice)
+
+    def _inner_get_response(  # type: ignore[override]
+        self,
+        *,
+        messages,
+        options,
+        stream: bool = False,
+        **kwargs,
+    ):
+        """Translate streaming requests into a non-streaming Foundry call.
+
+        Foundry Local's ``/v1/chat/completions`` with ``stream=true`` reliably
+        drops the connection mid-response when called from the long-running
+        FastAPI/uvicorn server (httpx surfaces this as
+        ``RemoteProtocolError: peer closed connection``). The non-streaming
+        path works perfectly. We can't disable streaming at the AG-UI layer
+        (``run_agent_stream`` always passes ``stream=True``), so we translate
+        it here: when streaming is requested, we call Foundry with
+        ``stream=False``, then synthesize a single ``ChatCompletionChunk``
+        that wraps the full response and feed it through the parent's
+        ``_parse_response_update_from_openai`` so the rest of the framework
+        sees a normal-looking stream of one chunk.
+
+        Trade-off: the user sees the response appear all at once after
+        generation completes, instead of token-by-token. This is acceptable
+        for a tool-calling agent (where most "tokens" are JSON arguments
+        that aren't shown to the user anyway) and unblocks all chat
+        functionality.
+
+        Couples us to ``agent_framework_openai._chat_completion_client``
+        internals (``_inner_get_response``, ``_parse_response_update_from_openai``,
+        ``_build_response_stream``). Pin the framework version. Revisit when
+        Foundry-Local#422 is fixed and remove this override if so.
+        """
+        # Strip the AG-UI auto-injected state-context system message before
+        # ANY downstream processing. AG-UI's _create_state_context_message
+        # dumps the full client state dict (in our case ~75k chars of todo
+        # JSON) as a system message on every turn. The model already has a
+        # compact view via _build_instructions(), and tools mutate state
+        # directly, so the injection is redundant — and on small-context
+        # models (qwen2.5-coder-0.5b: 32k tokens) it blows the context
+        # window and Foundry returns HTTP 500.
+        messages = [m for m in messages if not _is_agui_state_context(m)]
+
+        if not stream:
+            return super()._inner_get_response(
+                messages=messages, options=options, stream=False, **kwargs
+            )
+
+        # Streaming requested — fold to non-streaming and synthesize one
+        # chunk so the rest of agent-framework sees what it expects.
+        # Trade-off: we bypass the parent's ChatTelemetryLayer wrapping
+        # (chat <model> spans), so AI response telemetry is reduced for
+        # this path. The lower-level FunctionInvocationLayer telemetry
+        # (tool execution spans) still fires. Future work: wrap our raw
+        # call in the same span so the nerd panel sees AI events too.
+        async def _fake_stream():
+            options_dict = self._prepare_options(messages, options)
+            options_dict.pop("stream_options", None)
+            try:
+                completion = await self.client.chat.completions.create(
+                    stream=False, **options_dict
+                )
+            except Exception as ex:
+                from agent_framework.exceptions import ChatClientException
+                if isinstance(ex, ChatClientException):
+                    raise
+                raise ChatClientException(
+                    f"{type(self)} service failed to complete the prompt: {ex}",
+                    inner_exception=ex,
+                ) from ex
+            chunk = _completion_to_chunk(completion)
+            yield self._parse_response_update_from_openai(chunk)
+
+        return self._build_response_stream(
+            _fake_stream(), response_format=options.get("response_format")
+        )
+
+
+def _is_agui_state_context(message) -> bool:
+    """Detect AG-UI's auto-injected ``Current state of the application:``
+    system message so we can strip it before sending to Foundry.
+
+    Belt-and-suspenders: the prefix is unique to AG-UI's
+    ``_create_state_context_message`` helper so the prefix check alone is
+    very unlikely to false-positive. We also require the message be
+    suspiciously large (> 1 KB) to make absolutely sure we never strip a
+    legitimate user-or-app-authored system message that happens to start
+    with the same words. AG-UI's real injection is typically 75k+ chars
+    (full state JSON), so 1 KB is a comfortably low bar.
+    """
+    if getattr(message, "role", None) != "system":
+        return False
+    for content in getattr(message, "contents", None) or []:
+        text = getattr(content, "text", None)
+        if (
+            isinstance(text, str)
+            and text.startswith("Current state of the application:")
+            and len(text) > 1024
+        ):
+            return True
+    return False
+
+
+def _completion_to_chunk(completion):
+    """Convert a non-streaming ``ChatCompletion`` to a ``ChatCompletionChunk``.
+
+    The chunk preserves all fields the agent-framework parser cares about:
+    role, content, tool_calls, finish_reason, and usage. Used by
+    ``_NormalizingChatClient._inner_get_response`` to make a non-streaming
+    response look like a one-event stream.
+    """
+    from openai.types.chat import ChatCompletionChunk
+    from openai.types.chat.chat_completion_chunk import (
+        Choice,
+        ChoiceDelta,
+        ChoiceDeltaToolCall,
+        ChoiceDeltaToolCallFunction,
+    )
+
+    chunk_choices = []
+    for choice in completion.choices:
+        msg = choice.message
+        delta_tool_calls = None
+        if msg.tool_calls:
+            delta_tool_calls = [
+                ChoiceDeltaToolCall(
+                    index=i,
+                    id=tc.id,
+                    type=tc.type,
+                    function=ChoiceDeltaToolCallFunction(
+                        name=tc.function.name,
+                        arguments=tc.function.arguments,
+                    ),
+                )
+                for i, tc in enumerate(msg.tool_calls)
+            ]
+        delta = ChoiceDelta(
+            role=msg.role,
+            content=msg.content,
+            tool_calls=delta_tool_calls,
+        )
+        chunk_choices.append(
+            Choice(
+                index=choice.index,
+                delta=delta,
+                finish_reason=choice.finish_reason,
+            )
+        )
+
+    return ChatCompletionChunk(
+        id=completion.id,
+        choices=chunk_choices,
+        created=completion.created,
+        model=completion.model,
+        object="chat.completion.chunk",
+        usage=completion.usage,
+    )
 
 
 # Singleton agent instances — reassigned on model switch.
