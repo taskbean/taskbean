@@ -1533,8 +1533,29 @@ header {
   .composer-icon-btn.recording { animation: none; outline: 2px solid var(--red); outline-offset: 1px; }
 }
 @keyframes pulse { 50% { opacity: .7; } }
-.composer-model-pill { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 11px; font-family: inherit; transition: all .15s; white-space: nowrap; }
+.composer-model-pill { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 11px; font-family: inherit; transition: all .15s; white-space: nowrap; max-width: 240px; }
 .composer-model-pill:hover { background: var(--surface2); color: var(--text); border-color: var(--text); }
+.composer-model-pill #composerModelLabel { overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+/* Loading / error states surfaced right where the user picked the model.
+   Loading: warm pulsing dot + soft accent ring around the pill.
+   Error:   muted red tint with an alert glyph; click reopens picker. */
+.composer-model-status { display: none; flex-shrink: 0; width: 8px; height: 8px; align-items: center; justify-content: center; }
+.composer-model-status::before { content: ''; display: block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.composer-model-pill[data-status="loading"] { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 55%, transparent); background: color-mix(in oklch, var(--accent) 8%, var(--surface)); box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 40%, transparent); animation: composerPillPulse 1.6s ease-in-out infinite; }
+.composer-model-pill[data-status="loading"] .composer-model-status { display: inline-flex; animation: composerDotBlink 1s ease-in-out infinite; }
+.composer-model-pill[data-status="error"] { color: var(--red); border-color: color-mix(in oklch, var(--red) 50%, transparent); background: color-mix(in oklch, var(--red) 9%, var(--surface)); }
+.composer-model-pill[data-status="error"]:hover { background: color-mix(in oklch, var(--red) 14%, var(--surface)); }
+.composer-model-pill[data-status="error"] .composer-model-status { display: inline-flex; }
+.composer-model-pill[data-status="error"] .composer-model-status::before { content: ''; width: 0; height: 0; border-radius: 0; background: transparent; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 7px solid currentColor; }
+@keyframes composerPillPulse {
+  0%,100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 35%, transparent); }
+  50%     { box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent) 0%,  transparent); }
+}
+@keyframes composerDotBlink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  .composer-model-pill[data-status="loading"] { animation: none; }
+  .composer-model-pill[data-status="loading"] .composer-model-status { animation: none; }
+}
 .textarea-wrap { position: relative; }
 .textarea-wrap .drop-hint { display: none; position: absolute; inset: 0; background: var(--green-soft); border: 2px dashed var(--green); border-radius: 10px; pointer-events: none; align-items: center; justify-content: center; font-size: 12px; color: var(--green); }
 .textarea-wrap.dragging .drop-hint { display: flex; }
@@ -2681,6 +2702,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
           </div>
           <div class="input-bar-right">
             <button class="composer-model-pill" id="composerModelPill" onclick="toggleQuickModelPicker()" title="Switch model">
+              <span class="composer-model-status" id="composerModelStatus" aria-hidden="true"></span>
               <span id="composerModelLabel">Model</span>
               <i data-lucide="chevron-up" class="icon-sm" style="opacity:.4;width:10px;height:10px"></i>
             </button>
@@ -7382,6 +7404,10 @@ function toggleQuickModelPicker() {
 
 async function openQuickModelPicker() {
     _quickModelOpen = true;
+    // Opening the picker is the user's "retry" affordance after a failed
+    // switch — clear the error tint so the next selection starts fresh.
+    const _pill = document.getElementById('composerModelPill');
+    if (_pill?.dataset.status === 'error') setComposerModelStatus(null);
     const pop = document.getElementById('quickModelPopover');
     const anchor = document.getElementById('composerModelPill');
     if (anchor) {
@@ -7441,12 +7467,47 @@ document.addEventListener('click', (e) => {
 
 // Sync composer model label with status bar model label
 function syncComposerModelLabel() {
-    const statusLabel = document.getElementById('modelLabel');
     const composerLabel = document.getElementById('composerModelLabel');
-    if (statusLabel && composerLabel) {
-        // Status bar already shows the clean alias — just mirror it
+    const composerPill  = document.getElementById('composerModelPill');
+    if (!composerLabel) return;
+    // Don't clobber the loading/error message displayed during a switch.
+    if (composerPill?.dataset.status) return;
+    const statusLabel = document.getElementById('modelLabel');
+    if (statusLabel) {
         composerLabel.textContent = statusLabel.textContent?.trim() || 'Model';
     }
+}
+
+// Surface model-switch progress / failure on the composer pill itself —
+// otherwise the only feedback is buried in the chat feed and the picker
+// modal, which is too subtle when a switch takes 30+ seconds.
+//   state:    'loading' | 'error' | null  (null = idle)
+//   message:  short label shown inside the pill (full text in tooltip)
+//   tooltip:  optional override for the title attribute
+function setComposerModelStatus(state, message, tooltip) {
+    const pill = document.getElementById('composerModelPill');
+    const lbl  = document.getElementById('composerModelLabel');
+    if (!pill || !lbl) return;
+    if (state === 'loading' || state === 'error') {
+        pill.dataset.status = state;
+        if (message) lbl.textContent = message;
+        pill.title = tooltip || message ||
+            (state === 'loading' ? 'Loading model…' : 'Model switch failed — click to pick another');
+    } else {
+        delete pill.dataset.status;
+        pill.title = 'Switch model';
+        // Re-pull the live alias from the status-bar mirror.
+        syncComposerModelLabel();
+    }
+}
+
+// Resolve the friendliest short label we can for an in-flight model switch.
+function _shortModelLabel(modelId) {
+    const found = (typeof _allModels !== 'undefined' ? _allModels : [])
+        .find(m => m.modelId === modelId);
+    if (found?.alias) return found.alias;
+    // Strip foundry suffix like ":4" and trailing "-generic-cpu/-generic-npu".
+    return (modelId || '').split(':')[0].replace(/-generic-(cpu|gpu|npu)$/, '');
 }
 // Run sync periodically and on mutations
 setInterval(syncComposerModelLabel, 2000);
@@ -10766,6 +10827,7 @@ async function switchModel(modelId) {
     applyFiltersAndRender();
 
     _updateProgressBar(modelId, { message: 'Connecting…' });
+    setComposerModelStatus('loading', _shortModelLabel(modelId), 'Connecting to Foundry Local…');
 
     try {
         const res = await fetch('/api/models/switch', {
@@ -10791,10 +10853,13 @@ async function switchModel(modelId) {
                 try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
                 if (evt.type === 'progress') {
                     _updateProgressBar(modelId, { message: evt.message, pct: evt.pct, fileSizeGb: evt.fileSizeGb });
+                    setComposerModelStatus('loading', _shortModelLabel(modelId),
+                        evt.pct != null ? `${evt.message} · ${evt.pct.toFixed(0)}%` : evt.message);
                 } else if (evt.type === 'done') {
                     const lbl = document.getElementById('modelLabel');
                     if (lbl) lbl.textContent = evt.alias || evt.modelId;
                     _updateModelDeviceIcon(evt.modelId || modelId);
+                    setComposerModelStatus(null);
                     addChat('info', 'cpu', `Switched to <strong>${esc(evt.alias || evt.modelId)}</strong>.`);
                 } else if (evt.type === 'recommendation') {
                     // Model isn't downloaded locally — offer to download it
@@ -10802,17 +10867,21 @@ async function switchModel(modelId) {
                     const gb = rm.fileSizeGb ? ` (${rm.fileSizeGb} GB)` : '';
                     const alias = rm.alias || rm.modelId || modelId;
                     _updateProgressBar(modelId, { message: `Not downloaded${gb} — click Download & Use below.` });
+                    setComposerModelStatus('error', _shortModelLabel(modelId),
+                        `${alias} isn't downloaded${gb} — click to pick another or download.`);
                     const safeId = esc(rm.modelId || modelId);
                     addChat('info', 'download',
                         `<strong>${esc(alias)}</strong>${gb} is not downloaded locally.<br>` +
                         `<button class="inline-action-btn" onclick="switchModelForced('${safeId}');closeModelPicker()">⬇ Download &amp; Use</button>`
                     );
                 } else if (evt.type === 'error') {
+                    setComposerModelStatus('error', _shortModelLabel(modelId), `Switch failed: ${evt.message}`);
                     addChat('error-msg', 'alert-circle', `Model switch failed: ${esc(evt.message)}`);
                 }
             }
         }
     } catch (err) {
+        setComposerModelStatus('error', _shortModelLabel(modelId), `Switch failed: ${err.message}`);
         addChat('error-msg', 'alert-circle', `Model switch failed: ${esc(err.message)}`);
     } finally {
         _switchingModelId = null;
@@ -10826,6 +10895,7 @@ async function switchModelForced(modelId) {
     _switchingModelId = modelId;
     applyFiltersAndRender();
     addChat('info', 'download', `Downloading <strong>${esc(modelId.split(':')[0])}</strong>… this may take a few minutes.`);
+    setComposerModelStatus('loading', _shortModelLabel(modelId), `Downloading ${_shortModelLabel(modelId)}…`);
     try {
         const res = await fetch('/api/models/switch', {
             method: 'POST',
@@ -10848,17 +10918,22 @@ async function switchModelForced(modelId) {
                 try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
                 if (evt.type === 'progress' || evt.type === 'download_progress') {
                     _updateProgressBar(modelId, { message: evt.message, pct: evt.pct, fileSizeGb: evt.fileSizeGb });
+                    setComposerModelStatus('loading', _shortModelLabel(modelId),
+                        evt.pct != null ? `${evt.message} · ${evt.pct.toFixed(0)}%` : evt.message);
                 } else if (evt.type === 'done') {
                     const lbl = document.getElementById('modelLabel');
                     if (lbl) lbl.textContent = evt.alias || evt.modelId;
                     _updateModelDeviceIcon(evt.modelId || modelId);
+                    setComposerModelStatus(null);
                     addChat('info', 'check-circle', `Downloaded &amp; switched to <strong>${esc(evt.alias || evt.modelId)}</strong>.`);
                 } else if (evt.type === 'error') {
+                    setComposerModelStatus('error', _shortModelLabel(modelId), `Download failed: ${evt.message}`);
                     addChat('error-msg', 'alert-circle', `Download failed: ${esc(evt.message)}`);
                 }
             }
         }
     } catch (err) {
+        setComposerModelStatus('error', _shortModelLabel(modelId), `Download failed: ${err.message}`);
         addChat('error-msg', 'alert-circle', `Download failed: ${esc(err.message)}`);
     } finally {
         _switchingModelId = null;
