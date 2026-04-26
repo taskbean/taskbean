@@ -293,3 +293,22 @@ Only **metadata** (session ids, timestamps, model/provider, cwd, git branch) and
 ### `bean report`
 
 Reports now include a `## Usage` section (Markdown) / `usage` key (JSON) with per-agent sessions / turns / tokens / tool calls.
+
+## Playwright MCP (browser testing)
+
+The project has a Playwright MCP server configured in `.mcp.json` using `--extension` mode, which connects to an already-running Microsoft Edge instance via the [Playwright MCP Bridge extension](https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm). This lets you interact with the app at `http://localhost:8275` using your real browser state.
+
+### Workflow
+
+1. **Always snapshot before acting.** `browser_snapshot` returns an accessibility tree with `ref` identifiers. Use these refs in `browser_click`, `browser_type`, `browser_hover`, etc. Never guess element selectors.
+2. **Snapshot after navigation too.** After `browser_navigate`, take a snapshot to confirm the page loaded before interacting.
+3. **Snapshot → act → snapshot.** After each meaningful interaction, snapshot again to verify the result and get fresh refs.
+4. **Never use screenshots for element targeting.** `browser_take_screenshot` is for visual verification only — it does not provide actionable refs. The snapshot tool description says: *"this is better than screenshot."*
+5. **Use `element` descriptions for clarity.** When calling action tools, fill in the `element` parameter with a human-readable description (e.g., "the Send button") alongside the `ref`.
+
+### App-specific notes
+
+- The app runs on **`http://localhost:8275`** — the Python backend must be running first (`cd app/agent && python main.py`).
+- Chat is submitted via **Enter key** on the `#chatInput` textarea — there is no submit button. Use `browser_press_key` with `Enter` after typing.
+- The app has a **service worker** (`sw.js`). If it interferes with testing, add `--block-service-workers` to the MCP server args.
+- The frontend is a **single-file SPA** (`public/index.html`, ~7900 lines). Snapshots may be large — use the `depth` parameter to limit the tree when you only need top-level structure.
