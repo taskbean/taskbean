@@ -27,6 +27,10 @@ async def test_health_ready(client: httpx.AsyncClient) -> None:
     assert data["foundryReady"] is True,  f"foundryReady is False — startupError: {data.get('startupError')}"
     assert data["modelReady"]   is True,  "modelReady is False after startup wait"
     assert data["model"],                 "model field is empty"
+    # Friendly alias + execution device for the composer pill / status bar.
+    assert data["modelAlias"], "modelAlias should be populated when a model is loaded"
+    assert data["modelDevice"] in ("CPU", "GPU", "NPU"), \
+        f"modelDevice must be one of CPU/GPU/NPU, got {data['modelDevice']!r}"
     # Whisper-tiny is lazy-loaded only when the user picks the Whisper engine.
     # The status bar uses these fields to decide whether to surface its
     # device chip; default state (before any voice input) is unloaded.

@@ -1533,9 +1533,13 @@ header {
   .composer-icon-btn.recording { animation: none; outline: 2px solid var(--red); outline-offset: 1px; }
 }
 @keyframes pulse { 50% { opacity: .7; } }
-.composer-model-pill { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 11px; font-family: inherit; transition: all .15s; white-space: nowrap; max-width: 240px; }
+.composer-model-pill { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 11px; font-family: inherit; transition: all .15s; white-space: nowrap; max-width: 240px; }
 .composer-model-pill:hover { background: var(--surface2); color: var(--text); border-color: var(--text); }
-.composer-model-pill #composerModelLabel { overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.composer-model-pill #composerModelLabel { overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+/* Device tag — same visual grammar as the picker dropdown's
+   .quick-model-device so the pill reads as the picker's "selected row". */
+.composer-model-device { font-size: 9px; letter-spacing: .02em; color: var(--muted); background: var(--surface2); padding: 1px 5px; border-radius: 4px; flex-shrink: 0; text-transform: uppercase; }
+.composer-model-pill[data-status] .composer-model-device { display: none; }
 /* Loading / error states surfaced right where the user picked the model.
    Loading: warm pulsing dot + soft accent ring around the pill.
    Error:   muted red tint with an alert glyph; click reopens picker. */
@@ -2705,6 +2709,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
             <button class="composer-model-pill" id="composerModelPill" onclick="toggleQuickModelPicker()" title="Switch model">
               <span class="composer-model-status" id="composerModelStatus" aria-hidden="true"></span>
               <span id="composerModelLabel">Model</span>
+              <span class="composer-model-device" id="composerModelDevice" aria-hidden="true"></span>
               <i data-lucide="chevron-up" class="icon-sm" style="opacity:.4;width:10px;height:10px"></i>
             </button>
             <div style="display:flex;align-items:center;position:relative">
@@ -7466,16 +7471,63 @@ document.addEventListener('click', (e) => {
     if (_quickModelOpen && !e.target.closest?.('.quick-model-popover') && !e.target.closest?.('#composerModelPill')) closeQuickModelPicker();
 });
 
-// Sync composer model label with status bar model label
+// Display state for the composer model pill: friendly alias + device tag.
+// IMPORTANT: this is *display only*. The full Foundry model id (e.g.
+// "qwen3-0.6b-generic-cpu:4") lives in `agent_mod.MODEL_ID` server-side
+// and is the only thing sent in the API payload. Picker click handlers
+// pass `m.modelId` (the full id) to switchModel(), so changes here can't
+// break completion. We never derive a model id from the pill's textContent.
+function _setComposerModelDisplay({ alias, device, modelId } = {}) {
+    const lbl = document.getElementById('composerModelLabel');
+    const dev = document.getElementById('composerModelDevice');
+    const pill = document.getElementById('composerModelPill');
+    if (!lbl) return;
+    // Don't trample the loading/error message during a switch.
+    if (pill?.dataset.status) return;
+
+    // Resolve alias: prefer explicit, then look up in cached catalog by id,
+    // then strip the foundry suffix as a last resort.
+    let resolvedAlias = (alias && alias.trim()) || null;
+    if (!resolvedAlias && modelId) {
+        const found = (typeof _allModels !== 'undefined' ? _allModels : [])
+            .find(m => m.modelId === modelId);
+        resolvedAlias = found?.alias || _stripModelSuffix(modelId);
+    }
+    lbl.textContent = resolvedAlias || 'Model';
+
+    // Resolve device — prefer explicit, then catalog lookup, then infer from id.
+    let resolvedDevice = device || null;
+    if (!resolvedDevice && modelId) {
+        const found = (typeof _allModels !== 'undefined' ? _allModels : [])
+            .find(m => m.modelId === modelId);
+        resolvedDevice = found?.device || _inferDeviceFromModelId(modelId);
+    }
+    if (dev) dev.textContent = (resolvedDevice || '').toUpperCase();
+}
+
+// Strip "-generic-{cpu,gpu,npu}" tail and ":N" suffix to recover a vanity
+// alias when the catalog hasn't been loaded yet.
+function _stripModelSuffix(modelId) {
+    return (modelId || '').split(':')[0].replace(/-generic-(cpu|gpu|npu)$/i, '').replace(/-vitis-npu$/i, '');
+}
+
+// Sync composer model label with status bar model label.
+// Fallback path for events that don't carry alias/device explicitly —
+// derives them from whatever the status-bar label currently shows.
 function syncComposerModelLabel() {
-    const composerLabel = document.getElementById('composerModelLabel');
-    const composerPill  = document.getElementById('composerModelPill');
-    if (!composerLabel) return;
-    // Don't clobber the loading/error message displayed during a switch.
+    const composerPill = document.getElementById('composerModelPill');
     if (composerPill?.dataset.status) return;
     const statusLabel = document.getElementById('modelLabel');
-    if (statusLabel) {
-        composerLabel.textContent = statusLabel.textContent?.trim() || 'Model';
+    const raw = statusLabel?.textContent?.trim();
+    if (!raw) return;
+    // The status bar label may carry either an alias ("qwen3-0.6b") or a
+    // full id ("qwen3-0.6b-generic-cpu:4"). Treat anything containing
+    // "-generic-" or ":" as a full id and derive both pieces.
+    const looksFull = /-generic-(cpu|gpu|npu)|:\d/i.test(raw);
+    if (looksFull) {
+        _setComposerModelDisplay({ modelId: raw });
+    } else {
+        _setComposerModelDisplay({ alias: raw });
     }
 }
 
@@ -7936,12 +7988,20 @@ function updateStatusBarHealth(ev) {
     }
 
     if (ev.modelAlias || ev.model) {
-        // #chipModel itself is hidden in the status bar (the model alias is
-        // already shown in the composer pill), but #modelLabel must keep its
-        // text up-to-date — syncComposerModelLabel mirrors it into the pill.
+        // #chipModel is hidden in the status bar (the alias is shown in the
+        // composer pill instead). We keep #modelLabel populated so the
+        // syncComposerModelLabel fallback still works for any code path
+        // that doesn't go through _setComposerModelDisplay directly.
         const modelEl = document.getElementById('modelLabel');
         if (modelEl) modelEl.textContent = ev.modelAlias || ev.model;
         _updateModelDeviceIcon(ev.model || '');
+        // Drive the composer pill's friendly alias + device tag from the
+        // server-supplied health snapshot (cold start has no other source).
+        _setComposerModelDisplay({
+            alias: ev.modelAlias,
+            device: ev.modelDevice,
+            modelId: ev.model,
+        });
     }
 
     // Whisper load state drives an additional device chip when its
@@ -10864,6 +10924,7 @@ async function switchModel(modelId) {
                     const lbl = document.getElementById('modelLabel');
                     if (lbl) lbl.textContent = evt.alias || evt.modelId;
                     _updateModelDeviceIcon(evt.modelId || modelId);
+                    _setComposerModelDisplay({ alias: evt.alias, modelId: evt.modelId || modelId });
                     addChat('info', 'cpu', `Switched to <strong>${esc(evt.alias || evt.modelId)}</strong>.`);
                 } else if (evt.type === 'recommendation') {
                     // Model isn't downloaded locally — offer to download it
@@ -10931,6 +10992,7 @@ async function switchModelForced(modelId) {
                     const lbl = document.getElementById('modelLabel');
                     if (lbl) lbl.textContent = evt.alias || evt.modelId;
                     _updateModelDeviceIcon(evt.modelId || modelId);
+                    _setComposerModelDisplay({ alias: evt.alias, modelId: evt.modelId || modelId });
                     addChat('info', 'check-circle', `Downloaded &amp; switched to <strong>${esc(evt.alias || evt.modelId)}</strong>.`);
                 } else if (evt.type === 'error') {
                     setComposerModelStatus('error', _shortModelLabel(modelId), `Download failed: ${evt.message}`);
