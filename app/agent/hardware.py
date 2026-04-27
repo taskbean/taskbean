@@ -81,6 +81,11 @@ _WINML_NPU_PROVIDERS = {
 # Module-level handle for the Windows App SDK runtime so the Shutdown
 # object stays alive for the life of the process. Garbage-collecting it
 # would shut down the bootstrap and break subsequent catalog calls.
+# We deliberately never call shutdown explicitly: the bootstrap is
+# process-lifetime, and shutting it down during Python atexit could
+# deadlock if other PyWinRT objects are still alive. Letting the OS
+# clean up at process exit is the documented pattern for unpackaged
+# Python processes per PyWinRT community guidance.
 _winml_bootstrap = None
 
 
@@ -113,9 +118,12 @@ def _detect_npu_winml() -> Optional[NpuInfo]:
 
     try:
         # Bootstrap once per process and hold the shutdown handle —
-        # ON_PACKAGE_IDENTITY_NOOP lets unpackaged processes (like our
-        # plain python.exe) use the Windows App SDK without the MSI
-        # framework being explicitly registered.
+        # ON_PACKAGE_IDENTITY_NOOP is the documented option for
+        # unpackaged processes (plain python.exe): if no Windows App SDK
+        # framework package identity is found, fall back to runtime
+        # resolution rather than failing. Other options (the default,
+        # ON_NO_MATCH_SHOW_UI, ON_ERROR_FAIL_FAST) would either error
+        # out or prompt the user to install the WASDK MSI.
         if _winml_bootstrap is None:
             _winml_bootstrap = _bootstrap.initialize(
                 options=_bootstrap.InitializeOptions.ON_PACKAGE_IDENTITY_NOOP
@@ -126,6 +134,14 @@ def _detect_npu_winml() -> Optional[NpuInfo]:
         logger.warning("Windows ML catalog probe failed (%s: %s)", type(exc).__name__, exc)
         return None
 
+    # ExecutionProviderReadyState semantics per Microsoft Learn:
+    #   READY        = installed and registered with ONNX Runtime
+    #   NOT_READY    = installed but not yet registered (needs EnsureReadyAsync)
+    #   NOT_PRESENT  = not installed on the machine
+    # For "is this NPU on the machine?" detection we want READY OR
+    # NOT_READY — i.e. anything that isn't NOT_PRESENT — which matches
+    # the documented "FindAllProviders().Where(ReadyState != NotPresent)"
+    # idiom for installed-providers discovery.
     not_present = _winml.ExecutionProviderReadyState.NOT_PRESENT
     for p in providers:
         if p.ready_state == not_present:
@@ -268,12 +284,14 @@ def _detect_gpu_dxgi() -> list[GpuInfo]:
         logger.warning("CreateDXGIFactory failed (hr=0x%x)", hr & 0xFFFFFFFF)
         return []
 
-    # vtable: 0=QueryInterface 1=AddRef 2=Release 3..6=IDXGIObject methods
-    # 7=EnumAdapters (IDXGIFactory). IDXGIAdapter vtable: 7=EnumOutputs
-    # 8=GetDesc — but the first 7 are inherited from IDXGIObject so GetDesc
-    # is at vtable index 7 of IDXGIAdapter (not 8). DXGI ABI:
-    # IUnknown(0..2) + IDXGIObject(3..6) + IDXGIAdapter(7..9: EnumOutputs,
-    # GetDesc, CheckInterfaceSupport).
+    # vtable layout for IDXGIAdapter (and IDXGIFactory) per the COM ABI:
+    #   IUnknown(0..2):    QueryInterface, AddRef, Release
+    #   IDXGIObject(3..6): SetPrivateData, SetPrivateDataInterface,
+    #                       GetPrivateData, GetParent
+    #   IDXGIFactory(7..): EnumAdapters, ...
+    #   IDXGIAdapter(7..): EnumOutputs, GetDesc, CheckInterfaceSupport
+    # So GetDesc lives at v-table slot 8 of IDXGIAdapter (slot 7 is
+    # EnumOutputs). EnumAdapters is slot 7 of IDXGIFactory.
     def _vfn(this, idx, restype, argtypes):
         vtbl = ctypes.cast(this, ctypes.POINTER(ctypes.c_void_p))[0]
         addr = ctypes.cast(vtbl, ctypes.POINTER(ctypes.c_void_p))[idx]

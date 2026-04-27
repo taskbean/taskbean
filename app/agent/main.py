@@ -306,6 +306,13 @@ async def _metric_sampler() -> None:
 # ── NPU utilization sampler (background PDH polling) ─────────────────────────
 
 _npu_usage_percent: float = 0.0
+# PDH function calls are not documented as thread-safe
+# (https://learn.microsoft.com/en-us/windows/win32/perfctrs/thread-safety).
+# The sampler awaits asyncio.sleep(3) between iterations and each
+# _sample_npu_pdh call is well under 100 ms, so overlap is implausible —
+# but a module-level lock around the asyncio.to_thread call is cheap
+# insurance against future refactors that might add a second PDH caller.
+_pdh_lock: "asyncio.Lock | None" = None
 
 
 async def _npu_usage_sampler() -> None:
@@ -316,8 +323,15 @@ async def _npu_usage_sampler() -> None:
     implementation spawned ~1200 processes/hour). PDH counters are
     re-expanded each iteration so new process IDs (each Foundry-loaded model
     appears as a new pid_X instance) get picked up automatically.
+
+    Localization caveat: the counter path uses the English name "GPU Engine".
+    On non-English Windows installations (French "Moteur GPU", German
+    "GPU-Engine", etc.) ExpandCounterPath returns no matches and the
+    sampler silently reports 0%. pywin32 does not expose
+    PdhAddEnglishCounter; a future fix would resolve the localized name
+    via PdhLookupPerfNameByIndex (English index 1594 for GPU Engine).
     """
-    global _npu_usage_percent
+    global _npu_usage_percent, _pdh_lock
     # Wait for hardware detection to complete (lazy, runs on first /api/config)
     await asyncio.sleep(5)
     hw = hw_mod.detect_hardware()
@@ -331,13 +345,17 @@ async def _npu_usage_sampler() -> None:
         logger.warning("pywin32 not installed (%s) — NPU usage sampler disabled", exc)
         return
 
+    if _pdh_lock is None:
+        _pdh_lock = asyncio.Lock()
+
     luid = hw.npu.luid
     counter_filter = rf"\GPU Engine(pid_*_luid_{luid}*)\Utilization Percentage"
     logger.info("NPU usage sampler started (in-process PDH) for LUID %s", luid)
 
     while True:
         try:
-            _npu_usage_percent = await asyncio.to_thread(_sample_npu_pdh, win32pdh, counter_filter)
+            async with _pdh_lock:
+                _npu_usage_percent = await asyncio.to_thread(_sample_npu_pdh, win32pdh, counter_filter)
         except Exception as exc:
             logger.debug("NPU sampler iteration failed (%s: %s)", type(exc).__name__, exc)
             _npu_usage_percent = 0.0

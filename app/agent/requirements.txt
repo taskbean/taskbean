@@ -5,9 +5,14 @@
 # for the entire status-bar telemetry path; was previously transitive.
 psutil>=6.0,<8.0
 # pywin32 powers in-process WMI (Win32_VideoController name) and PDH
-# (NPU utilization counters) on Windows 11 24H2+. Pinned >=311 to get
-# past the DLL-load regression in versions 309-310 that still affects
-# users on 24H2 — see https://github.com/mhammond/pywin32/issues/2597.
+# (NPU utilization counters) on Windows 11 24H2+. Pinned >=311 because:
+#   - 309 and 310 had a DLL-load regression on Win 11 24H2 reported in
+#     mhammond/pywin32#2597 (original reporter on 310, build 26100.3775).
+#   - 311+ resolves it: empirically verified import of win32api/win32com/
+#     win32pdh on Win 11 24H2 build 26220+; zero new reports of #2597-style
+#     failures filed against 311 or 312.
+#   - Stay open-ended (not pinned ==308) so security fixes flow in. If a
+#     future regression shows up, narrow the upper bound here.
 pywin32>=311
 
 # Windows ML ExecutionProviderCatalog — vendor-agnostic NPU detection
@@ -17,8 +22,11 @@ pywin32>=311
 # Python sample: https://learn.microsoft.com/en-us/samples/microsoft/windowsappsdk-samples/windowsmlpython/
 # AMD's Ryzen AI Python sample uses the same pattern:
 # https://ryzenai.docs.amd.com/en/latest/winml/winml_ep.html
-wasdk-Microsoft.Windows.AI.MachineLearning
-wasdk-Microsoft.Windows.ApplicationModel.DynamicDependency.Bootstrap
+# Pinned to matching 1.8.x WASDK versions — both packages must come from
+# the same WASDK release for ABI compatibility between the catalog API
+# and the bootstrap runtime.
+wasdk-Microsoft.Windows.AI.MachineLearning==1.8.260317003
+wasdk-Microsoft.Windows.ApplicationModel.DynamicDependency.Bootstrap==1.8.260416003
 
 # ── Agent Framework + AG-UI ───────────────────────────────────────────────────
 # Versions are pinned because _NormalizingChatClient (in agent.py) overrides
