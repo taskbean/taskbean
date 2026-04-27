@@ -307,8 +307,16 @@ async def _metric_sampler() -> None:
 
 _npu_usage_percent: float = 0.0
 
+
 async def _npu_usage_sampler() -> None:
-    """Poll Windows PDH 'GPU Engine' counters filtered to NPU LUID every 3 seconds."""
+    """Sample Windows PDH 'GPU Engine' counters filtered to NPU LUID every 3 s.
+
+    Uses pywin32's in-process win32pdh bindings so each tick is microseconds
+    instead of the ~200-500 ms cost of spawning powershell.exe (the previous
+    implementation spawned ~1200 processes/hour). PDH counters are
+    re-expanded each iteration so new process IDs (each Foundry-loaded model
+    appears as a new pid_X instance) get picked up automatically.
+    """
     global _npu_usage_percent
     # Wait for hardware detection to complete (lazy, runs on first /api/config)
     await asyncio.sleep(5)
@@ -317,32 +325,76 @@ async def _npu_usage_sampler() -> None:
         logger.info("NPU LUID not available — NPU usage sampler disabled")
         return
 
+    try:
+        import win32pdh  # type: ignore[import-not-found]
+    except ImportError as exc:
+        logger.warning("pywin32 not installed (%s) — NPU usage sampler disabled", exc)
+        return
+
     luid = hw.npu.luid
     counter_filter = rf"\GPU Engine(pid_*_luid_{luid}*)\Utilization Percentage"
-    ps_cmd = (
-        f"(Get-Counter '{counter_filter}' -ErrorAction SilentlyContinue).CounterSamples "
-        f"| Measure-Object -Property CookedValue -Sum | Select-Object -ExpandProperty Sum"
-    )
-    logger.info("NPU usage sampler started for LUID %s", luid)
+    logger.info("NPU usage sampler started (in-process PDH) for LUID %s", luid)
 
     while True:
         try:
-            result = await asyncio.to_thread(
-                subprocess.run,
-                ["powershell", "-NoProfile", "-Command", ps_cmd],
-                capture_output=True, text=True, timeout=8,
-            )
-            if result.returncode == 0:
-                val = result.stdout.strip()
-                try:
-                    _npu_usage_percent = min(100.0, max(0.0, round(float(val), 1)))
-                except (ValueError, TypeError):
-                    _npu_usage_percent = 0.0
-            else:
-                _npu_usage_percent = 0.0
-        except Exception as e:
-            logger.debug("NPU sampler error: %s", e)
+            _npu_usage_percent = await asyncio.to_thread(_sample_npu_pdh, win32pdh, counter_filter)
+        except Exception as exc:
+            logger.debug("NPU sampler iteration failed (%s: %s)", type(exc).__name__, exc)
+            _npu_usage_percent = 0.0
         await asyncio.sleep(3)
+
+
+def _sample_npu_pdh(win32pdh, counter_filter: str) -> float:
+    """One PDH sampling iteration. Returns aggregate NPU utilization %.
+
+    Pure synchronous; called via asyncio.to_thread from _npu_usage_sampler.
+    Opens a fresh query each iteration so dynamic process IDs (Foundry
+    Local spawns a new process per loaded model) and engine-instance
+    changes are picked up without manual cache invalidation. PDH calls
+    are microseconds each, so the open/close-per-iteration cost is
+    negligible compared to the previous powershell.exe-spawn-per-iteration.
+    """
+    try:
+        paths = win32pdh.ExpandCounterPath(counter_filter)
+    except Exception:
+        paths = []
+    if not paths:
+        return 0.0
+
+    query = win32pdh.OpenQuery()
+    counters = []
+    try:
+        for p in paths:
+            try:
+                counters.append(win32pdh.AddCounter(query, p))
+            except Exception:
+                # Counter path may have disappeared between Expand and Add
+                # — typical for short-lived processes. Skip and continue.
+                pass
+        if not counters:
+            return 0.0
+        # Utilization Percentage is a rate counter — needs two samples
+        # to produce a value. CollectQueryData calls are microseconds.
+        win32pdh.CollectQueryData(query)
+        # ~50 ms is the conventional minimum for rate-counter delta sampling;
+        # we already sleep 3 s between iterations so this only adds delay
+        # within a single iteration's thread, not the asyncio loop.
+        time.sleep(0.05)
+        win32pdh.CollectQueryData(query)
+        total = 0.0
+        for c in counters:
+            try:
+                _, val = win32pdh.GetFormattedCounterValue(c, win32pdh.PDH_FMT_DOUBLE)
+                total += val
+            except Exception:
+                pass
+        return min(100.0, max(0.0, round(total, 1)))
+    finally:
+        for c in counters:
+            try: win32pdh.RemoveCounter(c)
+            except Exception: pass
+        try: win32pdh.CloseQuery(query)
+        except Exception: pass
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
