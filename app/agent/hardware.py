@@ -155,7 +155,15 @@ def _detect_ram() -> float:
     m = re.search(r"TotalVisibleMemorySize=(\d+)", out)
     if m:
         return int(m.group(1)) / (1024 * 1024)  # KB → GB
-    return 0.0
+    # wmic was removed in Windows 11 24H2+ (build 26100+). Fall back to
+    # psutil so the recommender doesn't see RAM=0 and refuse to load any
+    # CPU model. This keeps the static detector accurate even when the
+    # legacy CLI tool is gone.
+    try:
+        import psutil
+        return psutil.virtual_memory().total / (1024 ** 3)
+    except Exception:
+        return 0.0
 
 
 def detect_hardware(force: bool = False) -> HardwareProfile:
