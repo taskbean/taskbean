@@ -133,21 +133,150 @@ def _detect_npu_luid() -> str | None:
         return None
 
 
+def _detect_gpu_dxgi() -> list[GpuInfo]:
+    """Enumerate adapters via DXGI to get accurate 64-bit VRAM.
+
+    Win32_VideoController.AdapterRAM is uint32 and silently truncates past
+    ~4 GB — DXGI's IDXGIAdapter::GetDesc returns DedicatedVideoMemory as
+    SIZE_T (64-bit on x64), so this is the only correct API for modern
+    cards. Documented at:
+    https://learn.microsoft.com/windows/win32/api/dxgi/nf-dxgi-idxgiadapter-getdesc
+
+    Returns a list of (name, vram_gb) for all adapters DXGI can see.
+    Returns [] on any failure (no DirectX, missing dxgi.dll, etc.).
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    # IDXGIAdapter::GetDesc fills DXGI_ADAPTER_DESC. Layout per
+    # https://learn.microsoft.com/windows/win32/api/dxgi/ns-dxgi-dxgi_adapter_desc
+    class DXGI_ADAPTER_DESC(ctypes.Structure):
+        _fields_ = [
+            ("Description", wintypes.WCHAR * 128),
+            ("VendorId", wintypes.UINT),
+            ("DeviceId", wintypes.UINT),
+            ("SubSysId", wintypes.UINT),
+            ("Revision", wintypes.UINT),
+            ("DedicatedVideoMemory", ctypes.c_size_t),
+            ("DedicatedSystemMemory", ctypes.c_size_t),
+            ("SharedSystemMemory", ctypes.c_size_t),
+            ("AdapterLuid", ctypes.c_int64),
+        ]
+
+    try:
+        dxgi = ctypes.WinDLL("dxgi.dll")
+    except OSError as exc:
+        logger.warning("dxgi.dll not loadable (%s) — skipping DXGI VRAM enumeration", exc)
+        return []
+
+    # IID_IDXGIFactory = {7b7166ec-21c7-44ae-b21a-c9ae321ae369}
+    IID_IDXGIFactory = (ctypes.c_ubyte * 16)(
+        0xec, 0x66, 0x71, 0x7b, 0xc7, 0x21, 0xae, 0x44,
+        0xb2, 0x1a, 0xc9, 0xae, 0x32, 0x1a, 0xe3, 0x69,
+    )
+
+    factory = ctypes.c_void_p()
+    create = dxgi.CreateDXGIFactory
+    create.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
+    create.restype = ctypes.c_long
+    hr = create(IID_IDXGIFactory, ctypes.byref(factory))
+    if hr != 0 or not factory.value:
+        logger.warning("CreateDXGIFactory failed (hr=0x%x)", hr & 0xFFFFFFFF)
+        return []
+
+    # vtable: 0=QueryInterface 1=AddRef 2=Release 3..6=IDXGIObject methods
+    # 7=EnumAdapters (IDXGIFactory). IDXGIAdapter vtable: 7=EnumOutputs
+    # 8=GetDesc — but the first 7 are inherited from IDXGIObject so GetDesc
+    # is at vtable index 7 of IDXGIAdapter (not 8). DXGI ABI:
+    # IUnknown(0..2) + IDXGIObject(3..6) + IDXGIAdapter(7..9: EnumOutputs,
+    # GetDesc, CheckInterfaceSupport).
+    def _vfn(this, idx, restype, argtypes):
+        vtbl = ctypes.cast(this, ctypes.POINTER(ctypes.c_void_p))[0]
+        addr = ctypes.cast(vtbl, ctypes.POINTER(ctypes.c_void_p))[idx]
+        proto = ctypes.WINFUNCTYPE(restype, ctypes.c_void_p, *argtypes)
+        return proto(addr)
+
+    EnumAdapters = _vfn(factory, 7, ctypes.c_long, [wintypes.UINT, ctypes.POINTER(ctypes.c_void_p)])
+    Release = _vfn(factory, 2, ctypes.c_ulong, [])
+
+    results: list[GpuInfo] = []
+    try:
+        idx = 0
+        while True:
+            adapter = ctypes.c_void_p()
+            hr = EnumAdapters(factory, idx, ctypes.byref(adapter))
+            if hr != 0:
+                break  # DXGI_ERROR_NOT_FOUND ends the enumeration
+            try:
+                desc = DXGI_ADAPTER_DESC()
+                GetDesc = _vfn(adapter, 8, ctypes.c_long, [ctypes.POINTER(DXGI_ADAPTER_DESC)])
+                AdapterRelease = _vfn(adapter, 2, ctypes.c_ulong, [])
+                if GetDesc(adapter, ctypes.byref(desc)) == 0:
+                    name = desc.Description.strip()
+                    vram_gb = desc.DedicatedVideoMemory / (1024 ** 3)
+                    if name and not re.search(r"basic display|microsoft basic|remote desktop", name, re.I):
+                        results.append(GpuInfo(name=name, vram_gb=round(vram_gb, 1)))
+                AdapterRelease(adapter)
+            except Exception as exc:
+                logger.debug("DXGI adapter[%d] read failed: %s", idx, exc)
+            idx += 1
+    finally:
+        Release(factory)
+
+    return results
+
+
+def _detect_gpu_wmi_name() -> list[str]:
+    """Enumerate GPU adapter names via in-process WMI (pywin32).
+
+    Used as a fallback when DXGI enumeration fails (e.g. system without
+    DirectX 12). Drops the wmic CLI dependency that was broken on
+    Windows 11 24H2+.
+    """
+    try:
+        import win32com.client  # type: ignore[import-untyped]
+    except ImportError as exc:
+        logger.warning("pywin32 not available (%s) — falling back to wmic for GPU name", exc)
+        return []
+    try:
+        wmi = win32com.client.GetObject("winmgmts:\\\\.\\root\\cimv2")
+        items = wmi.ExecQuery("SELECT Name FROM Win32_VideoController WHERE Name IS NOT NULL")
+        return [str(item.Name).strip() for item in items if str(item.Name).strip()]
+    except Exception as exc:
+        logger.warning("WMI Win32_VideoController query failed: %s", exc)
+        return []
+
+
 def _detect_gpu() -> Optional[GpuInfo]:
-    """Return the best discrete GPU found via WMI, or None."""
-    out = _wmic("wmic path win32_VideoController get name,AdapterRAM /format:list")
-    names = re.findall(r"Name=(.+)", out)
-    vrams = re.findall(r"AdapterRAM=(\d+)", out)
-    best: Optional[GpuInfo] = None
-    for name, vram_str in zip(names, vrams + ["0"] * len(names)):
-        name = name.strip()
-        if not name or re.search(r"basic display|microsoft basic|remote desktop", name, re.I):
+    """Return the best discrete GPU found, or None.
+
+    Strategy: DXGI first (gives accurate 64-bit VRAM), then merge with
+    WMI for any adapter DXGI missed (rare, but DXGI requires DirectX 12).
+    Drops the legacy `wmic` CLI which was removed on Windows 11 24H2+.
+    """
+    # Filter out integrated software adapters and remote-session shims.
+    def _keep(name: str) -> bool:
+        return bool(name) and not re.search(r"basic display|microsoft basic|remote desktop", name, re.I)
+
+    candidates: list[GpuInfo] = list(_detect_gpu_dxgi())
+
+    # Backfill any adapter WMI knows about that DXGI didn't surface.
+    seen = {g.name.lower() for g in candidates}
+    for name in _detect_gpu_wmi_name():
+        if not _keep(name):
             continue
-        vram_gb = int(vram_str) / (1024 ** 3)
-        # Prefer discrete GPUs (higher VRAM wins)
-        if best is None or vram_gb > best.vram_gb:
-            best = GpuInfo(name=name, vram_gb=round(vram_gb, 1))
-    return best
+        if name.lower() in seen:
+            continue
+        # No VRAM info from this path — DXGI would have provided it. Mark as 0.
+        # The recommender's max_model_gb already gates on vram_gb > 0.
+        candidates.append(GpuInfo(name=name, vram_gb=0.0))
+        seen.add(name.lower())
+
+    if not candidates:
+        return None
+    # Prefer the adapter with the highest VRAM (typically the discrete GPU).
+    candidates.sort(key=lambda g: g.vram_gb, reverse=True)
+    return candidates[0]
 
 
 def _detect_ram() -> float:
