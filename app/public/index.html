@@ -7527,7 +7527,14 @@ function syncComposerModelLabel() {
     if (looksFull) {
         _setComposerModelDisplay({ modelId: raw });
     } else {
-        _setComposerModelDisplay({ alias: raw });
+        // Aliases lose the device hint, so try to resolve the full modelId
+        // from the catalog cache before passing through. Without this,
+        // _setComposerModelDisplay would fall back to _inferDeviceFromModelId('')
+        // which defaults to 'CPU' and would mis-tag GPU/NPU models when this
+        // observer-driven call runs after the explicit one in updateStatusBarHealth.
+        const found = (typeof _allModels !== 'undefined' ? _allModels : [])
+            .find(m => m.alias === raw);
+        _setComposerModelDisplay({ alias: raw, modelId: found?.modelId, device: found?.device });
     }
 }
 
