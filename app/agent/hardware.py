@@ -70,8 +70,92 @@ def _wmic(query: str, timeout: int = 10) -> str:
         return ""
 
 
+# Map Windows ML execution provider name → friendly NPU label.
+# Reference: https://learn.microsoft.com/windows/ai/new-windows-ml/supported-execution-providers
+_WINML_NPU_PROVIDERS = {
+    "VitisAIExecutionProvider": ("AMD NPU (XDNA)", "AMD"),
+    "OpenVINOExecutionProvider": ("Intel NPU", "Intel"),
+    "QNNExecutionProvider":      ("Qualcomm Hexagon NPU", "Qualcomm"),
+}
+
+# Module-level handle for the Windows App SDK runtime so the Shutdown
+# object stays alive for the life of the process. Garbage-collecting it
+# would shut down the bootstrap and break subsequent catalog calls.
+_winml_bootstrap = None
+
+
+def _detect_npu_winml() -> Optional[NpuInfo]:
+    """Detect NPU via Windows ML's ExecutionProviderCatalog (Win 11 24H2+).
+
+    This is the Microsoft-blessed, vendor-agnostic detection path: the
+    catalog lists all execution providers Windows ML knows about
+    (VitisAI/AMD, OpenVINO/Intel, QNN/Qualcomm). Filtering to providers
+    whose ReadyState != NOT_PRESENT tells us which NPUs are *installed*
+    on the machine (independent of whether our specific ONNX Runtime
+    instance has them registered).
+
+    Requires:
+      - Windows 11 24H2+ (build 26100+)
+      - wasdk-Microsoft.Windows.AI.MachineLearning
+      - wasdk-Microsoft.Windows.ApplicationModel.DynamicDependency.Bootstrap
+
+    Returns None on any failure so callers can fall back to legacy
+    PnP-based detection on older Windows or when the wasdk packages
+    aren't installed.
+    """
+    global _winml_bootstrap
+    try:
+        import winui3.microsoft.windows.applicationmodel.dynamicdependency.bootstrap as _bootstrap
+        import winui3.microsoft.windows.ai.machinelearning as _winml
+    except ImportError as exc:
+        logger.info("Windows ML ExecutionProviderCatalog unavailable (%s) — using legacy PnP detection", exc)
+        return None
+
+    try:
+        # Bootstrap once per process and hold the shutdown handle —
+        # ON_PACKAGE_IDENTITY_NOOP lets unpackaged processes (like our
+        # plain python.exe) use the Windows App SDK without the MSI
+        # framework being explicitly registered.
+        if _winml_bootstrap is None:
+            _winml_bootstrap = _bootstrap.initialize(
+                options=_bootstrap.InitializeOptions.ON_PACKAGE_IDENTITY_NOOP
+            )
+        catalog = _winml.ExecutionProviderCatalog.get_default()
+        providers = catalog.find_all_providers()
+    except Exception as exc:
+        logger.warning("Windows ML catalog probe failed (%s: %s)", type(exc).__name__, exc)
+        return None
+
+    not_present = _winml.ExecutionProviderReadyState.NOT_PRESENT
+    for p in providers:
+        if p.ready_state == not_present:
+            continue
+        if p.name in _WINML_NPU_PROVIDERS:
+            label, _vendor = _WINML_NPU_PROVIDERS[p.name]
+            logger.info("NPU detected via Windows ML catalog: %s (provider=%s, ready_state=%s)",
+                        label, p.name, p.ready_state)
+            luid = _detect_npu_luid()
+            return NpuInfo(name=label, luid=luid)
+    return None
+
+
 def _detect_npu() -> Optional[NpuInfo]:
-    """Check Windows PnP devices for known NPU identifiers, then discover LUID."""
+    """Find an NPU on this machine.
+
+    Layered strategy:
+    1. Windows ML ExecutionProviderCatalog (vendor-blessed, Win 11 24H2+).
+    2. Legacy PnP-name regex fallback for older Windows or when the
+       wasdk packages aren't available.
+
+    Returns the first match; None if neither path finds anything.
+    """
+    npu = _detect_npu_winml()
+    if npu is not None:
+        return npu
+
+    # Legacy PnP-name fallback. Loose regex — known to match some
+    # USB devices ('USB Input Device') so it's only used when the
+    # modern catalog API isn't available.
     out = _wmic(
         'powershell -NoProfile -Command '
         '"Get-PnpDevice -Status OK | Where-Object { '
@@ -82,7 +166,7 @@ def _detect_npu() -> Optional[NpuInfo]:
     if not out.strip():
         return None
     name = out.strip().splitlines()[0]
-    logger.info("NPU detected: %s", name)
+    logger.info("NPU detected via legacy PnP regex (catalog unavailable): %s", name)
     luid = _detect_npu_luid()
     return NpuInfo(name=name, luid=luid)
 
