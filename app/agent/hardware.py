@@ -151,19 +151,25 @@ def _detect_gpu() -> Optional[GpuInfo]:
 
 
 def _detect_ram() -> float:
+    # psutil is the canonical, in-process source on every supported
+    # platform — try it first. Fall back to wmic only if psutil isn't
+    # available; on Windows 11 24H2+ wmic itself is missing by default
+    # (Feature on Demand) so a wmic-first ordering is wasteful.
+    try:
+        import psutil
+        gb = psutil.virtual_memory().total / (1024 ** 3)
+        logger.info("ram_gb detected via psutil: %.1f", gb)
+        return gb
+    except Exception as exc:
+        logger.warning("psutil RAM detection failed (%s: %s) — falling back to wmic", type(exc).__name__, exc)
     out = _wmic("wmic OS get TotalVisibleMemorySize /value")
     m = re.search(r"TotalVisibleMemorySize=(\d+)", out)
     if m:
-        return int(m.group(1)) / (1024 * 1024)  # KB → GB
-    # wmic was removed in Windows 11 24H2+ (build 26100+). Fall back to
-    # psutil so the recommender doesn't see RAM=0 and refuse to load any
-    # CPU model. This keeps the static detector accurate even when the
-    # legacy CLI tool is gone.
-    try:
-        import psutil
-        return psutil.virtual_memory().total / (1024 ** 3)
-    except Exception:
-        return 0.0
+        gb = int(m.group(1)) / (1024 * 1024)  # KB → GB
+        logger.info("ram_gb detected via wmic fallback: %.1f", gb)
+        return gb
+    logger.warning("ram_gb detection failed (psutil unavailable + wmic returned no data — likely Win 11 24H2+ where wmic is removed)")
+    return 0.0
 
 
 def detect_hardware(force: bool = False) -> HardwareProfile:
@@ -173,9 +179,12 @@ def detect_hardware(force: bool = False) -> HardwareProfile:
         return _cache
 
     profile = HardwareProfile(cpu_cores=os.cpu_count() or 1)
+    logger.info("cpu_cores detected: %d", profile.cpu_cores)
     profile.ram_gb = _detect_ram()
     profile.gpu = _detect_gpu()
+    logger.info("gpu detected: %s", profile.gpu.name if profile.gpu else "none")
     profile.npu = _detect_npu()
+    logger.info("npu detected: %s", profile.npu.name if profile.npu else "none")
 
     # Secondary NPU signal: check if the active Foundry model ID contains "npu",
     # which means Foundry already loaded an NPU model successfully.

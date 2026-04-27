@@ -1,3 +1,15 @@
+# ── Hardware monitoring ───────────────────────────────────────────────────────
+# psutil powers live CPU%/RAM in the status bar (app/agent/main.py
+# _hardware_snapshot) and the cold-start RAM-total fallback in
+# hardware.py _detect_ram. Pinned explicitly because it's load-bearing
+# for the entire status-bar telemetry path; was previously transitive.
+psutil>=6.0,<8.0
+# pywin32 powers in-process WMI (Win32_VideoController name) and PDH
+# (NPU utilization counters) on Windows 11 24H2+. Pinned >=311 to get
+# past the DLL-load regression in versions 309-310 that still affects
+# users on 24H2 — see https://github.com/mhammond/pywin32/issues/2597.
+pywin32>=311
+
 # ── Agent Framework + AG-UI ───────────────────────────────────────────────────
 # Versions are pinned because _NormalizingChatClient (in agent.py) overrides
 # private framework internals (_inner_get_response, _parse_response_update_from_openai,
