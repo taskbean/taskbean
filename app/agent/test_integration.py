@@ -504,6 +504,32 @@ async def test_speech_config_update(client: httpx.AsyncClient) -> None:
     cfg.set("speech", {"engine": "auto", "fallback": "whisper", "micDevice": None})
 
 
+def test_speech_config_sapi_migration() -> None:
+    """load() should rewrite legacy speech.engine/fallback == 'sapi' to 'whisper'."""
+    import app_config as cfg
+
+    # Save current state to restore later
+    original_speech = dict(cfg._config.get("speech", {}))
+    try:
+        cfg._config["speech"] = {"engine": "sapi", "fallback": "sapi", "micDevice": None}
+        cfg.save()
+
+        # Reload from disk; migration should run.
+        cfg.load()
+
+        speech = cfg._config["speech"]
+        assert speech["engine"] == "whisper", f"engine not migrated: {speech}"
+        assert speech["fallback"] == "whisper", f"fallback not migrated: {speech}"
+
+        # Verify the migrated values were persisted to disk.
+        on_disk = json.loads(cfg._CONFIG_FILE.read_text(encoding="utf-8"))
+        assert on_disk["speech"]["engine"] == "whisper"
+        assert on_disk["speech"]["fallback"] == "whisper"
+    finally:
+        cfg._config["speech"] = original_speech
+        cfg.save()
+
+
 async def test_speech_config_update_mic(client: httpx.AsyncClient) -> None:
     """POST /api/config can set micDevice."""
     import app_config as cfg
@@ -1094,3 +1120,51 @@ async def test_agent_toggle_strict_bool_accepts_true_bool(
     if r.status_code == 200:
         body = r.json()
         assert body.get("enabled") is True
+
+
+# ── Live transcription WebSocket ──────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_live_ws_busy(live_server: str) -> None:
+    """Second concurrent /api/transcribe/live connection must be rejected as busy.
+
+    We don't exercise the happy path because it requires the ~600 MB Nemotron
+    streaming model to be loaded. Instead we verify the lock-contention path:
+    open one session, then open a second and assert it receives the
+    `{"type":"error","code":"busy"}` text frame before the server closes it.
+    """
+    import asyncio
+    import websockets
+
+    ws_url = live_server.replace("http://", "ws://", 1) + "/api/transcribe/live"
+
+    # Connection #1 — hold open to keep the lock acquired. Don't recv, since
+    # the server may legitimately try to load the Nemotron model and stall.
+    ws1 = await websockets.connect(ws_url, open_timeout=10)
+    try:
+        # Give the server a moment to enter the sync with _live_ws_lock block.
+        await asyncio.sleep(0.5)
+
+        # Connection #2 — should be rejected immediately with busy.
+        async with websockets.connect(ws_url, open_timeout=10) as ws2:
+            raw = await asyncio.wait_for(ws2.recv(), timeout=10)
+            payload = json.loads(raw)
+            assert payload.get("type") == "error", payload
+            assert payload.get("code") == "busy", payload
+
+            # Drain until close; tolerate either a clean recv-raises-ConnectionClosed
+            # path or an explicit close frame from the server.
+            try:
+                await asyncio.wait_for(ws2.recv(), timeout=5)
+            except websockets.ConnectionClosed:
+                pass
+            except asyncio.TimeoutError:
+                pass
+
+            close_code = getattr(ws2, "close_code", None)
+            # Server uses 4090; accept any 4xxx app-level close code in case the
+            # websockets library normalises it.
+            if close_code is not None:
+                assert 4000 <= close_code < 5000, f"unexpected close code: {close_code}"
+    finally:
+        await ws1.close()

@@ -100,6 +100,22 @@ def load() -> dict:
             logger.warning("Could not read config file, using defaults: %s", exc)
     else:
         logger.info("No config file found, using defaults")
+    # Migrate legacy speech.engine/fallback == "sapi" to "whisper".
+    # The "sapi" backend was removed; without this the validator in main.py
+    # would reject the user's existing config on first POST /api/config.
+    speech = _config.get("speech")
+    if isinstance(speech, dict):
+        migrated = False
+        if speech.get("engine") == "sapi":
+            speech["engine"] = "whisper"
+            migrated = True
+        if speech.get("fallback") == "sapi":
+            speech["fallback"] = "whisper"
+            migrated = True
+        if migrated:
+            logger.info("Migrated legacy speech.engine='sapi' -> 'whisper' in config")
+            _config["speech"] = speech
+            save()
     return _config
 
 
