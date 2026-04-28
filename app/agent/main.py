@@ -384,14 +384,33 @@ def _health_data() -> dict[str, Any]:
     }
 
 
+# Tracks whether psutil.cpu_percent has been called at least once in this
+# process — the first call returns 0.0 unless given an explicit interval.
+_psutil_warmed_up = False
+
+
 def _hardware_snapshot() -> dict[str, Any]:
     """Live hardware snapshot with CPU/RAM/NPU usage."""
     hw = hw_mod.detect_hardware()
     hw_dict = hw.to_dict()
-    # Enrich with live metrics
+    # Enrich with live metrics. Catch *any* psutil failure (not just
+    # ImportError) — empirically the module's internal state can get
+    # corrupted on long-running uvicorn workers (probably Foundry SDK FFI
+    # interactions), at which point a previously-working psutil starts
+    # raising or returning bad data. Log and gracefully degrade so the
+    # status bar stops at "0%/0GB" instead of returning HTTP 500.
     try:
         import psutil
-        hw_dict["cpu"]["usagePercent"] = psutil.cpu_percent(interval=None)
+        # interval=None returns the percentage since the previous call —
+        # the very first call after process start returns 0.0 because there
+        # is no previous reference. Use a tiny 0.05 s sampling window for
+        # the first call to avoid the cold-start zero; subsequent calls
+        # return immediately because psutil keeps its own per-process
+        # baseline.
+        global _psutil_warmed_up
+        cpu_pct = psutil.cpu_percent(interval=None if _psutil_warmed_up else 0.05)
+        _psutil_warmed_up = True
+        hw_dict["cpu"]["usagePercent"] = cpu_pct
         mem = psutil.virtual_memory()
         hw_dict["ram"] = {
             "totalGb": round(mem.total / (1024 ** 3), 1),
@@ -399,7 +418,13 @@ def _hardware_snapshot() -> dict[str, Any]:
             "freeGb": round(mem.available / (1024 ** 3), 1),
             "usagePercent": round(mem.percent, 1),
         }
-    except ImportError:
+        # Backfill cpu.ramGb when hardware.py's wmic-based detector failed
+        # (wmic was removed in Windows 11 24H2+). psutil's value is the
+        # ground truth for live RAM totals anyway.
+        if not hw_dict["cpu"].get("ramGb"):
+            hw_dict["cpu"]["ramGb"] = round(mem.total / (1024 ** 3), 1)
+    except Exception as exc:
+        logger.warning("psutil snapshot failed (%s: %s) — falling back to static values", type(exc).__name__, exc)
         hw_dict["cpu"]["usagePercent"] = 0
         total = hw.ram_gb
         hw_dict["ram"] = {"totalGb": round(total, 1), "usedGb": 0, "freeGb": round(total, 1), "usagePercent": 0}
