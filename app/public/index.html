@@ -2832,21 +2832,11 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 
       <!-- Mic popover (native Popover API) -->
       <div class="mic-popover" id="micPopover" popover>
-        <div class="mic-popover-engines" id="micPopoverEngines" role="radiogroup" aria-label="Speech engine">
-          <button class="mic-engine-pill" data-engine="whisper" onclick="selectMicEngine('whisper')" role="radio">
-            <i data-lucide="cpu" class="icon-sm"></i><span>On-device</span>
-          </button>
-          <button class="mic-engine-pill" data-engine="live" onclick="selectMicEngine('live')" role="radio">
-            <i data-lucide="radio" class="icon-sm"></i><span>Live</span>
-          </button>
-          <button class="mic-engine-pill" data-engine="web" onclick="selectMicEngine('web')" role="radio">
-            <i data-lucide="cloud" class="icon-sm"></i><span>Cloud</span>
-          </button>
-        </div>
-        <!-- Whisper variant picker — only visible when engine === 'whisper'.
-             Lists cached voice models (whisper-tiny, whisper-base, etc.) so
-             the user can choose accuracy-vs-speed without leaving the mic.
-             Populated by populateMicWhisperModels() each time the popover opens. -->
+        <!-- Whisper variant picker — Live and Cloud engine options were removed
+             pending Foundry Local catalog support for nemotron-speech-streaming
+             (see research/copilot-image-57359b-png-why-isn-t-nemotron-found-.md).
+             On-device Whisper is the only engine for now; the engine-pill row
+             is hidden until we have more than one to choose from. -->
         <div class="mic-whisper-picker" id="micWhisperPicker" style="display:none">
           <div class="mic-whisper-label">Voice model</div>
           <div class="mic-whisper-list" id="micWhisperList">
@@ -3223,33 +3213,12 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
             </div>
           </div>
 
-          <div class="settings-group" data-search-terms="speech engine whisper microphone voice recognition fallback browser cloud live nemotron">
+          <div class="settings-group" data-search-terms="speech engine whisper microphone voice recognition">
             <div class="settings-group-title">Speech Recognition</div>
-            <div class="settings-row">
-              <label>
-                Speech engine
-                <button class="info-tip" tabindex="0" aria-label="Speech engine info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">On-device Whisper by default — your voice never leaves your machine. The cloud option uses your browser's built-in speech service (Microsoft on Edge, Google on Chrome) and is opt-in only.</span></button>
-              </label>
-              <select class="settings-select" id="settingsSpeechEngine" data-requires="server" onchange="updateSpeechSetting('engine', this.value)">
-                <option value="auto">Auto (on-device Whisper)</option>
-                <option value="whisper">Foundry Whisper (on-device)</option>
-                <option value="live">Live dictation (beta, on-device)</option>
-                <option value="web">Browser cloud speech</option>
-              </select>
-              <span class="save-dot"></span>
-            </div>
-            <div class="settings-row">
-              <label>
-                Fallback engine
-                <button class="info-tip" tabindex="0" aria-label="Fallback info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Backup engine used when the primary fails or times out. Defaults to Whisper. "No fallback" means voice input stops working if the primary is unavailable.</span></button>
-              </label>
-              <select class="settings-select" id="settingsSpeechFallback" data-requires="server" onchange="updateSpeechSetting('fallback', this.value)">
-                <option value="whisper">Foundry Whisper (on-device)</option>
-                <option value="web">Browser cloud speech</option>
-                <option value="none">No fallback</option>
-              </select>
-              <span class="save-dot"></span>
-            </div>
+            <!-- Engine + fallback selects were removed when we trimmed the
+                 stack to on-device Whisper only. Re-introduce them when
+                 Live (Nemotron) and Cloud (browser SpeechRecognition) are
+                 production-ready and the catalog rollout completes. -->
             <div class="settings-row">
               <label>
                 After dictation
@@ -7287,21 +7256,16 @@ async function toggleVoice() {
     if (isRecording) { stopCurrentRecording(); return; }
 
     const cfg = settingsConfig?.speech || {};
-    const engine = cfg.engine || 'auto';
-    const fallback = cfg.fallback || 'whisper';
-
-    // Auto = on-device Whisper first; cloud is opt-in only.
-    // Browser cloud speech (Edge → Microsoft, Chrome → Google) is unreliable on Edge
-    // and sends audio to a third party, so we never silently cascade to it.
-    const engines = engine === 'auto' ? ['whisper', fallback] : [engine, fallback];
-    const chain = [...new Set(engines)].filter(e => e && e !== 'none');
-
-    for (const eng of chain) {
-        const success = await tryStartEngine(eng, cfg.micDevice);
-        if (success) return;
-    }
+    // Engine selection UI was trimmed to on-device Whisper only. The
+    // "live" (Nemotron) and "web" (browser SpeechRecognition) paths
+    // still exist in code, but they're not user-selectable until we
+    // sort out the Foundry catalog rollout for nemotron and decide
+    // whether the cloud option is worth shipping. See research/
+    // copilot-image-57359b-png-why-isn-t-nemotron-found-.md.
+    const success = await tryStartEngine('whisper', cfg.micDevice);
+    if (success) return;
     const detail = window._lastSpeechError ? ` (${window._lastSpeechError})` : '';
-    addChat('error', 'mic-off', `All speech engines failed${detail}. Check your microphone and settings.`);
+    addChat('error', 'mic-off', `Microphone capture failed${detail}. Check your microphone and settings.`);
     window._lastSpeechError = null;
 }
 
