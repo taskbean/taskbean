@@ -262,6 +262,38 @@ async def shutdown_foundry() -> None:
 _TOOL_CALL_RE = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
 
 
+# Qwen3 ships in "thinking mode" by default — the model emits a long
+# <think>…</think> block before its actual answer. On a CPU backend with
+# taskbean's full agent payload that pushes inference past the smoke-test
+# budget and makes everyday chat painfully slow. The Qwen3 chat template
+# honors two off-switches; we set both as belt-and-suspenders so it works
+# regardless of whether Foundry Local forwards chat_template_kwargs to the
+# tokenizer:
+#   1. extra_body: chat_template_kwargs.enable_thinking = false
+#      (vLLM-style runtime hook — proper way)
+#   2. "/no_think" system-prompt prefix
+#      (text-level branch in the Qwen3 chat template — works even if the
+#       runtime drops chat_template_kwargs)
+def is_qwen3_model(model_id: str | None) -> bool:
+    """Return True for Qwen3-family models that default to thinking mode."""
+    return bool(model_id) and "qwen3" in model_id.lower()
+
+
+# Sentinel system message that Qwen3's chat template intercepts to disable
+# the <think>…</think> reasoning block.
+QWEN3_NO_THINK_PREFIX = "/no_think"
+
+
+def qwen3_extra_body(model_id: str | None) -> dict[str, Any]:
+    """Return the OpenAI ``extra_body`` payload that disables Qwen3 thinking.
+
+    Empty dict for non-Qwen3 models so callers can unconditionally merge.
+    """
+    if not is_qwen3_model(model_id):
+        return {}
+    return {"chat_template_kwargs": {"enable_thinking": False}}
+
+
 class _NormalizingChatClient(OpenAIChatCompletionClient):
     """OpenAIChatCompletionClient that normalises <tool_call> XML into
     structured tool_calls before the agent framework parses them.
@@ -334,6 +366,24 @@ class _NormalizingChatClient(OpenAIChatCompletionClient):
             return Content.from_text(text=stripped, raw_representation=choice) if stripped else None
         return super()._parse_text_from_openai(choice)
 
+    def _prepare_options(self, messages, options):  # type: ignore[override]
+        """Inject Qwen3-specific runtime kwargs into the OpenAI request body.
+
+        ``OpenAI.chat.completions.create`` merges ``extra_body`` into the JSON
+        sent to the server, so attaching ``chat_template_kwargs`` here gets it
+        all the way through to the Foundry/ONNX-Runtime tokenizer that decides
+        whether to emit a ``<think>`` block. No-op for non-Qwen3 models.
+        """
+        opts = super()._prepare_options(messages, options)
+        extra = qwen3_extra_body(self.model)
+        if extra:
+            existing = opts.get("extra_body") or {}
+            # Deep-merge chat_template_kwargs in case caller already set some.
+            merged_ctk = dict(existing.get("chat_template_kwargs") or {})
+            merged_ctk.update(extra["chat_template_kwargs"])
+            opts["extra_body"] = {**existing, "chat_template_kwargs": merged_ctk}
+        return opts
+
     def _inner_get_response(  # type: ignore[override]
         self,
         *,
@@ -376,6 +426,17 @@ class _NormalizingChatClient(OpenAIChatCompletionClient):
         # models (qwen2.5-coder-0.5b: 32k tokens) it blows the context
         # window and Foundry returns HTTP 500.
         messages = [m for m in messages if not _is_agui_state_context(m)]
+
+        # Qwen3 thinking-mode suppression: prepend a standalone /no_think
+        # system message. The marker only triggers Qwen3's chat-template
+        # branch when it's the *entire* content of a system message —
+        # embedding it inside the main instruction message is silently
+        # ignored. We do this here (vs. in build_agent's instructions)
+        # because the framework adds instructions as one combined system
+        # message, which won't trigger the chat-template hook.
+        if is_qwen3_model(self.model):
+            from agent_framework import Message as _AfMessage
+            messages = [_AfMessage("system", [QWEN3_NO_THINK_PREFIX]), *list(messages)]
 
         if not stream:
             return super()._inner_get_response(
@@ -624,7 +685,7 @@ def _build_instructions() -> str:
         for t in state_mod.todos
     ) or "(empty)"
 
-    return f"""You are a todo list assistant. Current time: {current_time} ({_tz_name}). Today: {today}.
+    base = f"""You are a todo list assistant. Current time: {current_time} ({_tz_name}). Today: {today}.
 
 Todos:
 {todo_list}
@@ -638,3 +699,23 @@ Rules:
 - Match "done with X"/"finished X" to closest todo title. Never invent IDs.
 - For priority: "urgent"/"ASAP"=high, "important"=medium, "whenever"/"low priority"=low.
 - After tool calls, reply briefly in plain text. Pure info questions: reply without tools."""
+
+    # NB: do NOT prefix with /no_think here. Qwen3's chat template only
+    # intercepts the marker when it's the *entire* content of a dedicated
+    # system message — prefixed inside a longer instruction it gets ignored
+    # and the model falls back to thinking mode. The marker is injected
+    # separately by callers via prepend_qwen3_no_think_message().
+    return base
+
+
+def prepend_qwen3_no_think_message(messages: list[dict], model_id: str | None) -> list[dict]:
+    """Prepend a standalone ``/no_think`` system message for Qwen3 models.
+
+    Qwen3's chat template intercepts ``/no_think`` only when it's the whole
+    content of a system message; embedding it inside the main instruction
+    is silently ignored. Returns the original list unchanged for non-Qwen3
+    models so callers can call this unconditionally.
+    """
+    if not is_qwen3_model(model_id):
+        return messages
+    return [{"role": "system", "content": QWEN3_NO_THINK_PREFIX}, *messages]
