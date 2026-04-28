@@ -1620,6 +1620,12 @@ header {
 .mic-device-item.active { color: var(--accent); }
 .mic-device-check { width: 16px; flex-shrink: 0; text-align: center; color: var(--accent); font-size: 14px; }
 .mic-popover-footer { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; border-top: 1px solid var(--border); }
+.mic-popover-engines { display: flex; gap: 4px; padding: 10px 12px 4px; }
+.mic-engine-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 10px; font-family: inherit; transition: all .15s; flex: 1; justify-content: center; }
+.mic-engine-pill svg { width: 11px; height: 11px; }
+.mic-engine-pill:hover { background: var(--surface2); color: var(--text); }
+.mic-engine-pill.active { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 55%, transparent); background: color-mix(in oklch, var(--accent) 10%, var(--surface)); }
+.mic-engine-pill.active:hover { background: color-mix(in oklch, var(--accent) 16%, var(--surface)); }
 
 /* ═══════════════════════════════════════════════════════════════════
    QUICK MODEL PICKER POPOVER
@@ -2768,6 +2774,17 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 
       <!-- Mic popover (native Popover API) -->
       <div class="mic-popover" id="micPopover" popover>
+        <div class="mic-popover-engines" id="micPopoverEngines" role="radiogroup" aria-label="Speech engine">
+          <button class="mic-engine-pill" data-engine="whisper" onclick="selectMicEngine('whisper')" role="radio">
+            <i data-lucide="cpu" class="icon-sm"></i><span>On-device</span>
+          </button>
+          <button class="mic-engine-pill" data-engine="live" onclick="selectMicEngine('live')" role="radio">
+            <i data-lucide="radio" class="icon-sm"></i><span>Live</span>
+          </button>
+          <button class="mic-engine-pill" data-engine="web" onclick="selectMicEngine('web')" role="radio">
+            <i data-lucide="cloud" class="icon-sm"></i><span>Cloud</span>
+          </button>
+        </div>
         <div class="mic-popover-header">
           <i data-lucide="mic" class="icon-sm"></i>
           <div class="mic-volume-bar"><div class="mic-volume-fill" id="micVolumeFill"></div></div>
@@ -7673,6 +7690,9 @@ async function openMicPopover() {
     if (pop.showPopover) pop.showPopover(); else pop.classList.add('open');
     lucide.createIcons();
 
+    // Sync engine pills with current setting (treat 'auto' as whisper).
+    _renderEnginePills();
+
     // Enumerate devices
     try {
         await navigator.mediaDevices.getUserMedia({ audio: true }); // ensure permission
@@ -7711,6 +7731,28 @@ async function selectMicDevice(deviceId) {
     try { await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speech: current }) }); } catch {}
     // Refresh list to show new checkmark
     openMicPopover();
+}
+
+// Active engine for the pill row in the mic popover. 'auto' renders as
+// whisper (since auto's first choice is whisper). Selecting a pill calls
+// updateSpeechSetting which also fires the warmup card if needed.
+function _renderEnginePills() {
+    const root = document.getElementById('micPopoverEngines');
+    if (!root) return;
+    let active = (settingsConfig?.speech?.engine || 'auto').toLowerCase();
+    if (active === 'auto') active = 'whisper';
+    root.querySelectorAll('.mic-engine-pill').forEach(p => {
+        const on = p.dataset.engine === active;
+        p.classList.toggle('active', on);
+        p.setAttribute('aria-checked', String(on));
+    });
+}
+
+async function selectMicEngine(engine) {
+    const sel = document.getElementById('settingsSpeechEngine');
+    if (sel) sel.value = engine;
+    await updateSpeechSetting('engine', engine);
+    _renderEnginePills();
 }
 
 async function startVolumeMeter(deviceId) {
