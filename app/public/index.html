@@ -2825,7 +2825,12 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
               <button class="composer-icon-btn" id="micBtn" onclick="toggleVoice()" title="Voice input"><i data-lucide="mic"></i></button>
               <button class="composer-icon-btn" id="micSettingsBtn" onclick="event.stopPropagation();toggleMicPopover()" title="Mic settings" style="width:16px;margin-left:-4px;color:var(--muted)"><i data-lucide="chevron-up" style="width:10px;height:10px"></i></button>
             </div>
-            <span id="voiceStatus"></span>
+            <!-- Off-screen aria-live region for screen readers. The visible
+                 "Listening..." / "Extracting tasks..." surface lives in the
+                 Live Composer Ribbon (mounted above the textarea while
+                 recording); keeping voiceStatus visible in the bottom row
+                 made the model pill jump left when the text appeared. -->
+            <span id="voiceStatus" class="sr-only" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap"></span>
           </div>
         </div>
       </div>
