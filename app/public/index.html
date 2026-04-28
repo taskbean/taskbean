@@ -319,6 +319,11 @@ header {
 .model-ctx-chip.ctx-total { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in oklch, var(--accent) 25%, transparent); }
 .model-ctx-sep { color: var(--border); font-size: 10px; }
 .model-modal-footer { padding: 10px 18px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.model-tabs { display: flex; gap: 0; padding: 0 18px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.model-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-family: inherit; font-size: 11px; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s, border-color .15s; }
+.model-tab:hover { color: var(--text); }
+.model-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.model-tab svg { width: 12px; height: 12px; }
 
 /* Filter bar */
 .model-filters { padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; background: var(--surface); }
@@ -1661,6 +1666,19 @@ header {
 .mic-device-check { width: 16px; flex-shrink: 0; text-align: center; color: var(--accent); font-size: 14px; }
 .mic-popover-footer { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; border-top: 1px solid var(--border); }
 .mic-popover-engines { display: flex; gap: 4px; padding: 10px 12px 4px; }
+.mic-whisper-picker { padding: 4px 12px 8px; border-bottom: 1px solid var(--border); }
+.mic-whisper-label { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 4px 4px 6px; }
+.mic-whisper-list { display: flex; flex-direction: column; gap: 2px; }
+.mic-whisper-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 6px; font-size: 11px; cursor: pointer; transition: background .15s; color: var(--text); }
+.mic-whisper-item:hover { background: var(--surface2); }
+.mic-whisper-item.active { background: color-mix(in oklch, var(--accent) 12%, var(--surface)); color: var(--accent); }
+.mic-whisper-item .name { flex: 1; }
+.mic-whisper-item .size { font-size: 9px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mic-whisper-item.active .size { color: var(--accent); opacity: .7; }
+.mic-whisper-item .check { width: 12px; flex-shrink: 0; color: var(--accent); }
+.mic-whisper-item .download { font-size: 9px; padding: 2px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); border: 0; cursor: pointer; }
+.mic-whisper-item .download:hover { background: var(--accent); color: var(--bg); }
+.mic-whisper-empty { font-size: 10px; color: var(--muted); padding: 6px 8px; line-height: 1.4; }
 .mic-engine-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 10px; font-family: inherit; transition: all .15s; flex: 1; justify-content: center; }
 .mic-engine-pill svg { width: 11px; height: 11px; }
 .mic-engine-pill:hover { background: var(--surface2); color: var(--text); }
@@ -2825,6 +2843,16 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
             <i data-lucide="cloud" class="icon-sm"></i><span>Cloud</span>
           </button>
         </div>
+        <!-- Whisper variant picker — only visible when engine === 'whisper'.
+             Lists cached voice models (whisper-tiny, whisper-base, etc.) so
+             the user can choose accuracy-vs-speed without leaving the mic.
+             Populated by populateMicWhisperModels() each time the popover opens. -->
+        <div class="mic-whisper-picker" id="micWhisperPicker" style="display:none">
+          <div class="mic-whisper-label">Voice model</div>
+          <div class="mic-whisper-list" id="micWhisperList">
+            <div style="font-size:11px;color:var(--muted);padding:4px 8px">Loading…</div>
+          </div>
+        </div>
         <div class="mic-popover-header">
           <i data-lucide="mic" class="icon-sm"></i>
           <div class="mic-volume-bar"><div class="mic-volume-fill" id="micVolumeFill"></div></div>
@@ -2944,6 +2972,17 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         </button>
         <button class="model-modal-close" onclick="closeModelPicker()" aria-label="Close" title="Close"><i data-lucide="x" aria-hidden="true"></i></button>
       </div>
+    </div>
+
+    <!-- Modality tabs — Chat is the default; Voice surfaces ASR/Whisper variants
+         that should never appear in the chat-model picker. -->
+    <div class="model-tabs" role="tablist" aria-label="Model category">
+      <button class="model-tab active" id="modelTabChat" role="tab" aria-selected="true" onclick="switchModelTab('chat')">
+        <i data-lucide="message-square" aria-hidden="true"></i> Chat
+      </button>
+      <button class="model-tab" id="modelTabVoice" role="tab" aria-selected="false" onclick="switchModelTab('voice')">
+        <i data-lucide="mic" aria-hidden="true"></i> Voice
+      </button>
     </div>
 
     <!-- Filter bar — chips built dynamically by JS -->
@@ -7519,8 +7558,9 @@ function mountComposerRibbon(engine, analyser, startedAt) {
 
     // Engine info chip
     const isLive = engine === 'live';
+    const whisperLabel = window._whisperLoadedAlias || (settingsConfig?.speech?.whisperModel) || 'whisper-tiny';
     _setRibbonChip(isLive ? 'live' : 'whisper',
-                   isLive ? 'live · loading…' : 'on-device · whisper-tiny',
+                   isLive ? 'live · loading…' : `on-device · ${whisperLabel}`,
                    isLive ? '' : (window._whisperDevice || 'CPU'));
 
     // Build 36 bars
@@ -7837,6 +7877,8 @@ async function openMicPopover() {
 
     // Sync engine pills with current setting (treat 'auto' as whisper).
     _renderEnginePills();
+    // If the active engine is whisper-family, surface the variant picker.
+    populateMicWhisperModels();
 
     // Enumerate devices
     try {
@@ -7898,6 +7940,90 @@ async function selectMicEngine(engine) {
     if (sel) sel.value = engine;
     await updateSpeechSetting('engine', engine);
     _renderEnginePills();
+    populateMicWhisperModels();
+}
+
+// ─── Whisper variant picker (mic popover) ────────────────────────────────
+// Visible only when the active engine is in the whisper family (auto/whisper).
+// Lists cached voice models from /api/models so the user can pick whisper-tiny
+// vs whisper-base vs whisper-small without leaving the mic. Selecting a
+// variant POSTs {speech:{whisperModel}} to /api/config; the backend drops
+// the cached _whisper_model so the next /api/transcribe lazy-loads the new one.
+async function populateMicWhisperModels() {
+    const wrap = document.getElementById('micWhisperPicker');
+    const list = document.getElementById('micWhisperList');
+    if (!wrap || !list) return;
+    const eng = (settingsConfig?.speech?.engine || 'auto').toLowerCase();
+    const isWhisperEngine = eng === 'auto' || eng === 'whisper';
+    if (!isWhisperEngine) {
+        wrap.style.display = 'none';
+        return;
+    }
+    wrap.style.display = '';
+    try {
+        const res = await fetch('/api/models');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { models } = await res.json();
+        const voice = models.filter(m => (m.modality || (m.alias?.toLowerCase().startsWith('whisper') ? 'voice' : 'chat')) === 'voice');
+        if (voice.length === 0) {
+            list.innerHTML = `<div class="mic-whisper-empty">No voice models cached. Open <a href="#" onclick="closeMicPopover();openModelPicker();switchModelTab('voice');return false">More models →</a> to download whisper-tiny or others.</div>`;
+            return;
+        }
+        const current = (settingsConfig?.speech?.whisperModel || 'whisper-tiny').toLowerCase();
+        // Sort: cached first, then by file size ascending (faster first).
+        voice.sort((a, b) => {
+            if (a.cached !== b.cached) return a.cached ? -1 : 1;
+            return (a.fileSizeGb || 0) - (b.fileSizeGb || 0);
+        });
+        list.innerHTML = voice.map(m => {
+            const active = m.alias.toLowerCase() === current && m.cached;
+            const sizeText = m.fileSizeGb ? `${m.fileSizeGb} GB` : '';
+            if (!m.cached) {
+                return `<div class="mic-whisper-item" title="Not downloaded">
+                    <span class="name" style="color:var(--muted)">${esc(m.alias)}</span>
+                    <span class="size">${esc(sizeText)}</span>
+                    <button class="download" onclick="closeMicPopover();openModelPicker();switchModelTab('voice')">Get</button>
+                </div>`;
+            }
+            return `<div class="mic-whisper-item ${active ? 'active' : ''}" onclick="selectMicWhisperModel('${esc(m.alias)}')">
+                <span class="check">${active ? '✓' : ''}</span>
+                <span class="name">${esc(m.alias)}</span>
+                <span class="size">${esc(sizeText)}</span>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        list.innerHTML = `<div class="mic-whisper-empty">Couldn’t load voice models (${esc(e.message)})</div>`;
+    }
+}
+
+async function selectMicWhisperModel(alias) {
+    const current = settingsConfig?.speech || {};
+    if ((current.whisperModel || '').toLowerCase() === alias.toLowerCase()) return;
+    current.whisperModel = alias;
+    if (settingsConfig) settingsConfig.speech = current;
+    try {
+        const res = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ speech: { whisperModel: alias } })
+        });
+        if (!res.ok) {
+            const err = await res.text();
+            addChat('error', 'alert-circle', `Couldn’t change voice model: ${esc(err.slice(0, 200))}`);
+            return;
+        }
+    } catch (e) {
+        addChat('error', 'alert-circle', `Couldn’t reach the backend to change voice model.`);
+        return;
+    }
+    // Refresh the variant list to update checkmarks and trigger the warmup
+    // card so the user sees the new variant being loaded.
+    populateMicWhisperModels();
+    // Force whisper warmup card to show even if the previous one was dismissed —
+    // a model change is a meaningful new event.
+    try { sessionStorage.removeItem('taskbean-warmup-dismissed-whisper'); } catch {}
+    _whisperWarmupShown = false;
+    showWarmupCard('whisper');
 }
 
 async function startVolumeMeter(deviceId) {
@@ -7992,7 +8118,9 @@ async function openQuickModelPicker() {
         const { models } = await res.json();
         _allModels = models;
 
-        const cached = models.filter(m => m.cached);
+        // Voice models (Whisper variants etc.) live in the mic popover, not
+        // the chat-model picker. They're never selectable as the chat model.
+        const cached = models.filter(m => m.cached && (m.modality || 'chat') === 'chat');
         if (cached.length === 0) {
             list.innerHTML = '<div style="padding:12px;text-align:center;font-size:11px;color:var(--muted)">No cached models</div>';
             lucide.createIcons();
@@ -8574,6 +8702,8 @@ function updateStatusBarHealth(ev) {
         const wasLoaded = _whisperLoaded;
         _whisperLoaded = ev.whisperLoaded;
         _whisperDevice = ev.whisperDevice || null;
+        window._whisperDevice = _whisperDevice;
+        if (typeof ev.whisperAlias === 'string') window._whisperLoadedAlias = ev.whisperAlias;
         _updateDeviceChipsVisibility();
         // Don't blast the user with a warmup card on every hard refresh —
         // give the silent background warmup 3s to finish first. Only show
@@ -11121,6 +11251,7 @@ initApp();
 const MODEL_FILTER_KEY = 'foundry-model-filters';
 
 // Filter state — devices persisted, others reset per session
+let _modelTab = 'chat';  // 'chat' | 'voice' — modality tab in the model picker modal
 let _modelFilters = (() => {
     try {
         const saved = JSON.parse(localStorage.getItem(MODEL_FILTER_KEY) || '{}');
@@ -11350,17 +11481,48 @@ function persistDeviceFilter() {
     try { localStorage.setItem(MODEL_FILTER_KEY, JSON.stringify({ devices: _modelFilters.devices })); } catch {}
 }
 
+function switchModelTab(tab) {
+    if (tab !== 'chat' && tab !== 'voice') return;
+    _modelTab = tab;
+    const chatBtn = document.getElementById('modelTabChat');
+    const voiceBtn = document.getElementById('modelTabVoice');
+    if (chatBtn) { chatBtn.classList.toggle('active', tab === 'chat'); chatBtn.setAttribute('aria-selected', String(tab === 'chat')); }
+    if (voiceBtn) { voiceBtn.classList.toggle('active', tab === 'voice'); voiceBtn.setAttribute('aria-selected', String(tab === 'voice')); }
+    // Hide chat-specific filters when on the Voice tab.
+    const toolsBtn = document.getElementById('modelToolCallBtn');
+    const filterBar = document.getElementById('modelFilters');
+    if (toolsBtn) toolsBtn.style.display = tab === 'voice' ? 'none' : '';
+    if (filterBar) filterBar.style.display = tab === 'voice' ? 'none' : '';
+    // Re-render with the active tab.
+    buildFilterBar(_allModels);
+    applyFiltersAndRender();
+    _syncHeaderFilterButtons();
+}
+
 function applyFiltersAndRender() {
+    const tab = _modelTab || 'chat';
     const filtered = _allModels.filter(m => {
+        // Modality tab gates everything else. Voice models never appear in
+        // the Chat tab; chat models never appear in the Voice tab. Models
+        // without an explicit modality default to chat (back-compat).
+        const modality = m.modality || 'chat';
+        if (tab === 'chat' && modality !== 'chat') return false;
+        if (tab === 'voice' && modality !== 'voice') return false;
         if (!_modelFilters.devices.includes(m.device)) return false;
-        if (_modelFilters.tools && !m.tasks.includes('tools')) return false;
+        // Tools/family/context filters are nonsensical for ASR models, so
+        // skip them on the Voice tab.
+        if (tab === 'chat') {
+            if (_modelFilters.tools && !m.tasks.includes('tools')) return false;
+            if (_modelFilters.ctxKey) {
+                const range = CTX_RANGES.find(r => r.key === _modelFilters.ctxKey);
+                if (range && !range.test(m.maxInputTokens)) return false;
+            }
+            if (_modelFilters.family && m.family !== _modelFilters.family) return false;
+            if (_toolCallFilterOn && !m.tasks.includes('tools')) return false;
+        }
         if (_modelFilters.sizeKey) {
             const range = SIZE_RANGES.find(r => r.key === _modelFilters.sizeKey);
             if (range && !range.test(m.fileSizeGb)) return false;
-        }
-        if (_modelFilters.ctxKey) {
-            const range = CTX_RANGES.find(r => r.key === _modelFilters.ctxKey);
-            if (range && !range.test(m.maxInputTokens)) return false;
         }
         if (_modelFilters.family && m.family !== _modelFilters.family) return false;
         // Header-level filters (compat + tool calling)

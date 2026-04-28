@@ -47,6 +47,7 @@ _DEFAULTS: dict = {
         "engine": "auto",       # "auto" | "web" | "whisper" | "live"
         "fallback": "whisper",  # "web" | "whisper" | "none"
         "micDevice": None,      # null = system default, or device label/id string
+        "whisperModel": "whisper-tiny",  # which Whisper variant to load (alias from /api/models, modality=voice)
         "liveModel": False,     # true once user opts into the Nemotron streaming tier
     },
     "schedule": {
@@ -92,9 +93,25 @@ def load() -> dict:
     if _CONFIG_FILE.exists():
         try:
             on_disk = json.loads(_CONFIG_FILE.read_text(encoding="utf-8"))
-            for key in _DEFAULTS:
-                if key in on_disk:
-                    _config[key] = on_disk[key]
+            for key, default_value in _DEFAULTS.items():
+                if key not in on_disk:
+                    continue
+                stored = on_disk[key]
+                # Deep-merge nested dict values so partial saves don't drop
+                # keys that the schema added later (e.g. saving speech as {}
+                # after a test cleanup must not erase whisperModel / engine).
+                if isinstance(default_value, dict) and isinstance(stored, dict):
+                    merged = dict(default_value)
+                    for sk, sv in stored.items():
+                        if isinstance(default_value.get(sk), dict) and isinstance(sv, dict):
+                            inner = dict(default_value[sk])
+                            inner.update(sv)
+                            merged[sk] = inner
+                        else:
+                            merged[sk] = sv
+                    _config[key] = merged
+                else:
+                    _config[key] = stored
             logger.info("Loaded app config from %s", _CONFIG_FILE)
         except Exception as exc:
             logger.warning("Could not read config file, using defaults: %s", exc)

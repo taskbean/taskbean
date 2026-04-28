@@ -54,6 +54,7 @@ from fastapi import FastAPI, HTTPException, Request, UploadFile, File, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, StrictBool
 
 from opentelemetry import trace
@@ -448,6 +449,7 @@ def _sample_npu_pdh(win32pdh, counter_filter: str) -> float:
 def _health_data() -> dict[str, Any]:
     whisper_loaded = _whisper_model is not None
     whisper_device = _device_from_model_id(_whisper_model.id) if whisper_loaded else None
+    whisper_alias = _whisper_loaded_alias if whisper_loaded else _get_whisper_alias()
     live_loaded = _live_model is not None
     live_device = _device_from_model_id(_live_model.id) if live_loaded else None
     # Friendly model alias (e.g. "qwen3-0.6b") + execution device tag for
@@ -482,6 +484,7 @@ def _health_data() -> dict[str, Any]:
         # the live model (Nemotron streaming) powers /api/transcribe/live.
         "whisperLoaded": whisper_loaded,
         "whisperDevice": whisper_device,
+        "whisperAlias": whisper_alias,
         "liveModelLoaded": live_loaded,
         "liveModelDevice": live_device,
     }
@@ -967,11 +970,26 @@ def _parse_model_catalog() -> list[dict]:
                 else "DeepSeek" if alias_lower.startswith("deepseek")
                 else "Mistral" if alias_lower.startswith("mistral")
                 else "Llama" if alias_lower.startswith("llama")
+                else "Whisper" if alias_lower.startswith("whisper")
+                else "Nemotron" if alias_lower.startswith("nemotron")
                 else "Other"
             )
             param_match = re.search(r"[_-](\d+\.?\d*)\s*b\b", alias, re.I)
             device = info.runtime.device_type if info.runtime else None
             device_str = device.upper() if device else "CPU"
+            # Modality split: "voice" for ASR / speech models, "chat" for
+            # everything else. Source of truth is info.task (Foundry SDK
+            # exposes HF-style task labels: text-generation / chat-completion
+            # vs automatic-speech-recognition / speech-to-text). Fall back to
+            # the alias prefix when info.task is missing or unrecognised so
+            # offline catalog parsers still classify correctly.
+            raw_task = (getattr(info, "task", None) or "").lower()
+            voice_tasks = {"automatic-speech-recognition", "speech-to-text", "transcribe"}
+            voice_alias_prefixes = ("whisper", "nemotron-speech", "moonshine", "wav2vec")
+            if raw_task in voice_tasks or any(alias_lower.startswith(p) for p in voice_alias_prefixes):
+                modality = "voice"
+            else:
+                modality = "chat"
             result.append({
                 "alias": alias,
                 "modelId": m.id,
@@ -979,6 +997,8 @@ def _parse_model_catalog() -> list[dict]:
                 "fileSizeGb": round(info.file_size_mb / 1024, 2) if info.file_size_mb else None,
                 "paramBillions": float(param_match.group(1)) if param_match else None,
                 "family": family,
+                "modality": modality,
+                "task": raw_task or None,
                 "tasks": ["chat", "tools"] if info.supports_tool_calling else ["chat"],
                 "toolCalling": bool(info.supports_tool_calling),
                 "license": info.license or "",
@@ -1031,8 +1051,13 @@ def _parse_model_catalog_cli() -> list[dict]:
             else "DeepSeek" if alias_lower.startswith("deepseek")
             else "Mistral" if alias_lower.startswith("mistral")
             else "Llama" if alias_lower.startswith("llama")
+            else "Whisper" if alias_lower.startswith("whisper")
+            else "Nemotron" if alias_lower.startswith("nemotron")
             else "Other"
         )
+        # CLI fallback: classify modality by alias prefix (CLI doesn't expose task field).
+        voice_alias_prefixes = ("whisper", "nemotron-speech", "moonshine", "wav2vec")
+        modality = "voice" if any(alias_lower.startswith(p) for p in voice_alias_prefixes) else "chat"
         models.append({
             "alias": current_alias,
             "modelId": model_id,
@@ -1040,6 +1065,8 @@ def _parse_model_catalog_cli() -> list[dict]:
             "fileSizeGb": file_size_gb,
             "paramBillions": param_billions,
             "family": family,
+            "modality": modality,
+            "task": None,
             "tasks": [t.strip() for t in tasks.split(",") if t.strip()],
             "toolCalling": "tools" in tasks.lower() or "tool" in tasks.lower(),
             "license": license_,
@@ -1118,6 +1145,7 @@ class SpeechConfig(BaseModel):
     engine: str | None = None
     fallback: str | None = None
     micDevice: str | None = None
+    whisperModel: str | None = None
 
 
 class ConfigPatch(BaseModel):
@@ -1382,6 +1410,28 @@ async def update_config(patch: ConfigPatch) -> dict:
                 current_speech["fallback"] = patch.speech.fallback.lower()
         if patch.speech.micDevice is not None:
             current_speech["micDevice"] = patch.speech.micDevice or None
+        if patch.speech.whisperModel is not None:
+            new_alias = (patch.speech.whisperModel or "").strip()
+            if not new_alias:
+                errors.append("speech.whisperModel must be a non-empty alias")
+            else:
+                # Validate the alias actually exists and is a voice model.
+                catalog_entry = next(
+                    (m for m in get_model_catalog() if m["alias"] == new_alias),
+                    None,
+                )
+                if catalog_entry is None:
+                    errors.append(f"speech.whisperModel '{new_alias}' not found in catalog")
+                elif catalog_entry.get("modality") != "voice":
+                    errors.append(f"speech.whisperModel '{new_alias}' is not a voice model")
+                else:
+                    prior_alias = (current_speech.get("whisperModel") or "").strip() or DEFAULT_WHISPER_ALIAS
+                    current_speech["whisperModel"] = new_alias
+                    # Variant change → drop the cached client so the next
+                    # /api/transcribe lazy-loads the new variant. Side effect
+                    # runs after persistence (below).
+                    if new_alias != prior_alias:
+                        pending["_whisperVariantChanged"] = True
         pending["speech"] = current_speech
 
     # Phase 2: If errors, reject entirely without persisting anything
@@ -1390,7 +1440,17 @@ async def update_config(patch: ConfigPatch) -> dict:
 
     # Phase 3: Persist all validated changes
     for key, value in pending.items():
+        if key.startswith("_"):
+            continue  # internal flags consumed in side-effect phase
         app_config.set(key, value)
+
+    # Side effect: if the user changed their Whisper variant, drop the
+    # cached _whisper_model so the next request lazy-loads the new one.
+    if pending.pop("_whisperVariantChanged", False):
+        try:
+            await reset_whisper_client()
+        except Exception as exc:
+            logger.warning("Whisper client reset after variant change failed: %s", exc)
 
     # Handle side effects after successful persistence
     startup_warning = None
@@ -3050,19 +3110,61 @@ async def extract_tasks(request: Request) -> StreamingResponse:
 
 _whisper_model = None
 _whisper_lock: asyncio.Lock | None = None
+# Tracks the alias the currently-loaded _whisper_model corresponds to. When the
+# user changes their preferred Whisper variant via Settings / mic popover, we
+# clear _whisper_model so the next request lazy-loads the new variant.
+_whisper_loaded_alias: str | None = None
 
 # Live streaming ASR via Nemotron — different model than Whisper because Whisper
 # does not support push-PCM live transcription. See research notes in
 # session-state research/ on this branch for the full justification.
 LIVE_MODEL_ALIAS = "nemotron-speech-streaming-en-0.6b"
-WHISPER_MODEL_ALIAS = "whisper-tiny"
+DEFAULT_WHISPER_ALIAS = "whisper-tiny"
 
 _live_model = None
 _live_lock: asyncio.Lock | None = None
 # Single concurrent /api/transcribe/live session per process. Whisper and
 # Nemotron can't reliably cohabit GPU memory on low-VRAM machines, and a
 # second concurrent session would interleave PCM into the same native handle.
-_live_ws_lock: asyncio.Lock | None = None
+# Implementation note: a bare asyncio.Lock isn't sufficient because awaiting
+# ws.accept() between the locked() check and acquire() would let two
+# connections both pass the check, then queue serially on the lock instead
+# of the second one being immediately rejected. We use a guard lock + boolean
+# active flag pattern so check-and-set is atomic (no await between them).
+_live_ws_guard: asyncio.Lock | None = None
+_live_ws_active: bool = False
+
+
+def _get_whisper_alias() -> str:
+    """Return the user's chosen Whisper variant alias, defaulting to whisper-tiny.
+
+    Read from app_config at every call so changes via /api/config take effect
+    on the next lazy-load without requiring a process restart.
+    """
+    cfg = app_config.get("speech") or {}
+    alias = (cfg.get("whisperModel") or "").strip() or DEFAULT_WHISPER_ALIAS
+    return alias
+
+
+async def reset_whisper_client() -> None:
+    """Drop the cached Whisper model so the next request lazy-loads a new one.
+
+    Called when the user picks a different Whisper variant. Unloads the
+    current model on its own thread to free VRAM/RAM before the new one loads.
+    """
+    global _whisper_model, _whisper_loaded_alias, _whisper_lock
+    if _whisper_lock is None:
+        _whisper_lock = asyncio.Lock()
+    async with _whisper_lock:
+        if _whisper_model is not None:
+            old = _whisper_model
+            _whisper_model = None
+            _whisper_loaded_alias = None
+            try:
+                await asyncio.to_thread(old.unload)
+                logger.info("Unloaded Whisper variant: %s", old.id)
+            except Exception as exc:
+                logger.warning("Whisper unload failed (non-fatal): %s", exc)
 
 
 def _device_from_model_id(model_id: str | None) -> str | None:
@@ -3083,25 +3185,35 @@ def _device_from_model_id(model_id: str | None) -> str | None:
 
 
 async def _get_whisper_client(progress_cb=None):
-    """Lazy-load whisper-tiny and return its AudioClient.
+    """Lazy-load the user's chosen Whisper variant and return its AudioClient.
 
     Args:
         progress_cb: Optional ``Callable[[float], None]`` invoked from the
             FFI thread with download percent (0–100). Ignored if the model
             is already cached or already loaded.
     """
-    global _whisper_model, _whisper_lock
+    global _whisper_model, _whisper_lock, _whisper_loaded_alias
     if _whisper_lock is None:
         _whisper_lock = asyncio.Lock()
-    if _whisper_model is not None:
+    desired_alias = _get_whisper_alias()
+    if _whisper_model is not None and _whisper_loaded_alias == desired_alias:
         return _whisper_model.get_audio_client()
     async with _whisper_lock:
-        if _whisper_model is not None:
+        if _whisper_model is not None and _whisper_loaded_alias == desired_alias:
             return _whisper_model.get_audio_client()
+        # Variant changed since last load — unload before swapping.
+        if _whisper_model is not None and _whisper_loaded_alias != desired_alias:
+            try:
+                await asyncio.to_thread(_whisper_model.unload)
+                logger.info("Unloaded prior Whisper variant: %s", _whisper_model.id)
+            except Exception as exc:
+                logger.warning("Prior Whisper unload failed (non-fatal): %s", exc)
+            _whisper_model = None
+            _whisper_loaded_alias = None
         manager = agent_mod.get_fl_manager()
-        model = await asyncio.to_thread(lambda: manager.catalog.get_model(WHISPER_MODEL_ALIAS))
+        model = await asyncio.to_thread(lambda: manager.catalog.get_model(desired_alias))
         if model is None:
-            raise RuntimeError(f"{WHISPER_MODEL_ALIAS} model not found in catalog")
+            raise RuntimeError(f"{desired_alias} model not found in catalog")
         if not model.is_cached:
             if progress_cb is not None:
                 await asyncio.to_thread(lambda: model.download(progress_cb))
@@ -3109,7 +3221,8 @@ async def _get_whisper_client(progress_cb=None):
                 await asyncio.to_thread(model.download)
         await asyncio.to_thread(model.load)
         _whisper_model = model
-        logger.info("Whisper model loaded: %s", model.id)
+        _whisper_loaded_alias = desired_alias
+        logger.info("Whisper model loaded: %s (alias=%s)", model.id, desired_alias)
         return model.get_audio_client()
 
 
@@ -3265,7 +3378,15 @@ async def transcribe_audio_stream(
             finally:
                 Path(tmp_path).unlink(missing_ok=True)
 
-    return StreamingResponse(_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        # Defensive cleanup: even if the SSE generator never reaches its
+        # finally (e.g. client disconnects before iteration starts, or the
+        # generator is garbage-collected without aclose), Starlette will
+        # invoke this background task once the response is closed.
+        background=BackgroundTask(lambda: Path(tmp_path).unlink(missing_ok=True)),
+    )
 
 
 # ── Speech model warmup (SSE) ─────────────────────────────────────────────────
@@ -3347,24 +3468,30 @@ async def warmup_speech_model(body: _WarmupRequest) -> StreamingResponse:
 
 @app.websocket("/api/transcribe/live")
 async def transcribe_live(ws: WebSocket) -> None:
-    global _live_ws_lock
-    if _live_ws_lock is None:
-        _live_ws_lock = asyncio.Lock()
-
-    if _live_ws_lock.locked():
-        await ws.accept()
-        await ws.send_json({"type": "error", "code": "busy", "message": "Another live session is already active."})
-        await ws.close(code=4090)
-        return
-
-    if not agent_mod.foundry_ready:
-        await ws.accept()
-        await ws.send_json({"type": "error", "code": "not_ready", "message": "Foundry not ready"})
-        await ws.close(code=4503)
-        return
+    global _live_ws_guard, _live_ws_active
+    if _live_ws_guard is None:
+        _live_ws_guard = asyncio.Lock()
 
     await ws.accept()
-    async with _live_ws_lock:
+
+    # Atomic check-and-set of the single-session flag. The guard lock has no
+    # awaits between check and set, so two concurrent connects cannot both
+    # pass the busy check (which was the BLOCKER race in the prior version).
+    async with _live_ws_guard:
+        if _live_ws_active:
+            try:
+                await ws.send_json({"type": "error", "code": "busy", "message": "Another live session is already active."})
+            finally:
+                await ws.close(code=4090)
+            return
+        _live_ws_active = True
+
+    try:
+        if not agent_mod.foundry_ready:
+            await ws.send_json({"type": "error", "code": "not_ready", "message": "Foundry not ready"})
+            await ws.close(code=4503)
+            return
+
         with telem.tracer.start_as_current_span("speech.live.session") as span:
             span.set_attribute("speech.model.alias", LIVE_MODEL_ALIAS)
             loop = asyncio.get_event_loop()
@@ -3498,6 +3625,10 @@ async def transcribe_live(ws: WebSocket) -> None:
                     await ws.close()
                 except Exception:
                     pass
+    finally:
+        # Release the single-session slot atomically.
+        async with _live_ws_guard:
+            _live_ws_active = False
 
 
 # ── Process speech ────────────────────────────────────────────────────────────
