@@ -1003,7 +1003,11 @@ def _parse_model_catalog() -> list[dict]:
                 "tasks": ["chat", "tools"] if info.supports_tool_calling else ["chat"],
                 "toolCalling": bool(info.supports_tool_calling),
                 "license": info.license or "",
-                "contextLength": info.context_length,
+                # Use the camelCase names the frontend / recommender already
+                # read. The earlier "contextLength" key was effectively dead
+                # (no consumer touched it), which made the model picker's
+                # context filter and the context chip both invisible.
+                "maxInputTokens": info.context_length,
                 "maxOutputTokens": info.max_output_tokens,
             })
         return result
@@ -1071,6 +1075,11 @@ def _parse_model_catalog_cli() -> list[dict]:
             "tasks": [t.strip() for t in tasks.split(",") if t.strip()],
             "toolCalling": "tools" in tasks.lower() or "tool" in tasks.lower(),
             "license": license_,
+            # CLI fallback can't see context limits — leave them None so the
+            # frontend's range filters and the recommender simply skip these
+            # models for context-aware checks instead of hiding them.
+            "maxInputTokens": None,
+            "maxOutputTokens": None,
         })
     return models
 
@@ -1112,7 +1121,7 @@ async def list_models() -> dict:
             "active": mid == agent_mod.MODEL_ID,
             "cached": mid in cached_ids,
             "loaded": mid in loaded_ids,
-            # contextLength and maxOutputTokens come from the catalog entry itself
+            # maxInputTokens and maxOutputTokens come from the catalog entry itself
             # (ModelInfo.context_length / ModelInfo.max_output_tokens via new SDK)
         })
 
