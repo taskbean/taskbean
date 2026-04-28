@@ -1146,6 +1146,7 @@ class SpeechConfig(BaseModel):
     fallback: str | None = None
     micDevice: str | None = None
     whisperModel: str | None = None
+    action: str | None = None
 
 
 class ConfigPatch(BaseModel):
@@ -1398,6 +1399,7 @@ async def update_config(patch: ConfigPatch) -> dict:
         current_speech = dict(app_config.get("speech") or app_config._DEFAULTS.get("speech", {}))
         valid_engines = {"auto", "web", "whisper", "live"}
         valid_fallbacks = {"web", "whisper", "none"}
+        valid_actions = {"compose", "extract"}
         if patch.speech.engine is not None:
             if patch.speech.engine.lower() not in valid_engines:
                 errors.append(f"speech.engine must be one of {sorted(valid_engines)}")
@@ -1410,6 +1412,11 @@ async def update_config(patch: ConfigPatch) -> dict:
                 current_speech["fallback"] = patch.speech.fallback.lower()
         if patch.speech.micDevice is not None:
             current_speech["micDevice"] = patch.speech.micDevice or None
+        if patch.speech.action is not None:
+            if patch.speech.action.lower() not in valid_actions:
+                errors.append(f"speech.action must be one of {sorted(valid_actions)}")
+            else:
+                current_speech["action"] = patch.speech.action.lower()
         if patch.speech.whisperModel is not None:
             new_alias = (patch.speech.whisperModel or "").strip()
             if not new_alias:

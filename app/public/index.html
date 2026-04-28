@@ -3251,6 +3251,17 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
               <span class="save-dot"></span>
             </div>
             <div class="settings-row">
+              <label>
+                After dictation
+                <button class="info-tip" tabindex="0" aria-label="Action info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">"Drop into composer" leaves the transcript in the textarea so you can edit and submit normally. "Extract tasks" runs the LLM task-extractor immediately on what you said.</span></button>
+              </label>
+              <select class="settings-select" id="settingsSpeechAction" data-requires="server" onchange="updateSpeechSetting('action', this.value)">
+                <option value="compose">Drop into composer for review</option>
+                <option value="extract">Extract tasks immediately</option>
+              </select>
+              <span class="save-dot"></span>
+            </div>
+            <div class="settings-row">
               <label for="settingsMicDevice">Microphone</label>
               <select class="settings-select" id="settingsMicDevice" data-requires="server" onchange="updateSpeechSetting('micDevice', this.value)">
                 <option value="">System default</option>
@@ -7186,8 +7197,7 @@ function initSpeech() {
         chatInput.value = t; autoResize();
         if (e.results[e.results.length-1].isFinal) {
             stopRec();
-            const transcript = chatInput.value.trim();
-            if (transcript) processSpeechToTasks(transcript); // fire-and-forget; do not await in event handler
+            _handleFinalTranscript(chatInput.value); // honors speech.action setting
         }
     };
     recognition.onerror = (e) => {
@@ -7448,6 +7458,35 @@ async function _startLocalCapture({ engine, micDevice }) {
     }
 }
 
+// Decide what to do with a finalized transcript. 'compose' (default) drops it
+// into chatInput so the user can review/edit and submit normally; 'extract'
+// keeps the legacy auto-extract behavior for users who liked the magic.
+function _speechAction() {
+    const a = (settingsConfig?.speech?.action || 'compose').toLowerCase();
+    return a === 'extract' ? 'extract' : 'compose';
+}
+
+function _handleFinalTranscript(text) {
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+        addChat('info', 'mic-off', 'No speech detected.');
+        setStatus('check-circle', 'Ready', 'idle');
+        return;
+    }
+    if (_speechAction() === 'extract') {
+        processSpeechToTasks(trimmed);
+        return;
+    }
+    // 'compose' mode: leave the transcript in the textarea, focus it so the
+    // user can edit + submit normally. No automatic extraction.
+    chatInput.value = trimmed;
+    autoResize();
+    chatInput.focus();
+    // Place cursor at end so they can keep dictating or type a refinement.
+    try { chatInput.setSelectionRange(trimmed.length, trimmed.length); } catch {}
+    setStatus('check-circle', 'Ready', 'idle');
+}
+
 async function stopCurrentRecording() {
     if (window._whisperRecording) {
         const { engine, stream, ctx, source, worklet, pcmChunks, liveWS } = window._whisperRecording;
@@ -7470,9 +7509,7 @@ async function stopCurrentRecording() {
             // Wait briefly for the final transcript to arrive.
             await new Promise(r => setTimeout(r, 300));
             try { liveWS && liveWS.close(); } catch {}
-            const text = (chatInput.value || '').trim();
-            if (text) processSpeechToTasks(text);
-            else { addChat('info', 'mic-off', 'No speech detected.'); setStatus('check-circle', 'Ready', 'idle'); }
+            _handleFinalTranscript(chatInput.value);
             return;
         }
 
@@ -7483,9 +7520,7 @@ async function stopCurrentRecording() {
 
         try {
             await _streamTranscribe(wav);
-            const text = (chatInput.value || '').trim();
-            if (text) processSpeechToTasks(text);
-            else { addChat('info', 'mic-off', 'No speech detected.'); setStatus('check-circle', 'Ready', 'idle'); }
+            _handleFinalTranscript(chatInput.value);
         } catch (e) {
             console.warn('[speech] Transcription error:', e.message);
             addChat('error', 'alert-circle', 'Transcription failed.');
@@ -10595,6 +10630,8 @@ function populateSettingsFromConfig(cfg) {
     if (engineSel) engineSel.value = speechCfg.engine || 'auto';
     const fallbackSel = document.getElementById('settingsSpeechFallback');
     if (fallbackSel) fallbackSel.value = speechCfg.fallback || 'whisper';
+    const actionSel = document.getElementById('settingsSpeechAction');
+    if (actionSel) actionSel.value = speechCfg.action || 'compose';
     populateMicDevices();
 }
 

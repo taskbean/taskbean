@@ -49,6 +49,8 @@ _DEFAULTS: dict = {
         "micDevice": None,      # null = system default, or device label/id string
         "whisperModel": "whisper-tiny",  # which Whisper variant to load (alias from /api/models, modality=voice)
         "liveModel": False,     # true once user opts into the Nemotron streaming tier
+        "action": "compose",    # "compose" = drop transcript into chatInput for review;
+                                # "extract" = legacy auto-extract tasks via /api/process-speech
     },
     "schedule": {
         "dnd": {
