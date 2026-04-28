@@ -34,8 +34,17 @@ async def test_health_ready(client: httpx.AsyncClient) -> None:
     # Whisper-tiny is lazy-loaded only when the user picks the Whisper engine.
     # The status bar uses these fields to decide whether to surface its
     # device chip; default state (before any voice input) is unloaded.
-    assert data["whisperLoaded"] is False, "whisperLoaded should default to False"
-    assert data["whisperDevice"] is None,  "whisperDevice should be None when whisper is not loaded"
+    # Note: with background warmup enabled, whisperLoaded may flip to True
+    # shortly after foundryReady — accept both states and just assert the
+    # device shape is consistent.
+    assert "whisperLoaded" in data
+    if data["whisperLoaded"]:
+        assert data["whisperDevice"] in ("CPU", "GPU", "NPU")
+    else:
+        assert data["whisperDevice"] is None
+    # Live (Nemotron) model is opt-in only; default is unloaded.
+    assert data["liveModelLoaded"] is False
+    assert data["liveModelDevice"] is None
 
 
 # ── 2. Models list ────────────────────────────────────────────────────────────
@@ -556,6 +565,88 @@ async def test_transcribe_wav(client: httpx.AsyncClient) -> None:
     data = r.json()
     assert "text" in data, f"Response missing 'text' field: {data}"
     assert isinstance(data["text"], str)
+
+
+def _silent_wav(seconds: float = 1.0, sample_rate: int = 16000) -> bytes:
+    """Return a WAV of N seconds of digital silence (16-bit mono)."""
+    import struct
+    num_samples = int(sample_rate * seconds)
+    data_size = num_samples * 2
+    wav = bytearray()
+    wav.extend(b'RIFF')
+    wav.extend(struct.pack('<I', 36 + data_size))
+    wav.extend(b'WAVE')
+    wav.extend(b'fmt ')
+    wav.extend(struct.pack('<IHHIIHH', 16, 1, 1, sample_rate, sample_rate * 2, 2, 16))
+    wav.extend(b'data')
+    wav.extend(struct.pack('<I', data_size))
+    wav.extend(b'\x00' * data_size)
+    return bytes(wav)
+
+
+async def test_transcribe_stream_requires_audio(client: httpx.AsyncClient) -> None:
+    """POST /api/transcribe/stream without a file should fail."""
+    r = await client.post("/api/transcribe/stream")
+    assert r.status_code == 422
+
+
+async def test_transcribe_stream_wav(client: httpx.AsyncClient) -> None:
+    """POST /api/transcribe/stream returns SSE chunks ending with done."""
+    wav = _silent_wav(1.0)
+    async with client.stream(
+        "POST",
+        "/api/transcribe/stream",
+        files={"audio": ("test.wav", wav, "audio/wav")},
+        timeout=120,
+    ) as r:
+        assert r.status_code == 200
+        events: list[dict] = []
+        async for line in r.aiter_lines():
+            if line.startswith("data:"):
+                events.append(json.loads(line[5:].strip()))
+                if events[-1].get("type") in ("done", "error"):
+                    break
+    assert events, "SSE stream produced no events"
+    assert events[-1]["type"] == "done", f"final event was {events[-1]}"
+    assert "text" in events[-1]
+    assert isinstance(events[-1]["text"], str)
+
+
+async def test_warmup_invalid_model(client: httpx.AsyncClient) -> None:
+    """POST /api/speech/warmup rejects unknown model names."""
+    r = await client.post("/api/speech/warmup", json={"model": "bogus"})
+    assert r.status_code == 400
+
+
+async def test_warmup_whisper_idempotent(client: httpx.AsyncClient) -> None:
+    """Warmup returns done immediately when the whisper model is already loaded.
+
+    Background warmup runs at startup, so by the time tests reach this point
+    Whisper is typically already cached + loaded — verify the idempotent path.
+    """
+    # Force-load via the existing transcribe endpoint to guarantee cached state
+    await client.post(
+        "/api/transcribe",
+        files={"audio": ("test.wav", _silent_wav(0.5), "audio/wav")},
+        timeout=120,
+    )
+    async with client.stream(
+        "POST",
+        "/api/speech/warmup",
+        json={"model": "whisper"},
+        timeout=30,
+    ) as r:
+        assert r.status_code == 200
+        events: list[dict] = []
+        async for line in r.aiter_lines():
+            if line.startswith("data:"):
+                events.append(json.loads(line[5:].strip()))
+                if events[-1].get("type") in ("done", "error"):
+                    break
+    assert events
+    assert events[-1]["type"] == "done"
+    assert events[-1]["model"] == "whisper"
+    assert events[-1]["cached"] is True
 
 
 # ── Slow: model switch ────────────────────────────────────────────────────────
