@@ -7953,6 +7953,13 @@ async function populateMicWhisperModels() {
     const wrap = document.getElementById('micWhisperPicker');
     const list = document.getElementById('micWhisperList');
     if (!wrap || !list) return;
+    // Make sure we have a current config snapshot before reading speech.engine /
+    // speech.whisperModel — settingsConfig is null until the user opens Settings
+    // OR until we explicitly load it. Without this, "active" defaulted to
+    // whisper-tiny even after the user picked a different variant.
+    if (!settingsConfig) {
+        try { await loadSettingsConfig(); } catch {}
+    }
     const eng = (settingsConfig?.speech?.engine || 'auto').toLowerCase();
     const isWhisperEngine = eng === 'auto' || eng === 'whisper';
     if (!isWhisperEngine) {
@@ -7997,10 +8004,14 @@ async function populateMicWhisperModels() {
 }
 
 async function selectMicWhisperModel(alias) {
-    const current = settingsConfig?.speech || {};
-    if ((current.whisperModel || '').toLowerCase() === alias.toLowerCase()) return;
-    current.whisperModel = alias;
-    if (settingsConfig) settingsConfig.speech = current;
+    // settingsConfig may be null on first use (user hasn't opened Settings yet).
+    // Hydrate from the server before checking equality so we don't compare
+    // against a stale local cache.
+    if (!settingsConfig) {
+        try { await loadSettingsConfig(); } catch {}
+    }
+    const currentAlias = (settingsConfig?.speech?.whisperModel || '').toLowerCase();
+    if (currentAlias === alias.toLowerCase()) return;
     try {
         const res = await fetch('/api/config', {
             method: 'POST',
@@ -8012,6 +8023,12 @@ async function selectMicWhisperModel(alias) {
             addChat('error', 'alert-circle', `Couldn’t change voice model: ${esc(err.slice(0, 200))}`);
             return;
         }
+        // Server response is the source of truth — refresh the local cache so
+        // populateMicWhisperModels' next render reflects the new active variant.
+        try {
+            const updated = await res.json();
+            if (updated && typeof updated === 'object') settingsConfig = updated;
+        } catch {}
     } catch (e) {
         addChat('error', 'alert-circle', `Couldn’t reach the backend to change voice model.`);
         return;
