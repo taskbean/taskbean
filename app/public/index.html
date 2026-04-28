@@ -1564,6 +1564,37 @@ header {
 .textarea-wrap { position: relative; }
 .textarea-wrap .drop-hint { display: none; position: absolute; inset: 0; background: var(--green-soft); border: 2px dashed var(--green); border-radius: 10px; pointer-events: none; align-items: center; justify-content: center; font-size: 12px; color: var(--green); }
 .textarea-wrap.dragging .drop-hint { display: flex; }
+
+/* ─────────────── Live Composer Ribbon ───────────────
+   Visible only while recording. Mounts above the textarea inside .input-bar-inner.
+   Replaces the cramped #voiceStatus span as the visible source-of-truth for
+   recording state. Speaks the same coffee-house dialect as the composer pills. */
+.composer-ribbon { display: none; align-items: center; gap: 10px; padding: 6px 12px; background: var(--surface2); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); animation: composerRibbonIn 180ms cubic-bezier(.2,.8,.2,1); }
+.composer-ribbon.open { display: flex; }
+.composer-ribbon-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 0 color-mix(in oklch, var(--red) 60%, transparent); animation: composerRibbonPulse 1.4s ease-in-out infinite; flex-shrink: 0; }
+.composer-ribbon-time { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; color: var(--text); min-width: 28px; }
+.composer-ribbon-wave { display: flex; align-items: center; gap: 2px; height: 14px; flex: 1 1 auto; min-width: 60px; max-width: 320px; }
+.composer-ribbon-wave .bar { width: 2px; background: var(--accent); border-radius: 1px; height: 2px; transition: height 60ms linear; }
+.composer-ribbon-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); white-space: nowrap; font-size: 10px; }
+.composer-ribbon-chip.live { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 50%, transparent); background: color-mix(in oklch, var(--accent) 8%, var(--surface)); }
+.composer-ribbon-chip .device { background: var(--surface2); color: var(--muted); padding: 1px 5px; border-radius: 4px; font-size: 9px; letter-spacing: .02em; text-transform: uppercase; }
+.composer-ribbon-cancel { width: 22px; height: 22px; border-radius: 6px; border: none; background: transparent; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }
+.composer-ribbon-cancel:hover { background: color-mix(in oklch, var(--red) 14%, var(--surface)); color: var(--red); }
+.composer-ribbon-cancel svg { width: 13px; height: 13px; }
+@keyframes composerRibbonIn { from { transform: translateY(4px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes composerRibbonPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--red) 60%, transparent); } 50% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--red) 0%, transparent); } }
+@media (prefers-reduced-motion: reduce) {
+  .composer-ribbon { animation: none; }
+  .composer-ribbon-dot { animation: none; box-shadow: none; }
+  .composer-ribbon-wave .bar { transition: none; height: 6px !important; }
+}
+
+/* Speech model warmup card — chat info card with a progress bar. Used the
+   first time the user picks the Whisper or Live engine and we need to
+   surface the multi-MB download instead of pausing silently. */
+.warmup-progress { width: 100%; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+.warmup-progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 200ms linear; width: 0%; }
+.warmup-pct { font-variant-numeric: tabular-nums; color: var(--muted); margin-left: 6px; font-size: 10px; }
 .send-btn { width: 30px; height: 30px; border-radius: 8px; border: none; background: var(--accent); color: #000; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; transition: opacity .15s; }
 .send-btn:disabled { opacity: .4; cursor: not-allowed; }
 .input-hint { font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
@@ -2696,6 +2727,20 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
     <!-- Unified multi-line input -->
     <div class="input-bar">
       <div class="input-bar-inner">
+        <!-- Live Composer Ribbon — mounted in JS while recording. Owns timer,
+             waveform, engine info chip, and cancel button. Hidden by default. -->
+        <div class="composer-ribbon" id="composerRibbon" role="status" aria-live="polite">
+          <span class="composer-ribbon-dot" aria-hidden="true"></span>
+          <span class="composer-ribbon-time" id="composerRibbonTime">0:00</span>
+          <div class="composer-ribbon-wave" id="composerRibbonWave" aria-hidden="true"></div>
+          <span class="composer-ribbon-chip" id="composerRibbonChip">
+            <span class="label">on-device</span>
+            <span class="device">CPU</span>
+          </span>
+          <button class="composer-ribbon-cancel" id="composerRibbonCancel" onclick="cancelVoiceCapture()" title="Cancel" aria-label="Cancel recording">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
         <div class="textarea-wrap" id="textareaWrap">
           <textarea id="chatInput" rows="2" placeholder='Type a command, paste text, or drop a file to extract tasks...'></textarea>
           <div class="drop-hint"><i data-lucide="upload"></i>&nbsp;Drop file to extract tasks</div>
@@ -3092,6 +3137,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
               <select class="settings-select" id="settingsSpeechEngine" data-requires="server" onchange="updateSpeechSetting('engine', this.value)">
                 <option value="auto">Auto (on-device Whisper)</option>
                 <option value="whisper">Foundry Whisper (on-device)</option>
+                <option value="live">Live dictation (beta, on-device)</option>
                 <option value="web">Browser cloud speech</option>
               </select>
               <span class="save-dot"></span>
@@ -7156,6 +7202,8 @@ async function tryStartEngine(engine, micDevice) {
         return tryWebSpeech();
     } else if (engine === 'whisper') {
         return tryWhisperCapture(micDevice);
+    } else if (engine === 'live') {
+        return tryLiveCapture(micDevice);
     }
     return false;
 }
@@ -7172,41 +7220,161 @@ function tryWebSpeech() {
     }
 }
 
+// Inline AudioWorklet module URL — created lazily once per page. The processor
+// receives 128-sample Float32 quantums from the audio device and forwards
+// them to the main thread via port.postMessage. Replaces the deprecated
+// ScriptProcessorNode (which ran on the main audio thread and glitched
+// under load). Inlined as a Blob URL because the project has no build step.
+let _audioWorkletURL = null;
+function _ensureAudioWorkletURL() {
+    if (_audioWorkletURL) return _audioWorkletURL;
+    const code = `
+class TaskbeanCaptureProcessor extends AudioWorkletProcessor {
+    constructor() {
+        super();
+    }
+    process(inputs) {
+        const input = inputs[0];
+        if (!input || !input[0]) return true;
+        // Copy because the underlying buffer is reused by the audio system.
+        const samples = new Float32Array(input[0]);
+        this.port.postMessage(samples, [samples.buffer]);
+        return true;
+    }
+}
+registerProcessor('taskbean-capture', TaskbeanCaptureProcessor);
+`;
+    _audioWorkletURL = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+    return _audioWorkletURL;
+}
+
+function _floatToInt16(float32) {
+    const out = new Int16Array(float32.length);
+    for (let i = 0; i < float32.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32[i]));
+        out[i] = s < 0 ? s * 32768 : s * 32767;
+    }
+    return out;
+}
+
 async function tryWhisperCapture(micDevice) {
+    return _startLocalCapture({ engine: 'whisper', micDevice });
+}
+
+async function tryLiveCapture(micDevice) {
+    return _startLocalCapture({ engine: 'live', micDevice });
+}
+
+// Single capture entry point used by both Whisper batch and Live WS flows.
+// engine === 'whisper' → accumulate PCM in memory, POST WAV to
+// /api/transcribe/stream on stop, write SSE chunks into chatInput.
+// engine === 'live'    → open WS /api/transcribe/live, push Int16 PCM
+// frames upstream, write JSON transcript chunks into chatInput as they arrive.
+async function _startLocalCapture({ engine, micDevice }) {
     try {
         const constraints = { audio: micDevice ? { deviceId: { exact: micDevice } } : true };
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
         const ctx = new AudioContext({ sampleRate: 16000 });
+        await ctx.audioWorklet.addModule(_ensureAudioWorkletURL());
         const source = ctx.createMediaStreamSource(stream);
-        const processor = ctx.createScriptProcessor(4096, 1, 1);
-        const pcmChunks = [];
+        const worklet = new AudioWorkletNode(ctx, 'taskbean-capture');
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
 
-        processor.onaudioprocess = e => pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-        source.connect(processor);
-        processor.connect(ctx.destination);
+        const pcmChunks = [];          // Whisper batch path
+        let liveWS = null;             // Live WS path
+        let liveReady = false;
+        let liveStartedAt = 0;
+        let interimText = '';
 
-        window._whisperRecording = { stream, ctx, source, processor, pcmChunks };
+        if (engine === 'live') {
+            const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            liveWS = new WebSocket(`${wsProto}//${location.host}/api/transcribe/live`);
+            liveWS.binaryType = 'arraybuffer';
+            liveWS.onmessage = (ev) => {
+                let msg;
+                try { msg = JSON.parse(ev.data); } catch { return; }
+                if (msg.type === 'loading') {
+                    _setRibbonChip('live', `live · ${Math.round(msg.pct)}%`, '');
+                } else if (msg.type === 'ready') {
+                    liveReady = true;
+                    _setRibbonChip('live', `live · ${msg.model.split('-').slice(0, 2).join('-')}`, msg.device || '');
+                } else if (msg.type === 'chunk') {
+                    interimText = (interimText + ' ' + msg.text).trim();
+                    chatInput.value = interimText;
+                    autoResize();
+                } else if (msg.type === 'done') {
+                    interimText = (msg.text || interimText || '').trim();
+                    chatInput.value = interimText;
+                    autoResize();
+                } else if (msg.type === 'error') {
+                    addChat('error', 'mic-off', `Live dictation error: ${esc(msg.message || 'unknown')}`);
+                    stopCurrentRecording();
+                }
+            };
+            liveWS.onerror = () => {
+                addChat('error', 'mic-off', 'Live dictation connection failed.');
+                stopCurrentRecording();
+            };
+            // Worklet → Int16 → WS
+            worklet.port.onmessage = (e) => {
+                if (!liveReady || liveWS.readyState !== 1) return;
+                const int16 = _floatToInt16(e.data);
+                liveWS.send(int16.buffer);
+            };
+        } else {
+            // Whisper batch — accumulate Float32 chunks for buildWav() on stop.
+            worklet.port.onmessage = (e) => pcmChunks.push(e.data);
+        }
+
+        source.connect(analyser);
+        source.connect(worklet);
+        const muted = ctx.createGain();
+        muted.gain.value = 0;
+        worklet.connect(muted).connect(ctx.destination);
+
+        window._whisperRecording = { engine, stream, ctx, source, worklet, analyser, pcmChunks, liveWS };
 
         startRec();
-        document.getElementById('voiceStatus').textContent = 'Listening (Whisper)...';
+        liveStartedAt = Date.now();
+        mountComposerRibbon(engine, analyser, liveStartedAt);
 
         return true;
     } catch (e) {
-        console.debug('[speech] Whisper capture failed:', e.message);
+        console.debug('[speech] capture failed:', e.message);
+        unmountComposerRibbon();
         return false;
     }
 }
 
 async function stopCurrentRecording() {
     if (window._whisperRecording) {
-        const { stream, ctx, source, processor, pcmChunks } = window._whisperRecording;
-        processor.disconnect();
-        source.disconnect();
+        const { engine, stream, ctx, source, worklet, pcmChunks, liveWS } = window._whisperRecording;
+        try { worklet.port.onmessage = null; } catch {}
+        try { worklet.disconnect(); } catch {}
+        try { source.disconnect(); } catch {}
         stream.getTracks().forEach(t => t.stop());
         await ctx.close();
         window._whisperRecording = null;
+        unmountComposerRibbon();
         stopRec();
+
+        if (engine === 'live') {
+            // Tell server we're done; final {type:'done', text} will populate chatInput.
+            try {
+                if (liveWS && liveWS.readyState === 1) {
+                    liveWS.send(JSON.stringify({ type: 'stop' }));
+                }
+            } catch {}
+            // Wait briefly for the final transcript to arrive.
+            await new Promise(r => setTimeout(r, 300));
+            try { liveWS && liveWS.close(); } catch {}
+            const text = (chatInput.value || '').trim();
+            if (text) processSpeechToTasks(text);
+            else { addChat('info', 'mic-off', 'No speech detected.'); setStatus('check-circle', 'Ready', 'idle'); }
+            return;
+        }
 
         if (pcmChunks.length === 0) return;
 
@@ -7214,18 +7382,10 @@ async function stopCurrentRecording() {
         const wav = buildWav(pcmChunks, 16000);
 
         try {
-            const form = new FormData();
-            form.append('audio', new Blob([wav], { type: 'audio/wav' }), 'recording.wav');
-            const res = await fetch('/api/transcribe', { method: 'POST', body: form });
-            if (!res.ok) throw new Error(`Transcribe failed: ${res.status}`);
-            const data = await res.json();
-            const text = (data.text || '').trim();
-            if (text) {
-                processSpeechToTasks(text);
-            } else {
-                addChat('info', 'mic-off', 'No speech detected.');
-                setStatus('check-circle', 'Ready', 'idle');
-            }
+            await _streamTranscribe(wav);
+            const text = (chatInput.value || '').trim();
+            if (text) processSpeechToTasks(text);
+            else { addChat('info', 'mic-off', 'No speech detected.'); setStatus('check-circle', 'Ready', 'idle'); }
         } catch (e) {
             console.warn('[speech] Transcription error:', e.message);
             addChat('error', 'alert-circle', 'Transcription failed.');
@@ -7234,6 +7394,219 @@ async function stopCurrentRecording() {
     } else if (isRecording && recognition) {
         recognition.stop();
         stopRec();
+    }
+}
+
+// POST WAV to /api/transcribe/stream and write SSE text chunks progressively
+// into chatInput as Whisper emits them.
+async function _streamTranscribe(wavBytes) {
+    const form = new FormData();
+    form.append('audio', new Blob([wavBytes], { type: 'audio/wav' }), 'recording.wav');
+    const res = await fetch('/api/transcribe/stream', { method: 'POST', body: form });
+    if (!res.ok || !res.body) throw new Error(`Transcribe failed: ${res.status}`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let acc = '';
+    chatInput.value = '';
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf('\n\n')) !== -1) {
+            const frame = buf.slice(0, idx).trim();
+            buf = buf.slice(idx + 2);
+            if (!frame.startsWith('data:')) continue;
+            let msg;
+            try { msg = JSON.parse(frame.slice(5).trim()); } catch { continue; }
+            if (msg.type === 'chunk') {
+                acc += msg.text;
+                chatInput.value = acc.trim();
+                autoResize();
+            } else if (msg.type === 'done') {
+                chatInput.value = (msg.text || acc).trim();
+                autoResize();
+                return;
+            } else if (msg.type === 'error') {
+                throw new Error(msg.message || 'stream error');
+            }
+        }
+    }
+}
+
+function cancelVoiceCapture() {
+    if (!window._whisperRecording) return;
+    const { stream, ctx, worklet, source, liveWS } = window._whisperRecording;
+    try { worklet.port.onmessage = null; } catch {}
+    try { worklet.disconnect(); } catch {}
+    try { source.disconnect(); } catch {}
+    try { stream.getTracks().forEach(t => t.stop()); } catch {}
+    try { ctx.close(); } catch {}
+    try { liveWS && liveWS.close(); } catch {}
+    window._whisperRecording = null;
+    unmountComposerRibbon();
+    stopRec();
+    setStatus('check-circle', 'Ready', 'idle');
+}
+
+// ─── Live Composer Ribbon controller ──────────────────────────────────────
+let _ribbonRAF = null;
+let _ribbonClockTimer = null;
+
+function mountComposerRibbon(engine, analyser, startedAt) {
+    const ribbon = document.getElementById('composerRibbon');
+    if (!ribbon) return;
+    ribbon.classList.add('open');
+
+    // Engine info chip
+    const isLive = engine === 'live';
+    _setRibbonChip(isLive ? 'live' : 'whisper',
+                   isLive ? 'live · loading…' : 'on-device · whisper-tiny',
+                   isLive ? '' : (window._whisperDevice || 'CPU'));
+
+    // Build 36 bars
+    const wave = document.getElementById('composerRibbonWave');
+    if (wave && wave.childElementCount !== 36) {
+        wave.innerHTML = '';
+        for (let i = 0; i < 36; i++) {
+            const b = document.createElement('div');
+            b.className = 'bar';
+            wave.appendChild(b);
+        }
+    }
+    const bars = wave ? Array.from(wave.children) : [];
+    const data = new Uint8Array(analyser.frequencyBinCount);
+
+    function tick() {
+        if (!window._whisperRecording) return;
+        analyser.getByteFrequencyData(data);
+        // Bin the FFT into 36 bands.
+        const step = Math.max(1, Math.floor(data.length / bars.length));
+        for (let i = 0; i < bars.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < step; j++) sum += data[i * step + j] || 0;
+            const avg = sum / step;
+            const h = Math.max(2, Math.min(14, (avg / 255) * 14));
+            bars[i].style.height = h + 'px';
+        }
+        _ribbonRAF = requestAnimationFrame(tick);
+    }
+    _ribbonRAF = requestAnimationFrame(tick);
+
+    // Tabular-nums clock, updated every 250 ms.
+    const clock = document.getElementById('composerRibbonTime');
+    function updateClock() {
+        if (!clock) return;
+        const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+        const mm = Math.floor(elapsed / 60);
+        const ss = elapsed % 60;
+        clock.textContent = `${mm}:${String(ss).padStart(2, '0')}`;
+    }
+    updateClock();
+    _ribbonClockTimer = setInterval(updateClock, 250);
+
+    lucide.createIcons();
+}
+
+function unmountComposerRibbon() {
+    const ribbon = document.getElementById('composerRibbon');
+    if (ribbon) ribbon.classList.remove('open');
+    if (_ribbonRAF) { cancelAnimationFrame(_ribbonRAF); _ribbonRAF = null; }
+    if (_ribbonClockTimer) { clearInterval(_ribbonClockTimer); _ribbonClockTimer = null; }
+    const clock = document.getElementById('composerRibbonTime');
+    if (clock) clock.textContent = '0:00';
+}
+
+function _setRibbonChip(kind, label, device) {
+    const chip = document.getElementById('composerRibbonChip');
+    if (!chip) return;
+    chip.classList.toggle('live', kind === 'live');
+    chip.querySelector('.label').textContent = label;
+    const dev = chip.querySelector('.device');
+    if (device) { dev.textContent = device; dev.style.display = ''; }
+    else { dev.style.display = 'none'; }
+}
+
+// ─── Speech model warmup card ─────────────────────────────────────────────
+// Mounted as an info chat card the first time a model needs to download.
+// Subscribes to /api/speech/warmup SSE for progress; removes itself on done.
+const _warmupCardKey = (model) => `warmup-card-${model}`;
+
+async function showWarmupCard(model) {
+    const key = _warmupCardKey(model);
+    if (document.getElementById(key)) return; // already mounted
+
+    const feed = document.getElementById('chatFeed');
+    if (!feed) return;
+    const div = document.createElement('div');
+    div.id = key;
+    div.className = 'chat-msg info';
+    const label = model === 'live'
+        ? 'Warming up live dictation (~600 MB Nemotron model, one-time download)…'
+        : 'Warming the espresso machine — downloading whisper-tiny (~75 MB) for on-device dictation…';
+    div.innerHTML = `<i data-lucide="coffee" class="msg-icon"></i><span class="msg-content">${label}<div class="warmup-progress"><div class="warmup-progress-fill"></div></div><span class="warmup-pct">0%</span></span>`;
+    feed.appendChild(div);
+    feed.scrollTop = feed.scrollHeight;
+    lucide.createIcons();
+
+    const fill = div.querySelector('.warmup-progress-fill');
+    const pctEl = div.querySelector('.warmup-pct');
+
+    try {
+        const res = await fetch('/api/speech/warmup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model })
+        });
+        if (!res.ok || !res.body) throw new Error(`warmup ${res.status}`);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            let idx;
+            while ((idx = buf.indexOf('\n\n')) !== -1) {
+                const frame = buf.slice(0, idx).trim();
+                buf = buf.slice(idx + 2);
+                if (!frame.startsWith('data:')) continue;
+                let msg;
+                try { msg = JSON.parse(frame.slice(5).trim()); } catch { continue; }
+                if (msg.type === 'progress') {
+                    if (fill) fill.style.width = msg.pct + '%';
+                    if (pctEl) pctEl.textContent = Math.round(msg.pct) + '%';
+                } else if (msg.type === 'done') {
+                    if (msg.cached) {
+                        // Already loaded — just remove the card silently.
+                        div.remove();
+                    } else {
+                        if (fill) fill.style.width = '100%';
+                        if (pctEl) pctEl.textContent = '100%';
+                        const content = div.querySelector('.msg-content');
+                        if (content) content.firstChild.textContent = model === 'live'
+                            ? 'Live dictation ready — your microphone now works for continuous speech.'
+                            : 'Espresso pulled — your microphone now works offline.';
+                        setTimeout(() => div.remove(), 4000);
+                    }
+                    return;
+                } else if (msg.type === 'error') {
+                    const content = div.querySelector('.msg-content');
+                    if (content) content.firstChild.textContent = `Speech model warmup failed: ${msg.message || 'unknown'}`;
+                    div.classList.remove('info');
+                    div.classList.add('error');
+                    return;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[speech] warmup failed:', e.message);
+        const content = div.querySelector('.msg-content');
+        if (content) content.firstChild.textContent = `Speech model warmup failed: ${e.message}`;
+        div.classList.remove('info');
+        div.classList.add('error');
     }
 }
 
@@ -7993,9 +8366,25 @@ function updateStatusBarHealth(ev) {
     // Whisper load state drives an additional device chip when its
     // execution device differs from the chat model's.
     if (typeof ev.whisperLoaded === 'boolean') {
+        const wasLoaded = _whisperLoaded;
         _whisperLoaded = ev.whisperLoaded;
         _whisperDevice = ev.whisperDevice || null;
         _updateDeviceChipsVisibility();
+        // First time we see Whisper not yet loaded after Foundry is ready,
+        // show the warmup card so the user can watch the download finish.
+        // Suppress for the live engine (its warmup is shown when the user opts in).
+        if (!wasLoaded && !_whisperLoaded && ev.foundryReady && _whisperWarmupShown !== true) {
+            const eng = (settingsConfig?.speech?.engine || 'auto').toLowerCase();
+            if (eng === 'auto' || eng === 'whisper') {
+                _whisperWarmupShown = true;
+                showWarmupCard('whisper');
+            }
+        }
+        if (_whisperLoaded) _whisperWarmupShown = true;
+    }
+    if (typeof ev.liveModelLoaded === 'boolean') {
+        _liveModelLoaded = ev.liveModelLoaded;
+        _liveModelDevice = ev.liveModelDevice || null;
     }
 }
 
@@ -8005,6 +8394,11 @@ let _currentModelDevice = null;
 // Tracks whether Whisper-tiny has been lazy-loaded for voice transcription.
 let _whisperLoaded = false;
 let _whisperDevice = null;
+let _whisperWarmupShown = false;
+// Tracks the live (Nemotron) streaming ASR model. Lazy-loaded only when the
+// user opts into the live tier.
+let _liveModelLoaded = false;
+let _liveModelDevice = null;
 
 function _updateModelDeviceIcon(modelId) {
     const iconEl = document.getElementById('modelDeviceIcon');
@@ -8026,6 +8420,7 @@ function _updateDeviceChipsVisibility() {
     const active = new Set();
     if (_currentModelDevice && map[_currentModelDevice]) active.add(_currentModelDevice);
     if (_whisperLoaded && _whisperDevice && map[_whisperDevice]) active.add(_whisperDevice);
+    if (_liveModelLoaded && _liveModelDevice && map[_liveModelDevice]) active.add(_liveModelDevice);
 
     // Respect user's status-bar item preferences (Settings → Status bar).
     let enabledKeys = null;
@@ -9863,6 +10258,13 @@ async function updateSpeechSetting(key, value) {
     const current = settingsConfig?.speech || {};
     current[key] = value || null;
     await updateSettingsConfig('speech', current);
+    // Surface the warmup card the first time the user opts into a model
+    // that needs downloading. The backend's /api/speech/warmup is idempotent
+    // and emits {type:'done', cached:true} immediately if already loaded.
+    if (key === 'engine') {
+        if (value === 'live') showWarmupCard('live');
+        else if (value === 'whisper' || value === 'auto') showWarmupCard('whisper');
+    }
 }
 
 async function populateMicDevices() {
