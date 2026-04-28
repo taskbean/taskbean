@@ -1589,12 +1589,52 @@ header {
   .composer-ribbon-wave .bar { transition: none; height: 6px !important; }
 }
 
-/* Speech model warmup card — chat info card with a progress bar. Used the
-   first time the user picks the Whisper or Live engine and we need to
-   surface the multi-MB download instead of pausing silently. */
-.warmup-progress { width: 100%; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; margin-top: 6px; }
-.warmup-progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 200ms linear; width: 0%; }
-.warmup-pct { font-variant-numeric: tabular-nums; color: var(--muted); margin-left: 6px; font-size: 10px; }
+/* Speech model warmup card — chat-anchored info card with semantic severity.
+   Three states share one element: loading (accent), warn (orange, server stale),
+   error (red). Action button for the warn case ("Restart server" hint).
+   Dismissible via the close button; remembers dismissal in sessionStorage so
+   a hard refresh doesn't replay it within the same tab session. */
+.warmup-card { position: relative; display: grid; grid-template-columns: 22px 1fr auto; column-gap: 10px; row-gap: 4px; align-items: start; padding: 10px 32px 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); font-size: 11px; max-width: 100%; align-self: stretch; }
+.warmup-card .icon { color: var(--accent); display: flex; align-items: center; justify-content: center; height: 16px; }
+.warmup-card .icon svg { width: 14px; height: 14px; }
+.warmup-card .body { color: var(--text); line-height: 1.45; }
+.warmup-card .body code { background: var(--surface2); color: var(--text); padding: 1px 6px; border-radius: 4px; font-family: 'Cascadia Code', 'Fira Code', ui-monospace, monospace; font-size: 10px; }
+.warmup-card .body .hint { color: var(--muted); margin-top: 2px; }
+.warmup-card .pct { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 10px; align-self: center; }
+.warmup-card .progress { grid-column: 1 / -1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+.warmup-card .progress > i { display: block; height: 100%; width: 0%; background: var(--accent); border-radius: 2px; transition: width 200ms linear; }
+.warmup-card .actions { grid-column: 2 / -1; display: flex; gap: 6px; margin-top: 4px; }
+.warmup-card .action-btn { font-family: inherit; font-size: 10px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; transition: all .15s; }
+.warmup-card .action-btn:hover { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.warmup-card .action-btn.subtle { background: transparent; color: var(--muted); }
+.warmup-card .action-btn.subtle:hover { background: var(--surface2); color: var(--text); border-color: var(--border); }
+.warmup-card .dismiss { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: .6; transition: all .15s; }
+.warmup-card .dismiss:hover { opacity: 1; background: var(--surface2); }
+.warmup-card .dismiss svg { width: 11px; height: 11px; }
+
+/* Severity variants — coffee-warm gradient from accent (loading) to orange
+   (warn: stale server, recoverable) to red (error: real failure). */
+.warmup-card[data-state="warn"]    { border-left-color: var(--orange); background: color-mix(in oklch, var(--orange) 5%, var(--surface)); }
+.warmup-card[data-state="warn"]    .icon { color: var(--orange); }
+.warmup-card[data-state="warn"]    .progress { display: none; }
+.warmup-card[data-state="error"]   { border-left-color: var(--red); background: color-mix(in oklch, var(--red) 5%, var(--surface)); }
+.warmup-card[data-state="error"]   .icon { color: var(--red); }
+.warmup-card[data-state="error"]   .progress { display: none; }
+.warmup-card[data-state="success"] { border-left-color: var(--green); background: color-mix(in oklch, var(--green) 5%, var(--surface)); }
+.warmup-card[data-state="success"] .icon { color: var(--green); }
+.warmup-card[data-state="success"] .progress > i { background: var(--green); }
+.warmup-card[data-state="retrying"] .icon svg { animation: warmupSpin 1.2s linear infinite; }
+
+.warmup-card.dismissing { animation: warmupSlideOut 220ms ease-in forwards; }
+
+@keyframes warmupSpin { to { transform: rotate(360deg); } }
+@keyframes warmupSlideOut { to { opacity: 0; transform: translateY(-4px); height: 0; padding-top: 0; padding-bottom: 0; margin-top: 0; margin-bottom: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .warmup-card[data-state="retrying"] .icon svg { animation: none; }
+  .warmup-card.dismissing { animation: none; opacity: 0; }
+  .warmup-card .progress > i { transition: none; }
+}
 .send-btn { width: 30px; height: 30px; border-radius: 8px; border: none; background: var(--accent); color: #000; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; transition: opacity .15s; }
 .send-btn:disabled { opacity: .4; cursor: not-allowed; }
 .input-hint { font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
@@ -7547,37 +7587,129 @@ function _setRibbonChip(kind, label, device) {
 }
 
 // ─── Speech model warmup card ─────────────────────────────────────────────
-// Mounted as an info chat card the first time a model needs to download.
-// Subscribes to /api/speech/warmup SSE for progress; removes itself on done.
+// Mounted as a chat-anchored card. Three semantic states: loading (downloading),
+// warn (server is stale — restart suggestion), error (real failure). Designed
+// so a hard refresh on a stale backend produces a *teaching* error, not an
+// alarming red brick.
+//
+// Lifecycle:
+//   1. showWarmupCard(model) is called either when the user opts in via
+//      Settings or when the health stream reveals !whisperLoaded after a
+//      brief grace window for the background warmup to finish.
+//   2. Card POSTs /api/speech/warmup and consumes SSE.
+//   3. On {type:'done'} → success state, fades out 3.5s later.
+//   4. On {type:'done', cached:true} → silent removal (server already loaded).
+//   5. On HTTP 405/404 → 'warn' state with restart-server action.
+//   6. On HTTP 503 / fetch error → one auto-retry after 3s, then 'error'.
+//   7. Dismissal sticks for the tab session via sessionStorage so a hard
+//      refresh doesn't replay the same card.
+
 const _warmupCardKey = (model) => `warmup-card-${model}`;
+const _warmupDismissedKey = (model) => `taskbean-warmup-dismissed-${model}`;
 
-async function showWarmupCard(model) {
-    const key = _warmupCardKey(model);
-    if (document.getElementById(key)) return; // already mounted
-
-    const feed = document.getElementById('chatFeed');
-    if (!feed) return;
-    const div = document.createElement('div');
-    div.id = key;
-    div.className = 'chat-msg info';
-    const label = model === 'live'
-        ? 'Warming up live dictation (~600 MB Nemotron model, one-time download)…'
-        : 'Warming the espresso machine — downloading whisper-tiny (~75 MB) for on-device dictation…';
-    div.innerHTML = `<i data-lucide="coffee" class="msg-icon"></i><span class="msg-content">${label}<div class="warmup-progress"><div class="warmup-progress-fill"></div></div><span class="warmup-pct">0%</span></span>`;
-    feed.appendChild(div);
-    feed.scrollTop = feed.scrollHeight;
+function _warmupCardEl(model, state, label, hint, opts = {}) {
+    const id = _warmupCardKey(model);
+    let card = document.getElementById(id);
+    const created = !card;
+    if (!card) {
+        card = document.createElement('div');
+        card.id = id;
+        card.className = 'chat-msg warmup-card';
+    }
+    const showProgress = state === 'loading' || state === 'success';
+    const showDismiss = opts.dismissible !== false;
+    card.dataset.state = state;
+    const iconName = ({
+        loading: 'coffee',
+        retrying: 'loader',
+        warn: 'plug-zap',
+        error: 'alert-triangle',
+        success: 'check-circle-2',
+    })[state] || 'coffee';
+    card.innerHTML = `
+        <span class="icon" aria-hidden="true"><i data-lucide="${iconName}"></i></span>
+        <span class="body">${label}${hint ? `<div class="hint">${hint}</div>` : ''}</span>
+        ${showProgress ? `<span class="pct">0%</span><div class="progress"><i></i></div>` : ''}
+        ${opts.actions ? `<div class="actions">${opts.actions}</div>` : ''}
+        ${showDismiss ? `<button class="dismiss" type="button" aria-label="Dismiss" onclick="dismissWarmupCard('${model}')"><i data-lucide="x"></i></button>` : ''}
+    `;
+    if (created) {
+        const feed = document.getElementById('chatFeed');
+        if (feed) { feed.appendChild(card); feed.scrollTop = feed.scrollHeight; }
+    }
     lucide.createIcons();
+    return card;
+}
 
-    const fill = div.querySelector('.warmup-progress-fill');
-    const pctEl = div.querySelector('.warmup-pct');
+function dismissWarmupCard(model) {
+    const card = document.getElementById(_warmupCardKey(model));
+    if (!card) return;
+    try { sessionStorage.setItem(_warmupDismissedKey(model), '1'); } catch {}
+    card.classList.add('dismissing');
+    setTimeout(() => card.remove(), 240);
+}
 
+function _warmupSetProgress(card, pct) {
+    const fill = card.querySelector('.progress > i');
+    const pctEl = card.querySelector('.pct');
+    if (fill) fill.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+}
+
+async function showWarmupCard(model, _attempt = 1) {
+    // Honor a tab-session dismissal so hard refreshes don't replay the card.
+    try { if (sessionStorage.getItem(_warmupDismissedKey(model)) === '1') return; } catch {}
+    if (document.getElementById(_warmupCardKey(model))) return; // already mounted
+
+    const loadingLabel = model === 'live'
+        ? 'Warming up live dictation'
+        : 'Warming the espresso machine';
+    const loadingHint = model === 'live'
+        ? '~600 MB Nemotron streaming model · one-time download'
+        : '~75 MB whisper-tiny · one-time download';
+    const card = _warmupCardEl(model, 'loading', loadingLabel, loadingHint);
+
+    let res;
     try {
-        const res = await fetch('/api/speech/warmup', {
+        res = await fetch('/api/speech/warmup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ model })
         });
-        if (!res.ok || !res.body) throw new Error(`warmup ${res.status}`);
+    } catch (e) {
+        // Network / fetch error — backend not reachable. Auto-retry once.
+        if (_attempt < 2) return _warmupRetry(model, card, 'Backend not reachable, retrying in 3s…');
+        _warmupCardEl(model, 'error',
+            'Couldn’t reach your local backend',
+            'Make sure the taskbean Python server is running on this machine.',
+            { actions: `<button class="action-btn subtle" onclick="showWarmupCard('${esc(model)}')">Try again</button>` });
+        return;
+    }
+
+    // Stale-backend detection: the catch-all GET route in main.py returns
+    // 405 when this POST endpoint isn't yet registered (older server build).
+    // 404 happens if the route is gone entirely. Either way, the cure is the
+    // same — restart the local server.
+    if (res.status === 405 || res.status === 404) {
+        _warmupCardEl(model, 'warn',
+            'Your local server is running an older build',
+            'On-device dictation needs a backend restart to pick up the new speech endpoints. In your terminal: <code>cd app/agent &amp;&amp; python main.py</code>',
+            { actions: `<button class="action-btn subtle" onclick="dismissWarmupCard('${esc(model)}')">Got it</button>` });
+        return;
+    }
+    if (res.status === 503) {
+        if (_attempt < 2) return _warmupRetry(model, card, 'Foundry still starting up, retrying in 3s…');
+    }
+    if (!res.ok || !res.body) {
+        _warmupCardEl(model, 'error',
+            `Speech model warmup failed (HTTP ${res.status})`,
+            'You can still type tasks normally. Voice input may not work until this is resolved.',
+            { actions: `<button class="action-btn subtle" onclick="showWarmupCard('${esc(model)}')">Try again</button>` });
+        return;
+    }
+
+    // Stream the SSE progress.
+    try {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buf = '';
@@ -7593,38 +7725,50 @@ async function showWarmupCard(model) {
                 let msg;
                 try { msg = JSON.parse(frame.slice(5).trim()); } catch { continue; }
                 if (msg.type === 'progress') {
-                    if (fill) fill.style.width = msg.pct + '%';
-                    if (pctEl) pctEl.textContent = Math.round(msg.pct) + '%';
+                    _warmupSetProgress(card, msg.pct);
                 } else if (msg.type === 'done') {
                     if (msg.cached) {
-                        // Already loaded — just remove the card silently.
-                        div.remove();
+                        // Already loaded — quiet success: just remove the card.
+                        card.remove();
                     } else {
-                        if (fill) fill.style.width = '100%';
-                        if (pctEl) pctEl.textContent = '100%';
-                        const content = div.querySelector('.msg-content');
-                        if (content) content.firstChild.textContent = model === 'live'
-                            ? 'Live dictation ready — your microphone now works for continuous speech.'
-                            : 'Espresso pulled — your microphone now works offline.';
-                        setTimeout(() => div.remove(), 4000);
+                        _warmupSetProgress(card, 100);
+                        const successLabel = model === 'live'
+                            ? 'Live dictation ready'
+                            : 'Espresso pulled — your microphone now works offline';
+                        _warmupCardEl(model, 'success', successLabel, '', { dismissible: false });
+                        // Restore the percent display after the rebuild.
+                        _warmupSetProgress(document.getElementById(_warmupCardKey(model)), 100);
+                        setTimeout(() => {
+                            const c = document.getElementById(_warmupCardKey(model));
+                            if (c) { c.classList.add('dismissing'); setTimeout(() => c.remove(), 240); }
+                        }, 3500);
                     }
                     return;
                 } else if (msg.type === 'error') {
-                    const content = div.querySelector('.msg-content');
-                    if (content) content.firstChild.textContent = `Speech model warmup failed: ${msg.message || 'unknown'}`;
-                    div.classList.remove('info');
-                    div.classList.add('error');
+                    _warmupCardEl(model, 'error',
+                        'Speech model warmup failed',
+                        esc(msg.message || 'unknown error'),
+                        { actions: `<button class="action-btn subtle" onclick="showWarmupCard('${esc(model)}')">Try again</button>` });
                     return;
                 }
             }
         }
     } catch (e) {
-        console.warn('[speech] warmup failed:', e.message);
-        const content = div.querySelector('.msg-content');
-        if (content) content.firstChild.textContent = `Speech model warmup failed: ${e.message}`;
-        div.classList.remove('info');
-        div.classList.add('error');
+        console.warn('[speech] warmup stream failed:', e.message);
+        _warmupCardEl(model, 'error',
+            'Speech model warmup failed',
+            esc(e.message || 'unknown'),
+            { actions: `<button class="action-btn subtle" onclick="showWarmupCard('${esc(model)}')">Try again</button>` });
     }
+}
+
+async function _warmupRetry(model, card, message) {
+    _warmupCardEl(model, 'retrying', message, '', { dismissible: false });
+    await new Promise(r => setTimeout(r, 3000));
+    // Drop the existing card so showWarmupCard can rebuild fresh.
+    const existing = document.getElementById(_warmupCardKey(model));
+    if (existing) existing.remove();
+    return showWarmupCard(model, 2);
 }
 
 function buildWav(pcmChunks, sampleRate) {
@@ -8431,14 +8575,21 @@ function updateStatusBarHealth(ev) {
         _whisperLoaded = ev.whisperLoaded;
         _whisperDevice = ev.whisperDevice || null;
         _updateDeviceChipsVisibility();
-        // First time we see Whisper not yet loaded after Foundry is ready,
-        // show the warmup card so the user can watch the download finish.
-        // Suppress for the live engine (its warmup is shown when the user opts in).
-        if (!wasLoaded && !_whisperLoaded && ev.foundryReady && _whisperWarmupShown !== true) {
+        // Don't blast the user with a warmup card on every hard refresh —
+        // give the silent background warmup 3s to finish first. Only show
+        // the card if Whisper is still unloaded after that grace window
+        // AND the user's engine actually depends on it.
+        if (!wasLoaded && !_whisperLoaded && ev.foundryReady && _whisperWarmupShown !== true && !_whisperWarmupGracePending) {
             const eng = (settingsConfig?.speech?.engine || 'auto').toLowerCase();
             if (eng === 'auto' || eng === 'whisper') {
-                _whisperWarmupShown = true;
-                showWarmupCard('whisper');
+                _whisperWarmupGracePending = true;
+                setTimeout(() => {
+                    _whisperWarmupGracePending = false;
+                    if (!_whisperLoaded && _whisperWarmupShown !== true) {
+                        _whisperWarmupShown = true;
+                        showWarmupCard('whisper');
+                    }
+                }, 3000);
             }
         }
         if (_whisperLoaded) _whisperWarmupShown = true;
@@ -8456,6 +8607,7 @@ let _currentModelDevice = null;
 let _whisperLoaded = false;
 let _whisperDevice = null;
 let _whisperWarmupShown = false;
+let _whisperWarmupGracePending = false;
 // Tracks the live (Nemotron) streaming ASR model. Lazy-loaded only when the
 // user opts into the live tier.
 let _liveModelLoaded = false;
