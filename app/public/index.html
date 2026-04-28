@@ -7956,18 +7956,12 @@ async function populateMicWhisperModels() {
     const wrap = document.getElementById('micWhisperPicker');
     const list = document.getElementById('micWhisperList');
     if (!wrap || !list) return;
-    // Make sure we have a current config snapshot before reading speech.engine /
-    // speech.whisperModel — settingsConfig is null until the user opens Settings
-    // OR until we explicitly load it. Without this, "active" defaulted to
-    // whisper-tiny even after the user picked a different variant.
+    // Always show the picker — the engine UI was trimmed to on-device only
+    // (commit 011c3ad), so the prior "engine === 'whisper'" gate would have
+    // hidden the picker for any user whose persisted config still had
+    // engine: 'live' or 'web' from before the trim.
     if (!settingsConfig) {
         try { await loadSettingsConfig(); } catch {}
-    }
-    const eng = (settingsConfig?.speech?.engine || 'auto').toLowerCase();
-    const isWhisperEngine = eng === 'auto' || eng === 'whisper';
-    if (!isWhisperEngine) {
-        wrap.style.display = 'none';
-        return;
     }
     wrap.style.display = '';
     try {
@@ -8207,7 +8201,15 @@ function _setComposerModelDisplay({ alias, device, modelId } = {}) {
             .find(m => m.modelId === modelId);
         resolvedDevice = found?.device || _inferDeviceFromModelId(modelId);
     }
-    if (dev) dev.textContent = (resolvedDevice || '').toUpperCase();
+    if (dev) {
+        const text = (resolvedDevice || '').toUpperCase();
+        dev.textContent = text;
+        // Hide the chip entirely when we have no device hint instead of
+        // rendering an empty 1x5 px pill (showed up as a phantom gap next
+        // to the alias on the very first health snapshot before /api/models
+        // had resolved the catalog).
+        dev.style.display = text ? '' : 'none';
+    }
 }
 
 // Strip "-generic-{cpu,gpu,npu}" tail and ":N" suffix to recover a vanity
