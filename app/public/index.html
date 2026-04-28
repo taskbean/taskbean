@@ -7290,7 +7290,9 @@ async function toggleVoice() {
         const success = await tryStartEngine(eng, cfg.micDevice);
         if (success) return;
     }
-    addChat('error', 'mic-off', 'All speech engines failed. Check your microphone and settings.');
+    const detail = window._lastSpeechError ? ` (${window._lastSpeechError})` : '';
+    addChat('error', 'mic-off', `All speech engines failed${detail}. Check your microphone and settings.`);
+    window._lastSpeechError = null;
 }
 
 async function tryStartEngine(engine, micDevice) {
@@ -7316,32 +7318,14 @@ function tryWebSpeech() {
     }
 }
 
-// Inline AudioWorklet module URL — created lazily once per page. The processor
-// receives 128-sample Float32 quantums from the audio device and forwards
-// them to the main thread via port.postMessage. Replaces the deprecated
-// ScriptProcessorNode (which ran on the main audio thread and glitched
-// under load). Inlined as a Blob URL because the project has no build step.
-let _audioWorkletURL = null;
+// AudioWorklet module URL — served as a same-origin static file from
+// app/public/audio-worklet.js. We previously inlined this via a Blob URL,
+// but the strict connect-src CSP blocks blob: URLs from being fetched by
+// audioWorklet.addModule, surfacing as "AbortError: Unable to load a
+// worklet's module." A static file avoids the CSP relaxation and is more
+// debuggable from the network panel.
 function _ensureAudioWorkletURL() {
-    if (_audioWorkletURL) return _audioWorkletURL;
-    const code = `
-class TaskbeanCaptureProcessor extends AudioWorkletProcessor {
-    constructor() {
-        super();
-    }
-    process(inputs) {
-        const input = inputs[0];
-        if (!input || !input[0]) return true;
-        // Copy because the underlying buffer is reused by the audio system.
-        const samples = new Float32Array(input[0]);
-        this.port.postMessage(samples, [samples.buffer]);
-        return true;
-    }
-}
-registerProcessor('taskbean-capture', TaskbeanCaptureProcessor);
-`;
-    _audioWorkletURL = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
-    return _audioWorkletURL;
+    return '/audio-worklet.js';
 }
 
 function _floatToInt16(float32) {
@@ -7438,8 +7422,28 @@ async function _startLocalCapture({ engine, micDevice }) {
 
         return true;
     } catch (e) {
-        console.debug('[speech] capture failed:', e.message);
+        console.error('[speech] capture failed:', e?.name, e?.message, e);
         unmountComposerRibbon();
+        // If anything got partially set up before the throw, tear it down so
+        // a retry isn't blocked by stale state. startRec() at the bottom of
+        // the try is the only mutator before this catch, but the user-facing
+        // mic button reads isRecording either way — keep it cohesive.
+        try {
+            if (window._whisperRecording) {
+                const r = window._whisperRecording;
+                try { r.worklet?.disconnect(); } catch {}
+                try { r.source?.disconnect(); } catch {}
+                try { r.stream?.getTracks().forEach(t => t.stop()); } catch {}
+                try { r.ctx?.close(); } catch {}
+                try { r.liveWS?.close(); } catch {}
+                window._whisperRecording = null;
+            }
+        } catch {}
+        try { stopRec(); } catch {}
+        // Surface the real reason instead of the catch-all "All speech
+        // engines failed" message in toggleVoice. Stash it on a tag the
+        // caller can read so we don't double-render here AND in toggleVoice.
+        window._lastSpeechError = `${e?.name || 'Error'}: ${e?.message || 'Microphone capture failed'}`;
         return false;
     }
 }
