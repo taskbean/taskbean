@@ -8095,10 +8095,35 @@ function stopVolumeMeter() {
     if (_micVolumeCtx) { _micVolumeCtx.close().catch(()=>{}); _micVolumeCtx = null; }
 }
 
-// Close mic popover on outside click
+// Close mic popover on outside click. Excludes both the mic button itself
+// (#micBtn) and the chevron that owns this popover (#micSettingsBtn) so
+// clicking either doesn't double-fire (the button's own onclick already
+// does the toggle, then this listener would close the just-opened popover).
 document.addEventListener('click', (e) => {
-    if (_micPopoverOpen && !e.target.closest?.('.mic-popover') && !e.target.closest?.('#micBtn')) closeMicPopover();
+    if (_micPopoverOpen
+        && !e.target.closest?.('.mic-popover')
+        && !e.target.closest?.('#micBtn')
+        && !e.target.closest?.('#micSettingsBtn')) {
+        closeMicPopover();
+    }
 });
+
+// Sync _micPopoverOpen with the native popover's actual visibility.
+// Without this, anything that closes the popover via the native API
+// (Escape key, light-dismiss, programmatic hidePopover from elsewhere)
+// leaves _micPopoverOpen stuck at true. Next chevron click then takes
+// the close branch on an already-closed popover and does nothing -
+// the user has to click a third time to actually re-open. Classic
+// every-other-click flake the user reported.
+(() => {
+    const pop = document.getElementById('micPopover');
+    if (!pop) return;
+    pop.addEventListener('toggle', (e) => {
+        const open = e.newState === 'open';
+        _micPopoverOpen = open;
+        if (!open) stopVolumeMeter();
+    });
+})();
 
 // ═══════════════════════════════════════════════════════════════════
 // Quick Model Picker — cached models for fast switching
