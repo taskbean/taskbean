@@ -44,7 +44,7 @@ agent-framework-openai==1.0.1
 agent-framework-ag-ui==1.0.0b260409
 
 # ── Foundry Local (Windows NPU) ───────────────────────────────────────────────
-foundry-local-sdk-winml
+foundry-local-sdk-winml>=1.0.0
 
 # ── Web framework ─────────────────────────────────────────────────────────────
 fastapi

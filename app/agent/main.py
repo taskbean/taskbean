@@ -487,6 +487,7 @@ def _health_data() -> dict[str, Any]:
         "whisperAlias": whisper_alias,
         "liveModelLoaded": live_loaded,
         "liveModelDevice": live_device,
+        "liveTierAvailable": _check_live_tier_available(),
     }
 
 
@@ -3189,6 +3190,31 @@ def _device_from_model_id(model_id: str | None) -> str | None:
     if "gpu" in s or "migraphx" in s or "cuda" in s:
         return "GPU"
     return "CPU"
+
+
+# Cached precondition: does the catalog actually have the live tier model?
+# Set lazily on first /api/health call once foundry_ready is true. Forward-
+# looking signal so the UI can grey out the Live engine option when the user's
+# Foundry Local catalog hasn't rolled out nemotron yet (see research notes).
+# None = not yet probed; True/False = cached result.
+_live_tier_available: bool | None = None
+
+
+def _check_live_tier_available() -> bool:
+    """One-shot catalog probe for nemotron-speech-streaming-en-0.6b."""
+    global _live_tier_available
+    if _live_tier_available is not None:
+        return _live_tier_available
+    if not agent_mod.foundry_ready:
+        return False
+    try:
+        manager = agent_mod.get_fl_manager()
+        model = manager.catalog.get_model(LIVE_MODEL_ALIAS)
+        _live_tier_available = model is not None
+    except Exception as exc:
+        logger.debug("Live tier catalog probe failed (treating as unavailable): %s", exc)
+        _live_tier_available = False
+    return _live_tier_available
 
 
 async def _get_whisper_client(progress_cb=None):
