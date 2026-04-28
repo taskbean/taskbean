@@ -1335,7 +1335,7 @@ async def update_config(patch: ConfigPatch) -> dict:
     # Validate speech config (deep merge into pending, don't persist yet)
     if patch.speech is not None:
         current_speech = dict(app_config.get("speech") or app_config._DEFAULTS.get("speech", {}))
-        valid_engines = {"auto", "web", "whisper"}
+        valid_engines = {"auto", "web", "whisper", "live"}
         valid_fallbacks = {"web", "whisper", "none"}
         if patch.speech.engine is not None:
             if patch.speech.engine.lower() not in valid_engines:

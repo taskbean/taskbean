@@ -480,7 +480,7 @@ header {
 .stg-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .stg-toggle, .stg-toggle::after { transition: none; } }
 
-/* Legacy toggle (used by clock popover, voice hold-to-record) */
+/* Legacy toggle (used by clock popover) */
 .settings-toggle { width: 32px; height: 18px; border-radius: 9px; border: none; cursor: pointer; position: relative; transition: background .2s; flex-shrink: 0; }
 .settings-toggle.off { background: var(--border); }
 .settings-toggle.on { background: var(--green); }
@@ -2730,13 +2730,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         <div class="mic-device-list" id="micDeviceList">
           <div style="font-size:11px;color:var(--muted);padding:8px">Loading devices…</div>
         </div>
-        <div class="mic-popover-footer">
-          <div style="display:flex;align-items:center;gap:6px">
-            <i data-lucide="hand" class="icon-sm" style="color:var(--muted)"></i>
-            <span style="font-size:11px">Hold to record</span>
-          </div>
-          <button class="settings-toggle on" id="holdToRecordToggle" onclick="toggleHoldToRecord()" role="switch" aria-checked="true" style="transform:scale(.8)"></button>
-        </div>
+
       </div>
 
       <!-- Quick model picker popover (native Popover API) -->
@@ -3088,28 +3082,28 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
             </div>
           </div>
 
-          <div class="settings-group" data-search-terms="speech engine whisper microphone voice recognition fallback">
+          <div class="settings-group" data-search-terms="speech engine whisper microphone voice recognition fallback browser cloud live nemotron">
             <div class="settings-group-title">Speech Recognition</div>
             <div class="settings-row">
               <label>
                 Speech engine
-                <button class="info-tip" tabindex="0" aria-label="Speech engine info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Primary voice-to-text engine. "Auto" tries Edge Web Speech (cloud) first for speed, then falls back to Foundry Whisper running locally on your device.</span></button>
+                <button class="info-tip" tabindex="0" aria-label="Speech engine info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">On-device Whisper by default — your voice never leaves your machine. The cloud option uses your browser's built-in speech service (Microsoft on Edge, Google on Chrome) and is opt-in only.</span></button>
               </label>
               <select class="settings-select" id="settingsSpeechEngine" data-requires="server" onchange="updateSpeechSetting('engine', this.value)">
-                <option value="auto">Auto (best available)</option>
-                <option value="web">Edge Web Speech (cloud)</option>
+                <option value="auto">Auto (on-device Whisper)</option>
                 <option value="whisper">Foundry Whisper (on-device)</option>
+                <option value="web">Browser cloud speech</option>
               </select>
               <span class="save-dot"></span>
             </div>
             <div class="settings-row">
               <label>
                 Fallback engine
-                <button class="info-tip" tabindex="0" aria-label="Fallback info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Backup engine used when the primary fails or times out. "No fallback" means voice input stops working if the primary engine is unavailable.</span></button>
+                <button class="info-tip" tabindex="0" aria-label="Fallback info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Backup engine used when the primary fails or times out. Defaults to Whisper. "No fallback" means voice input stops working if the primary is unavailable.</span></button>
               </label>
               <select class="settings-select" id="settingsSpeechFallback" data-requires="server" onchange="updateSpeechSetting('fallback', this.value)">
                 <option value="whisper">Foundry Whisper (on-device)</option>
-                <option value="web">Edge Web Speech (cloud)</option>
+                <option value="web">Browser cloud speech</option>
                 <option value="none">No fallback</option>
               </select>
               <span class="save-dot"></span>
@@ -7144,8 +7138,10 @@ async function toggleVoice() {
     const engine = cfg.engine || 'auto';
     const fallback = cfg.fallback || 'whisper';
 
-    // Determine which engine to try first
-    const engines = engine === 'auto' ? ['web', fallback] : [engine, fallback];
+    // Auto = on-device Whisper first; cloud is opt-in only.
+    // Browser cloud speech (Edge → Microsoft, Chrome → Google) is unreliable on Edge
+    // and sends audio to a third party, so we never silently cascade to it.
+    const engines = engine === 'auto' ? ['whisper', fallback] : [engine, fallback];
     const chain = [...new Set(engines)].filter(e => e && e !== 'none');
 
     for (const eng of chain) {
@@ -7277,13 +7273,13 @@ function startRec() { isRecording = true; const b = document.getElementById('mic
 function stopRec() { isRecording = false; const b = document.getElementById('micBtn'); b.classList.remove('recording'); b.innerHTML = '<i data-lucide="mic"></i>'; lucide.createIcons(); setTimeout(()=>document.getElementById('voiceStatus').textContent='', 2000); }
 
 // ═══════════════════════════════════════════════════════════════════
-// Mic Popover — device list, volume meter, hold-to-record toggle
+// Mic Popover — device list, volume meter
 // ═══════════════════════════════════════════════════════════════════
 
 let _micPopoverOpen = false;
 let _micVolumeCtx = null;
 let _micVolumeStream = null;
-let _holdToRecord = JSON.parse(localStorage.getItem('taskbean-hold-to-record') || 'false');
+
 
 function toggleMicPopover() {
     _micPopoverOpen ? closeMicPopover() : openMicPopover();
@@ -7303,13 +7299,6 @@ async function openMicPopover() {
     }
     if (pop.showPopover) pop.showPopover(); else pop.classList.add('open');
     lucide.createIcons();
-
-    // Sync hold-to-record toggle
-    const toggle = document.getElementById('holdToRecordToggle');
-    if (toggle) {
-        toggle.className = 'settings-toggle ' + (_holdToRecord ? 'on' : 'off');
-        toggle.setAttribute('aria-checked', String(_holdToRecord));
-    }
 
     // Enumerate devices
     try {
@@ -7349,16 +7338,6 @@ async function selectMicDevice(deviceId) {
     try { await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speech: current }) }); } catch {}
     // Refresh list to show new checkmark
     openMicPopover();
-}
-
-function toggleHoldToRecord() {
-    _holdToRecord = !_holdToRecord;
-    localStorage.setItem('taskbean-hold-to-record', JSON.stringify(_holdToRecord));
-    const toggle = document.getElementById('holdToRecordToggle');
-    if (toggle) {
-        toggle.className = 'settings-toggle ' + (_holdToRecord ? 'on' : 'off');
-        toggle.setAttribute('aria-checked', String(_holdToRecord));
-    }
 }
 
 async function startVolumeMeter(deviceId) {

@@ -44,9 +44,10 @@ _DEFAULTS: dict = {
     "hideIncompatibleModels": False,
     "toolCallOnly": False,
     "speech": {
-        "engine": "auto",       # "auto" | "web" | "whisper" | "sapi"
-        "fallback": "whisper",  # "web" | "whisper" | "sapi" | "none"
+        "engine": "auto",       # "auto" | "web" | "whisper" | "live"
+        "fallback": "whisper",  # "web" | "whisper" | "none"
         "micDevice": None,      # null = system default, or device label/id string
+        "liveModel": False,     # true once user opts into the Nemotron streaming tier
     },
     "schedule": {
         "dnd": {

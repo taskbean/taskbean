@@ -469,8 +469,8 @@ async def test_speech_config_defaults(client: httpx.AsyncClient) -> None:
     data = r.json()
     assert "speech" in data, "speech config missing from /api/config"
     speech = data["speech"]
-    assert speech["engine"] in ("auto", "web", "whisper", "sapi")
-    assert speech["fallback"] in ("web", "whisper", "sapi", "none")
+    assert speech["engine"] in ("auto", "web", "whisper", "live")
+    assert speech["fallback"] in ("web", "whisper", "none")
 
 
 async def test_speech_config_update(client: httpx.AsyncClient) -> None:
