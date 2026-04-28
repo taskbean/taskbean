@@ -7669,6 +7669,7 @@ function stopRec() { isRecording = false; const b = document.getElementById('mic
 let _micPopoverOpen = false;
 let _micVolumeCtx = null;
 let _micVolumeStream = null;
+let _micVolumeBorrowed = false;
 
 
 function toggleMicPopover() {
@@ -7758,13 +7759,24 @@ async function selectMicEngine(engine) {
 async function startVolumeMeter(deviceId) {
     stopVolumeMeter();
     try {
-        const constraints = { audio: deviceId ? { deviceId: { exact: deviceId } } : true };
-        _micVolumeStream = await navigator.mediaDevices.getUserMedia(constraints);
-        _micVolumeCtx = new AudioContext();
-        const source = _micVolumeCtx.createMediaStreamSource(_micVolumeStream);
-        const analyser = _micVolumeCtx.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
+        let analyser;
+        // If a recording is already in flight, reuse its analyser node so we
+        // don't open a second getUserMedia stream (which causes a brief
+        // mic-indicator flash and is wasteful). The recording owns the
+        // stream/AudioContext lifecycle in this case.
+        if (window._whisperRecording && window._whisperRecording.analyser) {
+            analyser = window._whisperRecording.analyser;
+            _micVolumeBorrowed = true;
+        } else {
+            const constraints = { audio: deviceId ? { deviceId: { exact: deviceId } } : true };
+            _micVolumeStream = await navigator.mediaDevices.getUserMedia(constraints);
+            _micVolumeCtx = new AudioContext();
+            const source = _micVolumeCtx.createMediaStreamSource(_micVolumeStream);
+            analyser = _micVolumeCtx.createAnalyser();
+            analyser.fftSize = 256;
+            source.connect(analyser);
+            _micVolumeBorrowed = false;
+        }
         const data = new Uint8Array(analyser.frequencyBinCount);
         const fill = document.getElementById('micVolumeFill');
 
@@ -7783,6 +7795,13 @@ async function startVolumeMeter(deviceId) {
 }
 
 function stopVolumeMeter() {
+    // When the analyser was borrowed from an active recording, the stream
+    // and AudioContext belong to _whisperRecording and will be torn down
+    // when recording stops — don't close them here.
+    if (_micVolumeBorrowed) {
+        _micVolumeBorrowed = false;
+        return;
+    }
     if (_micVolumeStream) { _micVolumeStream.getTracks().forEach(t => t.stop()); _micVolumeStream = null; }
     if (_micVolumeCtx) { _micVolumeCtx.close().catch(()=>{}); _micVolumeCtx = null; }
 }
