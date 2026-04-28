@@ -50,10 +50,11 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, StrictBool
 
 from opentelemetry import trace
@@ -176,8 +177,36 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(_delayed_health())
     asyncio.create_task(_metric_sampler())
     asyncio.create_task(_npu_usage_sampler())
+    asyncio.create_task(_background_speech_warmup())
     yield  # server is running
     await shutdown_foundry()
+
+
+async def _background_speech_warmup() -> None:
+    """Warm Whisper after Foundry is ready, if the user's engine prefers it.
+
+    Eliminates the silent multi-second pause on first mic press. Live model
+    (Nemotron) is *not* warmed here — it's larger and only useful if the
+    user explicitly opts into the beta tier."""
+    try:
+        for _ in range(120):  # up to 60s
+            if agent_mod.foundry_ready:
+                break
+            await asyncio.sleep(0.5)
+        if not agent_mod.foundry_ready:
+            return
+        speech_cfg = app_config.get("speech") or {}
+        engine = (speech_cfg.get("engine") or "auto").lower()
+        if engine in ("auto", "whisper"):
+            try:
+                await _get_whisper_client()
+                logger.info("Background Whisper warmup complete")
+            except Exception as exc:
+                logger.warning("Background Whisper warmup failed (non-fatal): %s", exc)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.debug("Background warmup task crashed: %s", exc)
 
 
 app = FastAPI(title="Foundry Todo Agent", lifespan=lifespan)
@@ -419,6 +448,10 @@ def _sample_npu_pdh(win32pdh, counter_filter: str) -> float:
 
 def _health_data() -> dict[str, Any]:
     whisper_loaded = _whisper_model is not None
+    whisper_device = _device_from_model_id(_whisper_model.id) if whisper_loaded else None
+    whisper_alias = _whisper_loaded_alias if whisper_loaded else _get_whisper_alias()
+    live_loaded = _live_model is not None
+    live_device = _device_from_model_id(_live_model.id) if live_loaded else None
     # Friendly model alias (e.g. "qwen3-0.6b") + execution device tag for
     # the composer pill / status bar — the full MODEL_ID is for API calls,
     # the alias is for display.
@@ -445,12 +478,16 @@ def _health_data() -> dict[str, Any]:
         "startupError": agent_mod.startup_error,
         "mcpAvailable": _markitdown_available(),
         "uptimeMs": int(time.time() * 1000) - telem.SERVER_START,
-        # Voice transcription model — lazy-loaded the first time the user
-        # picks the Whisper engine. The status bar uses this to decide
-        # whether to surface its execution device chip alongside the chat
-        # model's. Whisper-tiny ships as a CPU build today.
+        # Voice transcription models — both lazy-loaded on first use. The
+        # status bar surfaces each model's execution device chip alongside
+        # the chat model's. Whisper is the batch transcription model;
+        # the live model (Nemotron streaming) powers /api/transcribe/live.
         "whisperLoaded": whisper_loaded,
-        "whisperDevice": "CPU" if whisper_loaded else None,
+        "whisperDevice": whisper_device,
+        "whisperAlias": whisper_alias,
+        "liveModelLoaded": live_loaded,
+        "liveModelDevice": live_device,
+        "liveTierAvailable": _check_live_tier_available(),
     }
 
 
@@ -934,11 +971,26 @@ def _parse_model_catalog() -> list[dict]:
                 else "DeepSeek" if alias_lower.startswith("deepseek")
                 else "Mistral" if alias_lower.startswith("mistral")
                 else "Llama" if alias_lower.startswith("llama")
+                else "Whisper" if alias_lower.startswith("whisper")
+                else "Nemotron" if alias_lower.startswith("nemotron")
                 else "Other"
             )
             param_match = re.search(r"[_-](\d+\.?\d*)\s*b\b", alias, re.I)
             device = info.runtime.device_type if info.runtime else None
             device_str = device.upper() if device else "CPU"
+            # Modality split: "voice" for ASR / speech models, "chat" for
+            # everything else. Source of truth is info.task (Foundry SDK
+            # exposes HF-style task labels: text-generation / chat-completion
+            # vs automatic-speech-recognition / speech-to-text). Fall back to
+            # the alias prefix when info.task is missing or unrecognised so
+            # offline catalog parsers still classify correctly.
+            raw_task = (getattr(info, "task", None) or "").lower()
+            voice_tasks = {"automatic-speech-recognition", "speech-to-text", "transcribe"}
+            voice_alias_prefixes = ("whisper", "nemotron-speech", "moonshine", "wav2vec")
+            if raw_task in voice_tasks or any(alias_lower.startswith(p) for p in voice_alias_prefixes):
+                modality = "voice"
+            else:
+                modality = "chat"
             result.append({
                 "alias": alias,
                 "modelId": m.id,
@@ -946,10 +998,16 @@ def _parse_model_catalog() -> list[dict]:
                 "fileSizeGb": round(info.file_size_mb / 1024, 2) if info.file_size_mb else None,
                 "paramBillions": float(param_match.group(1)) if param_match else None,
                 "family": family,
+                "modality": modality,
+                "task": raw_task or None,
                 "tasks": ["chat", "tools"] if info.supports_tool_calling else ["chat"],
                 "toolCalling": bool(info.supports_tool_calling),
                 "license": info.license or "",
-                "contextLength": info.context_length,
+                # Use the camelCase names the frontend / recommender already
+                # read. The earlier "contextLength" key was effectively dead
+                # (no consumer touched it), which made the model picker's
+                # context filter and the context chip both invisible.
+                "maxInputTokens": info.context_length,
                 "maxOutputTokens": info.max_output_tokens,
             })
         return result
@@ -998,8 +1056,13 @@ def _parse_model_catalog_cli() -> list[dict]:
             else "DeepSeek" if alias_lower.startswith("deepseek")
             else "Mistral" if alias_lower.startswith("mistral")
             else "Llama" if alias_lower.startswith("llama")
+            else "Whisper" if alias_lower.startswith("whisper")
+            else "Nemotron" if alias_lower.startswith("nemotron")
             else "Other"
         )
+        # CLI fallback: classify modality by alias prefix (CLI doesn't expose task field).
+        voice_alias_prefixes = ("whisper", "nemotron-speech", "moonshine", "wav2vec")
+        modality = "voice" if any(alias_lower.startswith(p) for p in voice_alias_prefixes) else "chat"
         models.append({
             "alias": current_alias,
             "modelId": model_id,
@@ -1007,9 +1070,16 @@ def _parse_model_catalog_cli() -> list[dict]:
             "fileSizeGb": file_size_gb,
             "paramBillions": param_billions,
             "family": family,
+            "modality": modality,
+            "task": None,
             "tasks": [t.strip() for t in tasks.split(",") if t.strip()],
             "toolCalling": "tools" in tasks.lower() or "tool" in tasks.lower(),
             "license": license_,
+            # CLI fallback can't see context limits — leave them None so the
+            # frontend's range filters and the recommender simply skip these
+            # models for context-aware checks instead of hiding them.
+            "maxInputTokens": None,
+            "maxOutputTokens": None,
         })
     return models
 
@@ -1051,7 +1121,7 @@ async def list_models() -> dict:
             "active": mid == agent_mod.MODEL_ID,
             "cached": mid in cached_ids,
             "loaded": mid in loaded_ids,
-            # contextLength and maxOutputTokens come from the catalog entry itself
+            # maxInputTokens and maxOutputTokens come from the catalog entry itself
             # (ModelInfo.context_length / ModelInfo.max_output_tokens via new SDK)
         })
 
@@ -1085,6 +1155,8 @@ class SpeechConfig(BaseModel):
     engine: str | None = None
     fallback: str | None = None
     micDevice: str | None = None
+    whisperModel: str | None = None
+    action: str | None = None
 
 
 class ConfigPatch(BaseModel):
@@ -1335,8 +1407,9 @@ async def update_config(patch: ConfigPatch) -> dict:
     # Validate speech config (deep merge into pending, don't persist yet)
     if patch.speech is not None:
         current_speech = dict(app_config.get("speech") or app_config._DEFAULTS.get("speech", {}))
-        valid_engines = {"auto", "web", "whisper"}
+        valid_engines = {"auto", "web", "whisper", "live"}
         valid_fallbacks = {"web", "whisper", "none"}
+        valid_actions = {"compose", "extract"}
         if patch.speech.engine is not None:
             if patch.speech.engine.lower() not in valid_engines:
                 errors.append(f"speech.engine must be one of {sorted(valid_engines)}")
@@ -1349,6 +1422,33 @@ async def update_config(patch: ConfigPatch) -> dict:
                 current_speech["fallback"] = patch.speech.fallback.lower()
         if patch.speech.micDevice is not None:
             current_speech["micDevice"] = patch.speech.micDevice or None
+        if patch.speech.action is not None:
+            if patch.speech.action.lower() not in valid_actions:
+                errors.append(f"speech.action must be one of {sorted(valid_actions)}")
+            else:
+                current_speech["action"] = patch.speech.action.lower()
+        if patch.speech.whisperModel is not None:
+            new_alias = (patch.speech.whisperModel or "").strip()
+            if not new_alias:
+                errors.append("speech.whisperModel must be a non-empty alias")
+            else:
+                # Validate the alias actually exists and is a voice model.
+                catalog_entry = next(
+                    (m for m in get_model_catalog() if m["alias"] == new_alias),
+                    None,
+                )
+                if catalog_entry is None:
+                    errors.append(f"speech.whisperModel '{new_alias}' not found in catalog")
+                elif catalog_entry.get("modality") != "voice":
+                    errors.append(f"speech.whisperModel '{new_alias}' is not a voice model")
+                else:
+                    prior_alias = (current_speech.get("whisperModel") or "").strip() or DEFAULT_WHISPER_ALIAS
+                    current_speech["whisperModel"] = new_alias
+                    # Variant change → drop the cached client so the next
+                    # /api/transcribe lazy-loads the new variant. Side effect
+                    # runs after persistence (below).
+                    if new_alias != prior_alias:
+                        pending["_whisperVariantChanged"] = True
         pending["speech"] = current_speech
 
     # Phase 2: If errors, reject entirely without persisting anything
@@ -1357,7 +1457,17 @@ async def update_config(patch: ConfigPatch) -> dict:
 
     # Phase 3: Persist all validated changes
     for key, value in pending.items():
+        if key.startswith("_"):
+            continue  # internal flags consumed in side-effect phase
         app_config.set(key, value)
+
+    # Side effect: if the user changed their Whisper variant, drop the
+    # cached _whisper_model so the next request lazy-loads the new one.
+    if pending.pop("_whisperVariantChanged", False):
+        try:
+            await reset_whisper_client()
+        except Exception as exc:
+            logger.warning("Whisper client reset after variant change failed: %s", exc)
 
     # Handle side effects after successful persistence
     startup_warning = None
@@ -3017,28 +3127,179 @@ async def extract_tasks(request: Request) -> StreamingResponse:
 
 _whisper_model = None
 _whisper_lock: asyncio.Lock | None = None
+# Tracks the alias the currently-loaded _whisper_model corresponds to. When the
+# user changes their preferred Whisper variant via Settings / mic popover, we
+# clear _whisper_model so the next request lazy-loads the new variant.
+_whisper_loaded_alias: str | None = None
+
+# Live streaming ASR via Nemotron — different model than Whisper because Whisper
+# does not support push-PCM live transcription. See research notes in
+# session-state research/ on this branch for the full justification.
+LIVE_MODEL_ALIAS = "nemotron-speech-streaming-en-0.6b"
+DEFAULT_WHISPER_ALIAS = "whisper-tiny"
+
+_live_model = None
+_live_lock: asyncio.Lock | None = None
+# Single concurrent /api/transcribe/live session per process. Whisper and
+# Nemotron can't reliably cohabit GPU memory on low-VRAM machines, and a
+# second concurrent session would interleave PCM into the same native handle.
+# Implementation note: a bare asyncio.Lock isn't sufficient because awaiting
+# ws.accept() between the locked() check and acquire() would let two
+# connections both pass the check, then queue serially on the lock instead
+# of the second one being immediately rejected. We use a guard lock + boolean
+# active flag pattern so check-and-set is atomic (no await between them).
+_live_ws_guard: asyncio.Lock | None = None
+_live_ws_active: bool = False
 
 
-async def _get_whisper_client():
-    """Lazy-load whisper-tiny and return its AudioClient."""
-    global _whisper_model, _whisper_lock
+def _get_whisper_alias() -> str:
+    """Return the user's chosen Whisper variant alias, defaulting to whisper-tiny.
+
+    Read from app_config at every call so changes via /api/config take effect
+    on the next lazy-load without requiring a process restart.
+    """
+    cfg = app_config.get("speech") or {}
+    alias = (cfg.get("whisperModel") or "").strip() or DEFAULT_WHISPER_ALIAS
+    return alias
+
+
+async def reset_whisper_client() -> None:
+    """Drop the cached Whisper model so the next request lazy-loads a new one.
+
+    Called when the user picks a different Whisper variant. Unloads the
+    current model on its own thread to free VRAM/RAM before the new one loads.
+    """
+    global _whisper_model, _whisper_loaded_alias, _whisper_lock
     if _whisper_lock is None:
         _whisper_lock = asyncio.Lock()
-    if _whisper_model is not None:
-        return _whisper_model.get_audio_client()
     async with _whisper_lock:
         if _whisper_model is not None:
-            return _whisper_model.get_audio_client()
+            old = _whisper_model
+            _whisper_model = None
+            _whisper_loaded_alias = None
+            try:
+                await asyncio.to_thread(old.unload)
+                logger.info("Unloaded Whisper variant: %s", old.id)
+            except Exception as exc:
+                logger.warning("Whisper unload failed (non-fatal): %s", exc)
+
+
+def _device_from_model_id(model_id: str | None) -> str | None:
+    """Heuristic: map a loaded Foundry variant id to NPU/GPU/CPU for the UI.
+
+    Mirrors the chat-model logic in _health_data(). Foundry variant ids
+    embed the runtime (e.g. ``Whisper-Tiny-CUDA``, ``whisper-tiny-cpu``,
+    ``...vitis-npu``, ``...migraphx-gpu``).
+    """
+    if not model_id:
+        return None
+    s = model_id.lower()
+    if "npu" in s or "vitis" in s:
+        return "NPU"
+    if "gpu" in s or "migraphx" in s or "cuda" in s:
+        return "GPU"
+    return "CPU"
+
+
+# Cached precondition: does the catalog actually have the live tier model?
+# Set lazily on first /api/health call once foundry_ready is true. Forward-
+# looking signal so the UI can grey out the Live engine option when the user's
+# Foundry Local catalog hasn't rolled out nemotron yet (see research notes).
+# None = not yet probed; True/False = cached result.
+_live_tier_available: bool | None = None
+
+
+def _check_live_tier_available() -> bool:
+    """One-shot catalog probe for nemotron-speech-streaming-en-0.6b."""
+    global _live_tier_available
+    if _live_tier_available is not None:
+        return _live_tier_available
+    if not agent_mod.foundry_ready:
+        return False
+    try:
         manager = agent_mod.get_fl_manager()
-        model = await asyncio.to_thread(lambda: manager.catalog.get_model("whisper-tiny"))
+        model = manager.catalog.get_model(LIVE_MODEL_ALIAS)
+        _live_tier_available = model is not None
+    except Exception as exc:
+        logger.debug("Live tier catalog probe failed (treating as unavailable): %s", exc)
+        _live_tier_available = False
+    return _live_tier_available
+
+
+async def _get_whisper_client(progress_cb=None):
+    """Lazy-load the user's chosen Whisper variant and return its AudioClient.
+
+    Args:
+        progress_cb: Optional ``Callable[[float], None]`` invoked from the
+            FFI thread with download percent (0–100). Ignored if the model
+            is already cached or already loaded.
+    """
+    global _whisper_model, _whisper_lock, _whisper_loaded_alias
+    if _whisper_lock is None:
+        _whisper_lock = asyncio.Lock()
+    desired_alias = _get_whisper_alias()
+    if _whisper_model is not None and _whisper_loaded_alias == desired_alias:
+        return _whisper_model.get_audio_client()
+    async with _whisper_lock:
+        if _whisper_model is not None and _whisper_loaded_alias == desired_alias:
+            return _whisper_model.get_audio_client()
+        # Variant changed since last load — unload before swapping.
+        if _whisper_model is not None and _whisper_loaded_alias != desired_alias:
+            try:
+                await asyncio.to_thread(_whisper_model.unload)
+                logger.info("Unloaded prior Whisper variant: %s", _whisper_model.id)
+            except Exception as exc:
+                logger.warning("Prior Whisper unload failed (non-fatal): %s", exc)
+            _whisper_model = None
+            _whisper_loaded_alias = None
+        manager = agent_mod.get_fl_manager()
+        model = await asyncio.to_thread(lambda: manager.catalog.get_model(desired_alias))
         if model is None:
-            raise RuntimeError("whisper-tiny model not found in catalog")
+            raise RuntimeError(f"{desired_alias} model not found in catalog")
         if not model.is_cached:
-            await asyncio.to_thread(model.download)
+            if progress_cb is not None:
+                await asyncio.to_thread(lambda: model.download(progress_cb))
+            else:
+                await asyncio.to_thread(model.download)
         await asyncio.to_thread(model.load)
         _whisper_model = model
-        logger.info("Whisper model loaded: %s", model.id)
+        _whisper_loaded_alias = desired_alias
+        logger.info("Whisper model loaded: %s (alias=%s)", model.id, desired_alias)
         return model.get_audio_client()
+
+
+async def _get_live_audio_client(progress_cb=None):
+    """Lazy-load the Nemotron streaming ASR model and return its AudioClient.
+
+    The returned client is reusable; each live transcription opens its own
+    short-lived ``LiveAudioTranscriptionSession`` against it.
+    """
+    global _live_model, _live_lock
+    if _live_lock is None:
+        _live_lock = asyncio.Lock()
+    if _live_model is not None:
+        return _live_model.get_audio_client()
+    async with _live_lock:
+        if _live_model is not None:
+            return _live_model.get_audio_client()
+        manager = agent_mod.get_fl_manager()
+        model = await asyncio.to_thread(lambda: manager.catalog.get_model(LIVE_MODEL_ALIAS))
+        if model is None:
+            raise RuntimeError(
+                f"{LIVE_MODEL_ALIAS} model not found in catalog. "
+                "Live dictation requires the Nemotron streaming model."
+            )
+        if not model.is_cached:
+            if progress_cb is not None:
+                await asyncio.to_thread(lambda: model.download(progress_cb))
+            else:
+                await asyncio.to_thread(model.download)
+        await asyncio.to_thread(model.load)
+        _live_model = model
+        logger.info("Live ASR model loaded: %s", model.id)
+        return model.get_audio_client()
+
+
 _MAX_AUDIO_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
@@ -3046,7 +3307,7 @@ _MAX_AUDIO_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 async def transcribe_audio(
     audio: UploadFile = File(...),
 ):
-    """Transcribe audio using on-device Whisper model."""
+    """Transcribe audio using on-device Whisper model (non-streaming)."""
     if not agent_mod.foundry_ready:
         raise HTTPException(503, "Foundry not ready")
 
@@ -3082,6 +3343,334 @@ async def transcribe_audio(
         raise HTTPException(500, f"Transcription failed: {exc}")
     finally:
         Path(tmp_path).unlink(missing_ok=True)
+
+
+# ── Streaming transcribe (SSE) ────────────────────────────────────────────────
+
+@app.post("/api/transcribe/stream", tags=["Speech"])
+async def transcribe_audio_stream(
+    audio: UploadFile = File(...),
+):
+    """Transcribe an uploaded audio file with SSE-streamed Whisper chunks.
+
+    Wraps ``audio_client.transcribe_streaming(path)`` — the canonical Foundry
+    Local pattern as of the 2026 SDK. Yields one ``{"type":"chunk","text":...}``
+    per Whisper chunk and a final ``{"type":"done","text":"<full>"}``.
+    """
+    if not agent_mod.foundry_ready:
+        raise HTTPException(503, "Foundry not ready")
+
+    content_type = audio.content_type or ""
+    if not content_type.startswith("audio/"):
+        raise HTTPException(400, f"Expected audio file, got {content_type}")
+
+    suffix = Path(audio.filename or "audio.wav").suffix or ".wav"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        total = 0
+        while chunk := await audio.read(8192):
+            total += len(chunk)
+            if total > _MAX_AUDIO_UPLOAD_BYTES:
+                tmp_path = tmp.name
+                Path(tmp_path).unlink(missing_ok=True)
+                raise HTTPException(413, f"Audio file too large (max {_MAX_AUDIO_UPLOAD_BYTES // (1024*1024)}MB)")
+            tmp.write(chunk)
+        tmp_path = tmp.name
+
+    async def _stream():
+        full_text_parts: list[str] = []
+        with telem.tracer.start_as_current_span("speech.transcribe.stream") as span:
+            span.set_attribute("audio.size_bytes", total)
+            try:
+                audio_client = await _get_whisper_client()
+                audio_client.settings.language = "en"
+
+                loop = asyncio.get_event_loop()
+                chunk_q: asyncio.Queue = asyncio.Queue()
+                _SENTINEL = object()
+
+                def _drain_to_queue() -> None:
+                    try:
+                        for resp in audio_client.transcribe_streaming(tmp_path):
+                            loop.call_soon_threadsafe(chunk_q.put_nowait, resp.text)
+                    except Exception as exc:
+                        loop.call_soon_threadsafe(chunk_q.put_nowait, exc)
+                    finally:
+                        loop.call_soon_threadsafe(chunk_q.put_nowait, _SENTINEL)
+
+                drain_task = asyncio.create_task(asyncio.to_thread(_drain_to_queue))
+
+                while True:
+                    item = await chunk_q.get()
+                    if item is _SENTINEL:
+                        break
+                    if isinstance(item, Exception):
+                        raise item
+                    if item:
+                        full_text_parts.append(item)
+                        yield _sse({"type": "chunk", "text": item})
+
+                await drain_task
+                full_text = "".join(full_text_parts).strip()
+                span.add_event("speech.transcribed", {"length": len(full_text), "audio_size": total})
+                yield _sse({"type": "done", "text": full_text})
+            except Exception as exc:
+                logger.exception("Streaming transcription failed: %s", exc)
+                span.record_exception(exc)
+                yield _sse({"type": "error", "message": str(exc)})
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        # Defensive cleanup: even if the SSE generator never reaches its
+        # finally (e.g. client disconnects before iteration starts, or the
+        # generator is garbage-collected without aclose), Starlette will
+        # invoke this background task once the response is closed.
+        background=BackgroundTask(lambda: Path(tmp_path).unlink(missing_ok=True)),
+    )
+
+
+# ── Speech model warmup (SSE) ─────────────────────────────────────────────────
+
+class _WarmupRequest(BaseModel):
+    model: str = "whisper"  # "whisper" | "live"
+
+
+@app.post("/api/speech/warmup", tags=["Speech"])
+async def warmup_speech_model(body: _WarmupRequest) -> StreamingResponse:
+    """Stream download + load progress for a speech model.
+
+    The frontend triggers this in the background after ``foundryReady`` so
+    the first mic press doesn't pay the multi-MB download tax silently.
+    Idempotent: if the model is already loaded, emits a single
+    ``{"type":"done"}`` event.
+    """
+    target = body.model.lower()
+    if target not in ("whisper", "live"):
+        raise HTTPException(400, "model must be 'whisper' or 'live'")
+    if not agent_mod.foundry_ready:
+        raise HTTPException(503, "Foundry not ready")
+
+    async def _stream():
+        with telem.tracer.start_as_current_span("speech.warmup") as span:
+            span.set_attribute("speech.model", target)
+            already = (target == "whisper" and _whisper_model is not None) or \
+                      (target == "live" and _live_model is not None)
+            if already:
+                yield _sse({"type": "done", "model": target, "cached": True})
+                return
+
+            loop = asyncio.get_event_loop()
+            progress_q: asyncio.Queue = asyncio.Queue()
+
+            def _on_progress(pct: float):
+                loop.call_soon_threadsafe(progress_q.put_nowait, pct)
+
+            try:
+                if target == "whisper":
+                    load_task = asyncio.create_task(_get_whisper_client(progress_cb=_on_progress))
+                else:
+                    load_task = asyncio.create_task(_get_live_audio_client(progress_cb=_on_progress))
+
+                last_pct = -1.0
+                while not load_task.done():
+                    try:
+                        pct = await asyncio.wait_for(progress_q.get(), timeout=0.5)
+                        if pct - last_pct >= 1:
+                            yield _sse({"type": "progress", "model": target, "pct": round(pct, 1)})
+                            last_pct = pct
+                    except asyncio.TimeoutError:
+                        pass
+                await load_task
+                yield _sse({"type": "done", "model": target, "cached": False})
+            except Exception as exc:
+                logger.exception("Speech warmup failed for %s: %s", target, exc)
+                span.record_exception(exc)
+                yield _sse({"type": "error", "model": target, "message": str(exc)})
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
+# ── Live transcription (WebSocket) ────────────────────────────────────────────
+#
+# Why WebSocket instead of SSE? This endpoint needs bidirectional binary
+# (PCM frames upstream) plus JSON downstream (interim/final transcripts),
+# which SSE cannot do. The rest of taskbean uses SSE for "everything
+# complex" — this is the documented exception.
+#
+# Protocol:
+#   server → text: {"type":"loading", "pct": 0..100}            (during download)
+#   server → text: {"type":"ready",   "model": str, "device": str}
+#   client → binary: raw 16-kHz mono Int16-LE PCM (any chunk size)
+#   client → text:   {"type":"stop"}                             (or just close)
+#   server → text: {"type":"chunk",  "text": str, "isFinal": bool}
+#   server → text: {"type":"done",   "text": str}                (full transcript)
+#   server → text: {"type":"error",  "message": str}             (then close)
+
+@app.websocket("/api/transcribe/live")
+async def transcribe_live(ws: WebSocket) -> None:
+    global _live_ws_guard, _live_ws_active
+    if _live_ws_guard is None:
+        _live_ws_guard = asyncio.Lock()
+
+    await ws.accept()
+
+    # Atomic check-and-set of the single-session flag. The guard lock has no
+    # awaits between check and set, so two concurrent connects cannot both
+    # pass the busy check (which was the BLOCKER race in the prior version).
+    async with _live_ws_guard:
+        if _live_ws_active:
+            try:
+                await ws.send_json({"type": "error", "code": "busy", "message": "Another live session is already active."})
+            finally:
+                await ws.close(code=4090)
+            return
+        _live_ws_active = True
+
+    try:
+        if not agent_mod.foundry_ready:
+            await ws.send_json({"type": "error", "code": "not_ready", "message": "Foundry not ready"})
+            await ws.close(code=4503)
+            return
+
+        with telem.tracer.start_as_current_span("speech.live.session") as span:
+            span.set_attribute("speech.model.alias", LIVE_MODEL_ALIAS)
+            loop = asyncio.get_event_loop()
+            session = None
+            try:
+                # Surface download/load progress before the session can start.
+                if _live_model is None:
+                    progress_q: asyncio.Queue = asyncio.Queue()
+
+                    def _on_progress(pct: float):
+                        loop.call_soon_threadsafe(progress_q.put_nowait, pct)
+
+                    load_task = asyncio.create_task(_get_live_audio_client(progress_cb=_on_progress))
+                    last_pct = -1.0
+                    while not load_task.done():
+                        try:
+                            pct = await asyncio.wait_for(progress_q.get(), timeout=0.5)
+                            if pct - last_pct >= 1:
+                                await ws.send_json({"type": "loading", "pct": round(pct, 1)})
+                                last_pct = pct
+                        except asyncio.TimeoutError:
+                            pass
+                    audio_client = await load_task
+                else:
+                    audio_client = await _get_live_audio_client()
+
+                device = _device_from_model_id(_live_model.id if _live_model else None)
+                await ws.send_json({"type": "ready", "model": _live_model.id if _live_model else LIVE_MODEL_ALIAS, "device": device})
+
+                # Start the live session on the audio client. Chunks arrive via
+                # the SDK's own background thread; we bridge them to the WS.
+                session = audio_client.create_live_transcription_session()
+                session.settings.sample_rate = 16000
+                session.settings.channels = 1
+                session.settings.bits_per_sample = 16
+                session.settings.language = "en"
+                await asyncio.to_thread(session.start)
+
+                full_text_parts: list[str] = []
+                stop_event = asyncio.Event()
+                _SENTINEL = object()
+                transcript_q: asyncio.Queue = asyncio.Queue()
+
+                def _drain_transcripts() -> None:
+                    try:
+                        for result in session.get_transcription_stream():
+                            text = result.content[0].text if result.content else ""
+                            if text:
+                                loop.call_soon_threadsafe(
+                                    transcript_q.put_nowait,
+                                    {"text": text, "isFinal": bool(getattr(result, "is_final", False))},
+                                )
+                    except Exception as exc:
+                        loop.call_soon_threadsafe(transcript_q.put_nowait, exc)
+                    finally:
+                        loop.call_soon_threadsafe(transcript_q.put_nowait, _SENTINEL)
+
+                drain_task = asyncio.create_task(asyncio.to_thread(_drain_transcripts))
+
+                async def _forward_transcripts() -> None:
+                    while True:
+                        item = await transcript_q.get()
+                        if item is _SENTINEL:
+                            return
+                        if isinstance(item, Exception):
+                            await ws.send_json({"type": "error", "message": str(item)})
+                            return
+                        full_text_parts.append(item["text"])
+                        await ws.send_json({"type": "chunk", "text": item["text"], "isFinal": item["isFinal"]})
+
+                forward_task = asyncio.create_task(_forward_transcripts())
+
+                async def _consume_client() -> None:
+                    while not stop_event.is_set():
+                        msg = await ws.receive()
+                        if msg.get("type") == "websocket.disconnect":
+                            stop_event.set()
+                            return
+                        if "bytes" in msg and msg["bytes"] is not None:
+                            # Push PCM straight to the SDK on its own thread to
+                            # avoid blocking the event loop on the FFI call.
+                            data = msg["bytes"]
+                            await asyncio.to_thread(session.append, data)
+                        elif "text" in msg and msg["text"] is not None:
+                            try:
+                                payload = json.loads(msg["text"])
+                            except Exception:
+                                continue
+                            if payload.get("type") == "stop":
+                                stop_event.set()
+                                return
+
+                consume_task = asyncio.create_task(_consume_client())
+                done, pending = await asyncio.wait(
+                    {consume_task, forward_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                # Either client said stop / disconnected, or the transcript
+                # stream ended unexpectedly. Either way, finalize cleanly.
+                for t in pending:
+                    t.cancel()
+
+                # Stop the live session on its own thread (drains remaining audio).
+                if session is not None:
+                    await asyncio.to_thread(session.stop)
+                await drain_task
+
+                full_text = "".join(full_text_parts).strip()
+                try:
+                    await ws.send_json({"type": "done", "text": full_text})
+                except Exception:
+                    pass
+                span.set_attribute("speech.transcript.length", len(full_text))
+            except WebSocketDisconnect:
+                # Client went away mid-session; just clean up.
+                pass
+            except Exception as exc:
+                logger.exception("Live transcription session failed: %s", exc)
+                span.record_exception(exc)
+                try:
+                    await ws.send_json({"type": "error", "message": str(exc)})
+                except Exception:
+                    pass
+            finally:
+                if session is not None:
+                    try:
+                        await asyncio.to_thread(session.stop)
+                    except Exception:
+                        pass
+                try:
+                    await ws.close()
+                except Exception:
+                    pass
+    finally:
+        # Release the single-session slot atomically.
+        async with _live_ws_guard:
+            _live_ws_active = False
 
 
 # ── Process speech ────────────────────────────────────────────────────────────

@@ -34,8 +34,17 @@ async def test_health_ready(client: httpx.AsyncClient) -> None:
     # Whisper-tiny is lazy-loaded only when the user picks the Whisper engine.
     # The status bar uses these fields to decide whether to surface its
     # device chip; default state (before any voice input) is unloaded.
-    assert data["whisperLoaded"] is False, "whisperLoaded should default to False"
-    assert data["whisperDevice"] is None,  "whisperDevice should be None when whisper is not loaded"
+    # Note: with background warmup enabled, whisperLoaded may flip to True
+    # shortly after foundryReady — accept both states and just assert the
+    # device shape is consistent.
+    assert "whisperLoaded" in data
+    if data["whisperLoaded"]:
+        assert data["whisperDevice"] in ("CPU", "GPU", "NPU")
+    else:
+        assert data["whisperDevice"] is None
+    # Live (Nemotron) model is opt-in only; default is unloaded.
+    assert data["liveModelLoaded"] is False
+    assert data["liveModelDevice"] is None
 
 
 # ── 2. Models list ────────────────────────────────────────────────────────────
@@ -469,8 +478,8 @@ async def test_speech_config_defaults(client: httpx.AsyncClient) -> None:
     data = r.json()
     assert "speech" in data, "speech config missing from /api/config"
     speech = data["speech"]
-    assert speech["engine"] in ("auto", "web", "whisper", "sapi")
-    assert speech["fallback"] in ("web", "whisper", "sapi", "none")
+    assert speech["engine"] in ("auto", "web", "whisper", "live")
+    assert speech["fallback"] in ("web", "whisper", "none")
 
 
 async def test_speech_config_update(client: httpx.AsyncClient) -> None:
@@ -493,6 +502,32 @@ async def test_speech_config_update(client: httpx.AsyncClient) -> None:
 
     # Restore defaults
     cfg.set("speech", {"engine": "auto", "fallback": "whisper", "micDevice": None})
+
+
+def test_speech_config_sapi_migration() -> None:
+    """load() should rewrite legacy speech.engine/fallback == 'sapi' to 'whisper'."""
+    import app_config as cfg
+
+    # Save current state to restore later
+    original_speech = dict(cfg._config.get("speech", {}))
+    try:
+        cfg._config["speech"] = {"engine": "sapi", "fallback": "sapi", "micDevice": None}
+        cfg.save()
+
+        # Reload from disk; migration should run.
+        cfg.load()
+
+        speech = cfg._config["speech"]
+        assert speech["engine"] == "whisper", f"engine not migrated: {speech}"
+        assert speech["fallback"] == "whisper", f"fallback not migrated: {speech}"
+
+        # Verify the migrated values were persisted to disk.
+        on_disk = json.loads(cfg._CONFIG_FILE.read_text(encoding="utf-8"))
+        assert on_disk["speech"]["engine"] == "whisper"
+        assert on_disk["speech"]["fallback"] == "whisper"
+    finally:
+        cfg._config["speech"] = original_speech
+        cfg.save()
 
 
 async def test_speech_config_update_mic(client: httpx.AsyncClient) -> None:
@@ -556,6 +591,88 @@ async def test_transcribe_wav(client: httpx.AsyncClient) -> None:
     data = r.json()
     assert "text" in data, f"Response missing 'text' field: {data}"
     assert isinstance(data["text"], str)
+
+
+def _silent_wav(seconds: float = 1.0, sample_rate: int = 16000) -> bytes:
+    """Return a WAV of N seconds of digital silence (16-bit mono)."""
+    import struct
+    num_samples = int(sample_rate * seconds)
+    data_size = num_samples * 2
+    wav = bytearray()
+    wav.extend(b'RIFF')
+    wav.extend(struct.pack('<I', 36 + data_size))
+    wav.extend(b'WAVE')
+    wav.extend(b'fmt ')
+    wav.extend(struct.pack('<IHHIIHH', 16, 1, 1, sample_rate, sample_rate * 2, 2, 16))
+    wav.extend(b'data')
+    wav.extend(struct.pack('<I', data_size))
+    wav.extend(b'\x00' * data_size)
+    return bytes(wav)
+
+
+async def test_transcribe_stream_requires_audio(client: httpx.AsyncClient) -> None:
+    """POST /api/transcribe/stream without a file should fail."""
+    r = await client.post("/api/transcribe/stream")
+    assert r.status_code == 422
+
+
+async def test_transcribe_stream_wav(client: httpx.AsyncClient) -> None:
+    """POST /api/transcribe/stream returns SSE chunks ending with done."""
+    wav = _silent_wav(1.0)
+    async with client.stream(
+        "POST",
+        "/api/transcribe/stream",
+        files={"audio": ("test.wav", wav, "audio/wav")},
+        timeout=120,
+    ) as r:
+        assert r.status_code == 200
+        events: list[dict] = []
+        async for line in r.aiter_lines():
+            if line.startswith("data:"):
+                events.append(json.loads(line[5:].strip()))
+                if events[-1].get("type") in ("done", "error"):
+                    break
+    assert events, "SSE stream produced no events"
+    assert events[-1]["type"] == "done", f"final event was {events[-1]}"
+    assert "text" in events[-1]
+    assert isinstance(events[-1]["text"], str)
+
+
+async def test_warmup_invalid_model(client: httpx.AsyncClient) -> None:
+    """POST /api/speech/warmup rejects unknown model names."""
+    r = await client.post("/api/speech/warmup", json={"model": "bogus"})
+    assert r.status_code == 400
+
+
+async def test_warmup_whisper_idempotent(client: httpx.AsyncClient) -> None:
+    """Warmup returns done immediately when the whisper model is already loaded.
+
+    Background warmup runs at startup, so by the time tests reach this point
+    Whisper is typically already cached + loaded — verify the idempotent path.
+    """
+    # Force-load via the existing transcribe endpoint to guarantee cached state
+    await client.post(
+        "/api/transcribe",
+        files={"audio": ("test.wav", _silent_wav(0.5), "audio/wav")},
+        timeout=120,
+    )
+    async with client.stream(
+        "POST",
+        "/api/speech/warmup",
+        json={"model": "whisper"},
+        timeout=30,
+    ) as r:
+        assert r.status_code == 200
+        events: list[dict] = []
+        async for line in r.aiter_lines():
+            if line.startswith("data:"):
+                events.append(json.loads(line[5:].strip()))
+                if events[-1].get("type") in ("done", "error"):
+                    break
+    assert events
+    assert events[-1]["type"] == "done"
+    assert events[-1]["model"] == "whisper"
+    assert events[-1]["cached"] is True
 
 
 # ── Slow: model switch ────────────────────────────────────────────────────────
@@ -1003,3 +1120,51 @@ async def test_agent_toggle_strict_bool_accepts_true_bool(
     if r.status_code == 200:
         body = r.json()
         assert body.get("enabled") is True
+
+
+# ── Live transcription WebSocket ──────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_live_ws_busy(live_server: str) -> None:
+    """Second concurrent /api/transcribe/live connection must be rejected as busy.
+
+    We don't exercise the happy path because it requires the ~600 MB Nemotron
+    streaming model to be loaded. Instead we verify the lock-contention path:
+    open one session, then open a second and assert it receives the
+    `{"type":"error","code":"busy"}` text frame before the server closes it.
+    """
+    import asyncio
+    import websockets
+
+    ws_url = live_server.replace("http://", "ws://", 1) + "/api/transcribe/live"
+
+    # Connection #1 — hold open to keep the lock acquired. Don't recv, since
+    # the server may legitimately try to load the Nemotron model and stall.
+    ws1 = await websockets.connect(ws_url, open_timeout=10)
+    try:
+        # Give the server a moment to enter the sync with _live_ws_lock block.
+        await asyncio.sleep(0.5)
+
+        # Connection #2 — should be rejected immediately with busy.
+        async with websockets.connect(ws_url, open_timeout=10) as ws2:
+            raw = await asyncio.wait_for(ws2.recv(), timeout=10)
+            payload = json.loads(raw)
+            assert payload.get("type") == "error", payload
+            assert payload.get("code") == "busy", payload
+
+            # Drain until close; tolerate either a clean recv-raises-ConnectionClosed
+            # path or an explicit close frame from the server.
+            try:
+                await asyncio.wait_for(ws2.recv(), timeout=5)
+            except websockets.ConnectionClosed:
+                pass
+            except asyncio.TimeoutError:
+                pass
+
+            close_code = getattr(ws2, "close_code", None)
+            # Server uses 4090; accept any 4xxx app-level close code in case the
+            # websockets library normalises it.
+            if close_code is not None:
+                assert 4000 <= close_code < 5000, f"unexpected close code: {close_code}"
+    finally:
+        await ws1.close()

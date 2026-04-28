@@ -629,14 +629,8 @@ test.describe('Settings Modal — UI Overhaul', () => {
       await page.locator('.theme-swatch-btn[data-theme="dark-roast"]').click();
     });
 
-    test('non-settings toggles (clock, voice) still use legacy settings-toggle', async ({ page }) => {
+    test('non-settings toggles (clock) still use legacy settings-toggle', async ({ page }) => {
       await page.goto('/');
-      // Check hold-to-record toggle
-      const holdToggle = page.locator('#holdToRecordToggle');
-      if (await holdToggle.isVisible()) {
-        const classes = await holdToggle.getAttribute('class');
-        expect(classes).toContain('settings-toggle');
-      }
       // Check clock seconds toggle
       await page.locator('#chipClock').click();
       await page.waitForTimeout(300);

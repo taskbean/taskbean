@@ -319,6 +319,11 @@ header {
 .model-ctx-chip.ctx-total { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in oklch, var(--accent) 25%, transparent); }
 .model-ctx-sep { color: var(--border); font-size: 10px; }
 .model-modal-footer { padding: 10px 18px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.model-tabs { display: flex; gap: 0; padding: 0 18px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.model-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-family: inherit; font-size: 11px; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s, border-color .15s; }
+.model-tab:hover { color: var(--text); }
+.model-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.model-tab svg { width: 12px; height: 12px; }
 
 /* Filter bar */
 .model-filters { padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; background: var(--surface); }
@@ -480,7 +485,7 @@ header {
 .stg-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .stg-toggle, .stg-toggle::after { transition: none; } }
 
-/* Legacy toggle (used by clock popover, voice hold-to-record) */
+/* Legacy toggle (used by clock popover) */
 .settings-toggle { width: 32px; height: 18px; border-radius: 9px; border: none; cursor: pointer; position: relative; transition: background .2s; flex-shrink: 0; }
 .settings-toggle.off { background: var(--border); }
 .settings-toggle.on { background: var(--green); }
@@ -1564,6 +1569,77 @@ header {
 .textarea-wrap { position: relative; }
 .textarea-wrap .drop-hint { display: none; position: absolute; inset: 0; background: var(--green-soft); border: 2px dashed var(--green); border-radius: 10px; pointer-events: none; align-items: center; justify-content: center; font-size: 12px; color: var(--green); }
 .textarea-wrap.dragging .drop-hint { display: flex; }
+
+/* ─────────────── Live Composer Ribbon ───────────────
+   Visible only while recording. Mounts above the textarea inside .input-bar-inner.
+   Replaces the cramped #voiceStatus span as the visible source-of-truth for
+   recording state. Speaks the same coffee-house dialect as the composer pills. */
+.composer-ribbon { display: none; align-items: center; gap: 10px; padding: 6px 12px; background: var(--surface2); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); animation: composerRibbonIn 180ms cubic-bezier(.2,.8,.2,1); }
+.composer-ribbon.open { display: flex; }
+.composer-ribbon-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 0 color-mix(in oklch, var(--red) 60%, transparent); animation: composerRibbonPulse 1.4s ease-in-out infinite; flex-shrink: 0; }
+.composer-ribbon-time { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; color: var(--text); min-width: 28px; }
+.composer-ribbon-wave { display: flex; align-items: center; gap: 2px; height: 14px; flex: 1 1 auto; min-width: 60px; max-width: 320px; }
+.composer-ribbon-wave .bar { width: 2px; background: var(--accent); border-radius: 1px; height: 2px; transition: height 60ms linear; }
+.composer-ribbon-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); white-space: nowrap; font-size: 10px; }
+.composer-ribbon-chip.live { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 50%, transparent); background: color-mix(in oklch, var(--accent) 8%, var(--surface)); }
+.composer-ribbon-chip .device { background: var(--surface2); color: var(--muted); padding: 1px 5px; border-radius: 4px; font-size: 9px; letter-spacing: .02em; text-transform: uppercase; }
+.composer-ribbon-cancel { width: 22px; height: 22px; border-radius: 6px; border: none; background: transparent; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }
+.composer-ribbon-cancel:hover { background: color-mix(in oklch, var(--red) 14%, var(--surface)); color: var(--red); }
+.composer-ribbon-cancel svg { width: 13px; height: 13px; }
+@keyframes composerRibbonIn { from { transform: translateY(4px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes composerRibbonPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--red) 60%, transparent); } 50% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--red) 0%, transparent); } }
+@media (prefers-reduced-motion: reduce) {
+  .composer-ribbon { animation: none; }
+  .composer-ribbon-dot { animation: none; box-shadow: none; }
+  .composer-ribbon-wave .bar { transition: none; height: 6px !important; }
+}
+
+/* Speech model warmup card — chat-anchored info card with semantic severity.
+   Three states share one element: loading (accent), warn (orange, server stale),
+   error (red). Action button for the warn case ("Restart server" hint).
+   Dismissible via the close button; remembers dismissal in sessionStorage so
+   a hard refresh doesn't replay it within the same tab session. */
+.warmup-card { position: relative; display: grid; grid-template-columns: 22px 1fr auto; column-gap: 10px; row-gap: 4px; align-items: start; padding: 10px 32px 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); font-size: 11px; max-width: 100%; align-self: stretch; }
+.warmup-card .icon { color: var(--accent); display: flex; align-items: center; justify-content: center; height: 16px; }
+.warmup-card .icon svg { width: 14px; height: 14px; }
+.warmup-card .body { color: var(--text); line-height: 1.45; }
+.warmup-card .body code { background: var(--surface2); color: var(--text); padding: 1px 6px; border-radius: 4px; font-family: 'Cascadia Code', 'Fira Code', ui-monospace, monospace; font-size: 10px; }
+.warmup-card .body .hint { color: var(--muted); margin-top: 2px; }
+.warmup-card .pct { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 10px; align-self: center; }
+.warmup-card .progress { grid-column: 1 / -1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+.warmup-card .progress > i { display: block; height: 100%; width: 0%; background: var(--accent); border-radius: 2px; transition: width 200ms linear; }
+.warmup-card .actions { grid-column: 2 / -1; display: flex; gap: 6px; margin-top: 4px; }
+.warmup-card .action-btn { font-family: inherit; font-size: 10px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; transition: all .15s; }
+.warmup-card .action-btn:hover { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.warmup-card .action-btn.subtle { background: transparent; color: var(--muted); }
+.warmup-card .action-btn.subtle:hover { background: var(--surface2); color: var(--text); border-color: var(--border); }
+.warmup-card .dismiss { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: .6; transition: all .15s; }
+.warmup-card .dismiss:hover { opacity: 1; background: var(--surface2); }
+.warmup-card .dismiss svg { width: 11px; height: 11px; }
+
+/* Severity variants — coffee-warm gradient from accent (loading) to orange
+   (warn: stale server, recoverable) to red (error: real failure). */
+.warmup-card[data-state="warn"]    { border-left-color: var(--orange); background: color-mix(in oklch, var(--orange) 5%, var(--surface)); }
+.warmup-card[data-state="warn"]    .icon { color: var(--orange); }
+.warmup-card[data-state="warn"]    .progress { display: none; }
+.warmup-card[data-state="error"]   { border-left-color: var(--red); background: color-mix(in oklch, var(--red) 5%, var(--surface)); }
+.warmup-card[data-state="error"]   .icon { color: var(--red); }
+.warmup-card[data-state="error"]   .progress { display: none; }
+.warmup-card[data-state="success"] { border-left-color: var(--green); background: color-mix(in oklch, var(--green) 5%, var(--surface)); }
+.warmup-card[data-state="success"] .icon { color: var(--green); }
+.warmup-card[data-state="success"] .progress > i { background: var(--green); }
+.warmup-card[data-state="retrying"] .icon svg { animation: warmupSpin 1.2s linear infinite; }
+
+.warmup-card.dismissing { animation: warmupSlideOut 220ms ease-in forwards; }
+
+@keyframes warmupSpin { to { transform: rotate(360deg); } }
+@keyframes warmupSlideOut { to { opacity: 0; transform: translateY(-4px); height: 0; padding-top: 0; padding-bottom: 0; margin-top: 0; margin-bottom: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .warmup-card[data-state="retrying"] .icon svg { animation: none; }
+  .warmup-card.dismissing { animation: none; opacity: 0; }
+  .warmup-card .progress > i { transition: none; }
+}
 .send-btn { width: 30px; height: 30px; border-radius: 8px; border: none; background: var(--accent); color: #000; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; transition: opacity .15s; }
 .send-btn:disabled { opacity: .4; cursor: not-allowed; }
 .input-hint { font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
@@ -1589,6 +1665,25 @@ header {
 .mic-device-item.active { color: var(--accent); }
 .mic-device-check { width: 16px; flex-shrink: 0; text-align: center; color: var(--accent); font-size: 14px; }
 .mic-popover-footer { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; border-top: 1px solid var(--border); }
+.mic-popover-engines { display: flex; gap: 4px; padding: 10px 12px 4px; }
+.mic-whisper-picker { padding: 4px 12px 8px; border-bottom: 1px solid var(--border); }
+.mic-whisper-label { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 4px 4px 6px; }
+.mic-whisper-list { display: flex; flex-direction: column; gap: 2px; }
+.mic-whisper-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 6px; font-size: 11px; cursor: pointer; transition: background .15s; color: var(--text); }
+.mic-whisper-item:hover { background: var(--surface2); }
+.mic-whisper-item.active { background: color-mix(in oklch, var(--accent) 12%, var(--surface)); color: var(--accent); }
+.mic-whisper-item .name { flex: 1; }
+.mic-whisper-item .size { font-size: 9px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mic-whisper-item.active .size { color: var(--accent); opacity: .7; }
+.mic-whisper-item .check { width: 12px; flex-shrink: 0; color: var(--accent); }
+.mic-whisper-item .download { font-size: 9px; padding: 2px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); border: 0; cursor: pointer; }
+.mic-whisper-item .download:hover { background: var(--accent); color: var(--bg); }
+.mic-whisper-empty { font-size: 10px; color: var(--muted); padding: 6px 8px; line-height: 1.4; }
+.mic-engine-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 10px; font-family: inherit; transition: all .15s; flex: 1; justify-content: center; }
+.mic-engine-pill svg { width: 11px; height: 11px; }
+.mic-engine-pill:hover { background: var(--surface2); color: var(--text); }
+.mic-engine-pill.active { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 55%, transparent); background: color-mix(in oklch, var(--accent) 10%, var(--surface)); }
+.mic-engine-pill.active:hover { background: color-mix(in oklch, var(--accent) 16%, var(--surface)); }
 
 /* ═══════════════════════════════════════════════════════════════════
    QUICK MODEL PICKER POPOVER
@@ -2696,6 +2791,20 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
     <!-- Unified multi-line input -->
     <div class="input-bar">
       <div class="input-bar-inner">
+        <!-- Live Composer Ribbon — mounted in JS while recording. Owns timer,
+             waveform, engine info chip, and cancel button. Hidden by default. -->
+        <div class="composer-ribbon" id="composerRibbon" role="status" aria-live="polite">
+          <span class="composer-ribbon-dot" aria-hidden="true"></span>
+          <span class="composer-ribbon-time" id="composerRibbonTime">0:00</span>
+          <div class="composer-ribbon-wave" id="composerRibbonWave" aria-hidden="true"></div>
+          <span class="composer-ribbon-chip" id="composerRibbonChip">
+            <span class="label">on-device</span>
+            <span class="device">CPU</span>
+          </span>
+          <button class="composer-ribbon-cancel" id="composerRibbonCancel" onclick="cancelVoiceCapture()" title="Cancel" aria-label="Cancel recording">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
         <div class="textarea-wrap" id="textareaWrap">
           <textarea id="chatInput" rows="2" placeholder='Type a command, paste text, or drop a file to extract tasks...'></textarea>
           <div class="drop-hint"><i data-lucide="upload"></i>&nbsp;Drop file to extract tasks</div>
@@ -2708,7 +2817,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
           <div class="input-bar-right">
             <button class="composer-model-pill" id="composerModelPill" onclick="toggleQuickModelPicker()" title="Switch model">
               <span class="composer-model-status" id="composerModelStatus" aria-hidden="true"></span>
-              <span id="composerModelLabel">Model</span>
+              <span id="composerModelLabel" style="opacity:.6">Loading…</span>
               <span class="composer-model-device" id="composerModelDevice" aria-hidden="true"></span>
               <i data-lucide="chevron-up" class="icon-sm" style="opacity:.4;width:10px;height:10px"></i>
             </button>
@@ -2716,13 +2825,29 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
               <button class="composer-icon-btn" id="micBtn" onclick="toggleVoice()" title="Voice input"><i data-lucide="mic"></i></button>
               <button class="composer-icon-btn" id="micSettingsBtn" onclick="event.stopPropagation();toggleMicPopover()" title="Mic settings" style="width:16px;margin-left:-4px;color:var(--muted)"><i data-lucide="chevron-up" style="width:10px;height:10px"></i></button>
             </div>
-            <span id="voiceStatus"></span>
+            <!-- Off-screen aria-live region for screen readers. The visible
+                 "Listening..." / "Extracting tasks..." surface lives in the
+                 Live Composer Ribbon (mounted above the textarea while
+                 recording); keeping voiceStatus visible in the bottom row
+                 made the model pill jump left when the text appeared. -->
+            <span id="voiceStatus" class="sr-only" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap"></span>
           </div>
         </div>
       </div>
 
       <!-- Mic popover (native Popover API) -->
       <div class="mic-popover" id="micPopover" popover>
+        <!-- Whisper variant picker — Live and Cloud engine options were removed
+             pending Foundry Local catalog support for nemotron-speech-streaming
+             (see research/copilot-image-57359b-png-why-isn-t-nemotron-found-.md).
+             On-device Whisper is the only engine for now; the engine-pill row
+             is hidden until we have more than one to choose from. -->
+        <div class="mic-whisper-picker" id="micWhisperPicker" style="display:none">
+          <div class="mic-whisper-label">Voice model</div>
+          <div class="mic-whisper-list" id="micWhisperList">
+            <div style="font-size:11px;color:var(--muted);padding:4px 8px">Loading…</div>
+          </div>
+        </div>
         <div class="mic-popover-header">
           <i data-lucide="mic" class="icon-sm"></i>
           <div class="mic-volume-bar"><div class="mic-volume-fill" id="micVolumeFill"></div></div>
@@ -2730,13 +2855,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         <div class="mic-device-list" id="micDeviceList">
           <div style="font-size:11px;color:var(--muted);padding:8px">Loading devices…</div>
         </div>
-        <div class="mic-popover-footer">
-          <div style="display:flex;align-items:center;gap:6px">
-            <i data-lucide="hand" class="icon-sm" style="color:var(--muted)"></i>
-            <span style="font-size:11px">Hold to record</span>
-          </div>
-          <button class="settings-toggle on" id="holdToRecordToggle" onclick="toggleHoldToRecord()" role="switch" aria-checked="true" style="transform:scale(.8)"></button>
-        </div>
+
       </div>
 
       <!-- Quick model picker popover (native Popover API) -->
@@ -2848,6 +2967,17 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         </button>
         <button class="model-modal-close" onclick="closeModelPicker()" aria-label="Close" title="Close"><i data-lucide="x" aria-hidden="true"></i></button>
       </div>
+    </div>
+
+    <!-- Modality tabs — Chat is the default; Voice surfaces ASR/Whisper variants
+         that should never appear in the chat-model picker. -->
+    <div class="model-tabs" role="tablist" aria-label="Model category">
+      <button class="model-tab active" id="modelTabChat" role="tab" aria-selected="true" onclick="switchModelTab('chat')">
+        <i data-lucide="message-square" aria-hidden="true"></i> Chat
+      </button>
+      <button class="model-tab" id="modelTabVoice" role="tab" aria-selected="false" onclick="switchModelTab('voice')">
+        <i data-lucide="mic" aria-hidden="true"></i> Voice
+      </button>
     </div>
 
     <!-- Filter bar — chips built dynamically by JS -->
@@ -3088,29 +3218,20 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
             </div>
           </div>
 
-          <div class="settings-group" data-search-terms="speech engine whisper microphone voice recognition fallback">
+          <div class="settings-group" data-search-terms="speech engine whisper microphone voice recognition">
             <div class="settings-group-title">Speech Recognition</div>
+            <!-- Engine + fallback selects were removed when we trimmed the
+                 stack to on-device Whisper only. Re-introduce them when
+                 Live (Nemotron) and Cloud (browser SpeechRecognition) are
+                 production-ready and the catalog rollout completes. -->
             <div class="settings-row">
               <label>
-                Speech engine
-                <button class="info-tip" tabindex="0" aria-label="Speech engine info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Primary voice-to-text engine. "Auto" tries Edge Web Speech (cloud) first for speed, then falls back to Foundry Whisper running locally on your device.</span></button>
+                After dictation
+                <button class="info-tip" tabindex="0" aria-label="Action info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">"Drop into composer" leaves the transcript in the textarea so you can edit and submit normally. "Extract tasks" runs the LLM task-extractor immediately on what you said.</span></button>
               </label>
-              <select class="settings-select" id="settingsSpeechEngine" data-requires="server" onchange="updateSpeechSetting('engine', this.value)">
-                <option value="auto">Auto (best available)</option>
-                <option value="web">Edge Web Speech (cloud)</option>
-                <option value="whisper">Foundry Whisper (on-device)</option>
-              </select>
-              <span class="save-dot"></span>
-            </div>
-            <div class="settings-row">
-              <label>
-                Fallback engine
-                <button class="info-tip" tabindex="0" aria-label="Fallback info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Backup engine used when the primary fails or times out. "No fallback" means voice input stops working if the primary engine is unavailable.</span></button>
-              </label>
-              <select class="settings-select" id="settingsSpeechFallback" data-requires="server" onchange="updateSpeechSetting('fallback', this.value)">
-                <option value="whisper">Foundry Whisper (on-device)</option>
-                <option value="web">Edge Web Speech (cloud)</option>
-                <option value="none">No fallback</option>
+              <select class="settings-select" id="settingsSpeechAction" data-requires="server" onchange="updateSpeechSetting('action', this.value)">
+                <option value="compose">Drop into composer for review</option>
+                <option value="extract">Extract tasks immediately</option>
               </select>
               <span class="save-dot"></span>
             </div>
@@ -7050,8 +7171,7 @@ function initSpeech() {
         chatInput.value = t; autoResize();
         if (e.results[e.results.length-1].isFinal) {
             stopRec();
-            const transcript = chatInput.value.trim();
-            if (transcript) processSpeechToTasks(transcript); // fire-and-forget; do not await in event handler
+            _handleFinalTranscript(chatInput.value); // honors speech.action setting
         }
     };
     recognition.onerror = (e) => {
@@ -7141,18 +7261,17 @@ async function toggleVoice() {
     if (isRecording) { stopCurrentRecording(); return; }
 
     const cfg = settingsConfig?.speech || {};
-    const engine = cfg.engine || 'auto';
-    const fallback = cfg.fallback || 'whisper';
-
-    // Determine which engine to try first
-    const engines = engine === 'auto' ? ['web', fallback] : [engine, fallback];
-    const chain = [...new Set(engines)].filter(e => e && e !== 'none');
-
-    for (const eng of chain) {
-        const success = await tryStartEngine(eng, cfg.micDevice);
-        if (success) return;
-    }
-    addChat('error', 'mic-off', 'All speech engines failed. Check your microphone and settings.');
+    // Engine selection UI was trimmed to on-device Whisper only. The
+    // "live" (Nemotron) and "web" (browser SpeechRecognition) paths
+    // still exist in code, but they're not user-selectable until we
+    // sort out the Foundry catalog rollout for nemotron and decide
+    // whether the cloud option is worth shipping. See research/
+    // copilot-image-57359b-png-why-isn-t-nemotron-found-.md.
+    const success = await tryStartEngine('whisper', cfg.micDevice);
+    if (success) return;
+    const detail = window._lastSpeechError ? ` (${window._lastSpeechError})` : '';
+    addChat('error', 'mic-off', `Microphone capture failed${detail}. Check your microphone and settings.`);
+    window._lastSpeechError = null;
 }
 
 async function tryStartEngine(engine, micDevice) {
@@ -7160,6 +7279,8 @@ async function tryStartEngine(engine, micDevice) {
         return tryWebSpeech();
     } else if (engine === 'whisper') {
         return tryWhisperCapture(micDevice);
+    } else if (engine === 'live') {
+        return tryLiveCapture(micDevice);
     }
     return false;
 }
@@ -7176,41 +7297,190 @@ function tryWebSpeech() {
     }
 }
 
+// AudioWorklet module URL — served as a same-origin static file from
+// app/public/audio-worklet.js. We previously inlined this via a Blob URL,
+// but the strict connect-src CSP blocks blob: URLs from being fetched by
+// audioWorklet.addModule, surfacing as "AbortError: Unable to load a
+// worklet's module." A static file avoids the CSP relaxation and is more
+// debuggable from the network panel.
+function _ensureAudioWorkletURL() {
+    return '/audio-worklet.js';
+}
+
+function _floatToInt16(float32) {
+    const out = new Int16Array(float32.length);
+    for (let i = 0; i < float32.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32[i]));
+        out[i] = s < 0 ? s * 32768 : s * 32767;
+    }
+    return out;
+}
+
 async function tryWhisperCapture(micDevice) {
+    return _startLocalCapture({ engine: 'whisper', micDevice });
+}
+
+async function tryLiveCapture(micDevice) {
+    return _startLocalCapture({ engine: 'live', micDevice });
+}
+
+// Single capture entry point used by both Whisper batch and Live WS flows.
+// engine === 'whisper' → accumulate PCM in memory, POST WAV to
+// /api/transcribe/stream on stop, write SSE chunks into chatInput.
+// engine === 'live'    → open WS /api/transcribe/live, push Int16 PCM
+// frames upstream, write JSON transcript chunks into chatInput as they arrive.
+async function _startLocalCapture({ engine, micDevice }) {
     try {
         const constraints = { audio: micDevice ? { deviceId: { exact: micDevice } } : true };
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
         const ctx = new AudioContext({ sampleRate: 16000 });
+        await ctx.audioWorklet.addModule(_ensureAudioWorkletURL());
         const source = ctx.createMediaStreamSource(stream);
-        const processor = ctx.createScriptProcessor(4096, 1, 1);
-        const pcmChunks = [];
+        const worklet = new AudioWorkletNode(ctx, 'taskbean-capture');
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
 
-        processor.onaudioprocess = e => pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-        source.connect(processor);
-        processor.connect(ctx.destination);
+        const pcmChunks = [];          // Whisper batch path
+        let liveWS = null;             // Live WS path
+        let liveReady = false;
+        let liveStartedAt = 0;
+        let interimText = '';
 
-        window._whisperRecording = { stream, ctx, source, processor, pcmChunks };
+        if (engine === 'live') {
+            const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            liveWS = new WebSocket(`${wsProto}//${location.host}/api/transcribe/live`);
+            liveWS.binaryType = 'arraybuffer';
+            liveWS.onmessage = (ev) => {
+                let msg;
+                try { msg = JSON.parse(ev.data); } catch { return; }
+                if (msg.type === 'loading') {
+                    _setRibbonChip('live', `live · ${Math.round(msg.pct)}%`, '');
+                } else if (msg.type === 'ready') {
+                    liveReady = true;
+                    _setRibbonChip('live', `live · ${msg.model.split('-').slice(0, 2).join('-')}`, msg.device || '');
+                } else if (msg.type === 'chunk') {
+                    interimText = (interimText + ' ' + msg.text).trim();
+                    chatInput.value = interimText;
+                    autoResize();
+                } else if (msg.type === 'done') {
+                    interimText = (msg.text || interimText || '').trim();
+                    chatInput.value = interimText;
+                    autoResize();
+                } else if (msg.type === 'error') {
+                    addChat('error', 'mic-off', `Live dictation error: ${esc(msg.message || 'unknown')}`);
+                    stopCurrentRecording();
+                }
+            };
+            liveWS.onerror = () => {
+                addChat('error', 'mic-off', 'Live dictation connection failed.');
+                stopCurrentRecording();
+            };
+            // Worklet → Int16 → WS
+            worklet.port.onmessage = (e) => {
+                if (!liveReady || liveWS.readyState !== 1) return;
+                const int16 = _floatToInt16(e.data);
+                liveWS.send(int16.buffer);
+            };
+        } else {
+            // Whisper batch — accumulate Float32 chunks for buildWav() on stop.
+            worklet.port.onmessage = (e) => pcmChunks.push(e.data);
+        }
+
+        source.connect(analyser);
+        source.connect(worklet);
+        const muted = ctx.createGain();
+        muted.gain.value = 0;
+        worklet.connect(muted).connect(ctx.destination);
+
+        window._whisperRecording = { engine, stream, ctx, source, worklet, analyser, pcmChunks, liveWS };
 
         startRec();
-        document.getElementById('voiceStatus').textContent = 'Listening (Whisper)...';
+        liveStartedAt = Date.now();
+        mountComposerRibbon(engine, analyser, liveStartedAt);
 
         return true;
     } catch (e) {
-        console.debug('[speech] Whisper capture failed:', e.message);
+        console.error('[speech] capture failed:', e?.name, e?.message, e);
+        unmountComposerRibbon();
+        // If anything got partially set up before the throw, tear it down so
+        // a retry isn't blocked by stale state. startRec() at the bottom of
+        // the try is the only mutator before this catch, but the user-facing
+        // mic button reads isRecording either way — keep it cohesive.
+        try {
+            if (window._whisperRecording) {
+                const r = window._whisperRecording;
+                try { r.worklet?.disconnect(); } catch {}
+                try { r.source?.disconnect(); } catch {}
+                try { r.stream?.getTracks().forEach(t => t.stop()); } catch {}
+                try { r.ctx?.close(); } catch {}
+                try { r.liveWS?.close(); } catch {}
+                window._whisperRecording = null;
+            }
+        } catch {}
+        try { stopRec(); } catch {}
+        // Surface the real reason instead of the catch-all "All speech
+        // engines failed" message in toggleVoice. Stash it on a tag the
+        // caller can read so we don't double-render here AND in toggleVoice.
+        window._lastSpeechError = `${e?.name || 'Error'}: ${e?.message || 'Microphone capture failed'}`;
         return false;
     }
 }
 
+// Decide what to do with a finalized transcript. 'compose' (default) drops it
+// into chatInput so the user can review/edit and submit normally; 'extract'
+// keeps the legacy auto-extract behavior for users who liked the magic.
+function _speechAction() {
+    const a = (settingsConfig?.speech?.action || 'compose').toLowerCase();
+    return a === 'extract' ? 'extract' : 'compose';
+}
+
+function _handleFinalTranscript(text) {
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+        addChat('info', 'mic-off', 'No speech detected.');
+        setStatus('check-circle', 'Ready', 'idle');
+        return;
+    }
+    if (_speechAction() === 'extract') {
+        processSpeechToTasks(trimmed);
+        return;
+    }
+    // 'compose' mode: leave the transcript in the textarea, focus it so the
+    // user can edit + submit normally. No automatic extraction.
+    chatInput.value = trimmed;
+    autoResize();
+    chatInput.focus();
+    // Place cursor at end so they can keep dictating or type a refinement.
+    try { chatInput.setSelectionRange(trimmed.length, trimmed.length); } catch {}
+    setStatus('check-circle', 'Ready', 'idle');
+}
+
 async function stopCurrentRecording() {
     if (window._whisperRecording) {
-        const { stream, ctx, source, processor, pcmChunks } = window._whisperRecording;
-        processor.disconnect();
-        source.disconnect();
+        const { engine, stream, ctx, source, worklet, pcmChunks, liveWS } = window._whisperRecording;
+        try { worklet.port.onmessage = null; } catch {}
+        try { worklet.disconnect(); } catch {}
+        try { source.disconnect(); } catch {}
         stream.getTracks().forEach(t => t.stop());
         await ctx.close();
         window._whisperRecording = null;
+        unmountComposerRibbon();
         stopRec();
+
+        if (engine === 'live') {
+            // Tell server we're done; final {type:'done', text} will populate chatInput.
+            try {
+                if (liveWS && liveWS.readyState === 1) {
+                    liveWS.send(JSON.stringify({ type: 'stop' }));
+                }
+            } catch {}
+            // Wait briefly for the final transcript to arrive.
+            await new Promise(r => setTimeout(r, 300));
+            try { liveWS && liveWS.close(); } catch {}
+            _handleFinalTranscript(chatInput.value);
+            return;
+        }
 
         if (pcmChunks.length === 0) return;
 
@@ -7218,18 +7488,8 @@ async function stopCurrentRecording() {
         const wav = buildWav(pcmChunks, 16000);
 
         try {
-            const form = new FormData();
-            form.append('audio', new Blob([wav], { type: 'audio/wav' }), 'recording.wav');
-            const res = await fetch('/api/transcribe', { method: 'POST', body: form });
-            if (!res.ok) throw new Error(`Transcribe failed: ${res.status}`);
-            const data = await res.json();
-            const text = (data.text || '').trim();
-            if (text) {
-                processSpeechToTasks(text);
-            } else {
-                addChat('info', 'mic-off', 'No speech detected.');
-                setStatus('check-circle', 'Ready', 'idle');
-            }
+            await _streamTranscribe(wav);
+            _handleFinalTranscript(chatInput.value);
         } catch (e) {
             console.warn('[speech] Transcription error:', e.message);
             addChat('error', 'alert-circle', 'Transcription failed.');
@@ -7239,6 +7499,324 @@ async function stopCurrentRecording() {
         recognition.stop();
         stopRec();
     }
+}
+
+// POST WAV to /api/transcribe/stream and write SSE text chunks progressively
+// into chatInput as Whisper emits them.
+async function _streamTranscribe(wavBytes) {
+    const form = new FormData();
+    form.append('audio', new Blob([wavBytes], { type: 'audio/wav' }), 'recording.wav');
+    const res = await fetch('/api/transcribe/stream', { method: 'POST', body: form });
+    if (!res.ok || !res.body) throw new Error(`Transcribe failed: ${res.status}`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let acc = '';
+    chatInput.value = '';
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf('\n\n')) !== -1) {
+            const frame = buf.slice(0, idx).trim();
+            buf = buf.slice(idx + 2);
+            if (!frame.startsWith('data:')) continue;
+            let msg;
+            try { msg = JSON.parse(frame.slice(5).trim()); } catch { continue; }
+            if (msg.type === 'chunk') {
+                acc += msg.text;
+                chatInput.value = acc.trim();
+                autoResize();
+            } else if (msg.type === 'done') {
+                chatInput.value = (msg.text || acc).trim();
+                autoResize();
+                return;
+            } else if (msg.type === 'error') {
+                throw new Error(msg.message || 'stream error');
+            }
+        }
+    }
+}
+
+function cancelVoiceCapture() {
+    if (!window._whisperRecording) return;
+    const { stream, ctx, worklet, source, liveWS } = window._whisperRecording;
+    try { worklet.port.onmessage = null; } catch {}
+    try { worklet.disconnect(); } catch {}
+    try { source.disconnect(); } catch {}
+    try { stream.getTracks().forEach(t => t.stop()); } catch {}
+    try { ctx.close(); } catch {}
+    try { liveWS && liveWS.close(); } catch {}
+    window._whisperRecording = null;
+    unmountComposerRibbon();
+    stopRec();
+    setStatus('check-circle', 'Ready', 'idle');
+}
+
+// ─── Live Composer Ribbon controller ──────────────────────────────────────
+let _ribbonRAF = null;
+let _ribbonClockTimer = null;
+
+function mountComposerRibbon(engine, analyser, startedAt) {
+    const ribbon = document.getElementById('composerRibbon');
+    if (!ribbon) return;
+    ribbon.classList.add('open');
+
+    // Engine info chip
+    const isLive = engine === 'live';
+    const whisperLabel = window._whisperLoadedAlias || (settingsConfig?.speech?.whisperModel) || 'whisper-tiny';
+    _setRibbonChip(isLive ? 'live' : 'whisper',
+                   isLive ? 'live · loading…' : `on-device · ${whisperLabel}`,
+                   isLive ? '' : (window._whisperDevice || 'CPU'));
+
+    // Build 36 bars
+    const wave = document.getElementById('composerRibbonWave');
+    if (wave && wave.childElementCount !== 36) {
+        wave.innerHTML = '';
+        for (let i = 0; i < 36; i++) {
+            const b = document.createElement('div');
+            b.className = 'bar';
+            wave.appendChild(b);
+        }
+    }
+    const bars = wave ? Array.from(wave.children) : [];
+    const data = new Uint8Array(analyser.frequencyBinCount);
+
+    function tick() {
+        if (!window._whisperRecording) return;
+        analyser.getByteFrequencyData(data);
+        // Bin the FFT into 36 bands.
+        const step = Math.max(1, Math.floor(data.length / bars.length));
+        for (let i = 0; i < bars.length; i++) {
+            let sum = 0;
+            for (let j = 0; j < step; j++) sum += data[i * step + j] || 0;
+            const avg = sum / step;
+            const h = Math.max(2, Math.min(14, (avg / 255) * 14));
+            bars[i].style.height = h + 'px';
+        }
+        _ribbonRAF = requestAnimationFrame(tick);
+    }
+    _ribbonRAF = requestAnimationFrame(tick);
+
+    // Tabular-nums clock, updated every 250 ms.
+    const clock = document.getElementById('composerRibbonTime');
+    function updateClock() {
+        if (!clock) return;
+        const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+        const mm = Math.floor(elapsed / 60);
+        const ss = elapsed % 60;
+        clock.textContent = `${mm}:${String(ss).padStart(2, '0')}`;
+    }
+    updateClock();
+    _ribbonClockTimer = setInterval(updateClock, 250);
+
+    lucide.createIcons();
+}
+
+function unmountComposerRibbon() {
+    const ribbon = document.getElementById('composerRibbon');
+    if (ribbon) ribbon.classList.remove('open');
+    if (_ribbonRAF) { cancelAnimationFrame(_ribbonRAF); _ribbonRAF = null; }
+    if (_ribbonClockTimer) { clearInterval(_ribbonClockTimer); _ribbonClockTimer = null; }
+    const clock = document.getElementById('composerRibbonTime');
+    if (clock) clock.textContent = '0:00';
+}
+
+function _setRibbonChip(kind, label, device) {
+    const chip = document.getElementById('composerRibbonChip');
+    if (!chip) return;
+    chip.classList.toggle('live', kind === 'live');
+    chip.querySelector('.label').textContent = label;
+    const dev = chip.querySelector('.device');
+    if (device) { dev.textContent = device; dev.style.display = ''; }
+    else { dev.style.display = 'none'; }
+}
+
+// ─── Speech model warmup card ─────────────────────────────────────────────
+// Mounted as a chat-anchored card. Three semantic states: loading (downloading),
+// warn (server is stale — restart suggestion), error (real failure). Designed
+// so a hard refresh on a stale backend produces a *teaching* error, not an
+// alarming red brick.
+//
+// Lifecycle:
+//   1. showWarmupCard(model) is called either when the user opts in via
+//      Settings or when the health stream reveals !whisperLoaded after a
+//      brief grace window for the background warmup to finish.
+//   2. Card POSTs /api/speech/warmup and consumes SSE.
+//   3. On {type:'done'} → success state, fades out 3.5s later.
+//   4. On {type:'done', cached:true} → silent removal (server already loaded).
+//   5. On HTTP 405/404 → 'warn' state with restart-server action.
+//   6. On HTTP 503 / fetch error → one auto-retry after 3s, then 'error'.
+//   7. Dismissal sticks for the tab session via sessionStorage so a hard
+//      refresh doesn't replay the same card.
+
+const _warmupCardKey = (model) => `warmup-card-${model}`;
+const _warmupDismissedKey = (model) => `taskbean-warmup-dismissed-${model}`;
+
+function _warmupCardEl(model, state, label, hint, opts = {}) {
+    const id = _warmupCardKey(model);
+    let card = document.getElementById(id);
+    const created = !card;
+    if (!card) {
+        card = document.createElement('div');
+        card.id = id;
+        card.className = 'chat-msg warmup-card';
+    }
+    const showProgress = state === 'loading' || state === 'success';
+    const showDismiss = opts.dismissible !== false;
+    card.dataset.state = state;
+    const iconName = ({
+        loading: 'coffee',
+        retrying: 'loader',
+        warn: 'plug-zap',
+        error: 'alert-triangle',
+        success: 'check-circle-2',
+    })[state] || 'coffee';
+    card.innerHTML = `
+        <span class="icon" aria-hidden="true"><i data-lucide="${iconName}"></i></span>
+        <span class="body">${label}${hint ? `<div class="hint">${hint}</div>` : ''}</span>
+        ${showProgress ? `<span class="pct">0%</span><div class="progress"><i></i></div>` : ''}
+        ${opts.actions ? `<div class="actions">${opts.actions}</div>` : ''}
+        ${showDismiss ? `<button class="dismiss" type="button" aria-label="Dismiss" onclick="dismissWarmupCard('${model}')"><i data-lucide="x"></i></button>` : ''}
+    `;
+    if (created) {
+        const feed = document.getElementById('chatFeed');
+        if (feed) { feed.appendChild(card); feed.scrollTop = feed.scrollHeight; }
+    }
+    lucide.createIcons();
+    return card;
+}
+
+function dismissWarmupCard(model) {
+    const card = document.getElementById(_warmupCardKey(model));
+    if (!card) return;
+    try { sessionStorage.setItem(_warmupDismissedKey(model), '1'); } catch {}
+    card.classList.add('dismissing');
+    setTimeout(() => card.remove(), 240);
+}
+
+function _warmupSetProgress(card, pct) {
+    const fill = card.querySelector('.progress > i');
+    const pctEl = card.querySelector('.pct');
+    if (fill) fill.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+}
+
+async function showWarmupCard(model, _attempt = 1) {
+    // Honor a tab-session dismissal so hard refreshes don't replay the card.
+    try { if (sessionStorage.getItem(_warmupDismissedKey(model)) === '1') return; } catch {}
+    if (document.getElementById(_warmupCardKey(model))) return; // already mounted
+
+    const loadingLabel = model === 'live'
+        ? 'Warming up live dictation'
+        : 'Warming the espresso machine';
+    const loadingHint = model === 'live'
+        ? '~600 MB Nemotron streaming model · one-time download'
+        : '~75 MB whisper-tiny · one-time download';
+    const card = _warmupCardEl(model, 'loading', loadingLabel, loadingHint);
+
+    let res;
+    try {
+        res = await fetch('/api/speech/warmup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model })
+        });
+    } catch (e) {
+        // Network / fetch error — backend not reachable. Auto-retry once.
+        if (_attempt < 2) return _warmupRetry(model, card, 'Backend not reachable, retrying in 3s…');
+        _warmupCardEl(model, 'error',
+            'Couldn’t reach your local backend',
+            'Make sure the taskbean Python server is running on this machine.',
+            { actions: `<button class="action-btn subtle" onclick="showWarmupCard('${esc(model)}')">Try again</button>` });
+        return;
+    }
+
+    // Stale-backend detection: the catch-all GET route in main.py returns
+    // 405 when this POST endpoint isn't yet registered (older server build).
+    // 404 happens if the route is gone entirely. Either way, the cure is the
+    // same — restart the local server.
+    if (res.status === 405 || res.status === 404) {
+        _warmupCardEl(model, 'warn',
+            'Your local server is running an older build',
+            'On-device dictation needs a backend restart to pick up the new speech endpoints. In your terminal: <code>cd app/agent &amp;&amp; python main.py</code>',
+            { actions: `<button class="action-btn subtle" onclick="dismissWarmupCard('${esc(model)}')">Got it</button>` });
+        return;
+    }
+    if (res.status === 503) {
+        if (_attempt < 2) return _warmupRetry(model, card, 'Foundry still starting up, retrying in 3s…');
+    }
+    if (!res.ok || !res.body) {
+        _warmupCardEl(model, 'error',
+            `Speech model warmup failed (HTTP ${res.status})`,
+            'You can still type tasks normally. Voice input may not work until this is resolved.',
+            { actions: `<button class="action-btn subtle" onclick="showWarmupCard('${esc(model)}')">Try again</button>` });
+        return;
+    }
+
+    // Stream the SSE progress.
+    try {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            let idx;
+            while ((idx = buf.indexOf('\n\n')) !== -1) {
+                const frame = buf.slice(0, idx).trim();
+                buf = buf.slice(idx + 2);
+                if (!frame.startsWith('data:')) continue;
+                let msg;
+                try { msg = JSON.parse(frame.slice(5).trim()); } catch { continue; }
+                if (msg.type === 'progress') {
+                    _warmupSetProgress(card, msg.pct);
+                } else if (msg.type === 'done') {
+                    if (msg.cached) {
+                        // Already loaded — quiet success: just remove the card.
+                        card.remove();
+                    } else {
+                        _warmupSetProgress(card, 100);
+                        const successLabel = model === 'live'
+                            ? 'Live dictation ready'
+                            : 'Espresso pulled — your microphone now works offline';
+                        _warmupCardEl(model, 'success', successLabel, '', { dismissible: false });
+                        // Restore the percent display after the rebuild.
+                        _warmupSetProgress(document.getElementById(_warmupCardKey(model)), 100);
+                        setTimeout(() => {
+                            const c = document.getElementById(_warmupCardKey(model));
+                            if (c) { c.classList.add('dismissing'); setTimeout(() => c.remove(), 240); }
+                        }, 3500);
+                    }
+                    return;
+                } else if (msg.type === 'error') {
+                    _warmupCardEl(model, 'error',
+                        'Speech model warmup failed',
+                        esc(msg.message || 'unknown error'),
+                        { actions: `<button class="action-btn subtle" onclick="showWarmupCard('${esc(model)}')">Try again</button>` });
+                    return;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[speech] warmup stream failed:', e.message);
+        _warmupCardEl(model, 'error',
+            'Speech model warmup failed',
+            esc(e.message || 'unknown'),
+            { actions: `<button class="action-btn subtle" onclick="showWarmupCard('${esc(model)}')">Try again</button>` });
+    }
+}
+
+async function _warmupRetry(model, card, message) {
+    _warmupCardEl(model, 'retrying', message, '', { dismissible: false });
+    await new Promise(r => setTimeout(r, 3000));
+    // Drop the existing card so showWarmupCard can rebuild fresh.
+    const existing = document.getElementById(_warmupCardKey(model));
+    if (existing) existing.remove();
+    return showWarmupCard(model, 2);
 }
 
 function buildWav(pcmChunks, sampleRate) {
@@ -7277,13 +7855,14 @@ function startRec() { isRecording = true; const b = document.getElementById('mic
 function stopRec() { isRecording = false; const b = document.getElementById('micBtn'); b.classList.remove('recording'); b.innerHTML = '<i data-lucide="mic"></i>'; lucide.createIcons(); setTimeout(()=>document.getElementById('voiceStatus').textContent='', 2000); }
 
 // ═══════════════════════════════════════════════════════════════════
-// Mic Popover — device list, volume meter, hold-to-record toggle
+// Mic Popover — device list, volume meter
 // ═══════════════════════════════════════════════════════════════════
 
 let _micPopoverOpen = false;
 let _micVolumeCtx = null;
 let _micVolumeStream = null;
-let _holdToRecord = JSON.parse(localStorage.getItem('taskbean-hold-to-record') || 'false');
+let _micVolumeBorrowed = false;
+
 
 function toggleMicPopover() {
     _micPopoverOpen ? closeMicPopover() : openMicPopover();
@@ -7304,12 +7883,10 @@ async function openMicPopover() {
     if (pop.showPopover) pop.showPopover(); else pop.classList.add('open');
     lucide.createIcons();
 
-    // Sync hold-to-record toggle
-    const toggle = document.getElementById('holdToRecordToggle');
-    if (toggle) {
-        toggle.className = 'settings-toggle ' + (_holdToRecord ? 'on' : 'off');
-        toggle.setAttribute('aria-checked', String(_holdToRecord));
-    }
+    // Sync engine pills with current setting (treat 'auto' as whisper).
+    _renderEnginePills();
+    // If the active engine is whisper-family, surface the variant picker.
+    populateMicWhisperModels();
 
     // Enumerate devices
     try {
@@ -7351,26 +7928,144 @@ async function selectMicDevice(deviceId) {
     openMicPopover();
 }
 
-function toggleHoldToRecord() {
-    _holdToRecord = !_holdToRecord;
-    localStorage.setItem('taskbean-hold-to-record', JSON.stringify(_holdToRecord));
-    const toggle = document.getElementById('holdToRecordToggle');
-    if (toggle) {
-        toggle.className = 'settings-toggle ' + (_holdToRecord ? 'on' : 'off');
-        toggle.setAttribute('aria-checked', String(_holdToRecord));
+// Active engine for the pill row in the mic popover. 'auto' renders as
+// whisper (since auto's first choice is whisper). Selecting a pill calls
+// updateSpeechSetting which also fires the warmup card if needed.
+function _renderEnginePills() {
+    const root = document.getElementById('micPopoverEngines');
+    if (!root) return;
+    let active = (settingsConfig?.speech?.engine || 'auto').toLowerCase();
+    if (active === 'auto') active = 'whisper';
+    root.querySelectorAll('.mic-engine-pill').forEach(p => {
+        const on = p.dataset.engine === active;
+        p.classList.toggle('active', on);
+        p.setAttribute('aria-checked', String(on));
+    });
+}
+
+async function selectMicEngine(engine) {
+    const sel = document.getElementById('settingsSpeechEngine');
+    if (sel) sel.value = engine;
+    await updateSpeechSetting('engine', engine);
+    _renderEnginePills();
+    populateMicWhisperModels();
+}
+
+// ─── Whisper variant picker (mic popover) ────────────────────────────────
+// Visible only when the active engine is in the whisper family (auto/whisper).
+// Lists cached voice models from /api/models so the user can pick whisper-tiny
+// vs whisper-base vs whisper-small without leaving the mic. Selecting a
+// variant POSTs {speech:{whisperModel}} to /api/config; the backend drops
+// the cached _whisper_model so the next /api/transcribe lazy-loads the new one.
+async function populateMicWhisperModels() {
+    const wrap = document.getElementById('micWhisperPicker');
+    const list = document.getElementById('micWhisperList');
+    if (!wrap || !list) return;
+    // Always show the picker — the engine UI was trimmed to on-device only
+    // (commit 011c3ad), so the prior "engine === 'whisper'" gate would have
+    // hidden the picker for any user whose persisted config still had
+    // engine: 'live' or 'web' from before the trim.
+    if (!settingsConfig) {
+        try { await loadSettingsConfig(); } catch {}
     }
+    wrap.style.display = '';
+    try {
+        const res = await fetch('/api/models');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { models } = await res.json();
+        const voice = models.filter(m => (m.modality || (m.alias?.toLowerCase().startsWith('whisper') ? 'voice' : 'chat')) === 'voice');
+        if (voice.length === 0) {
+            list.innerHTML = `<div class="mic-whisper-empty">No voice models cached. Open <a href="#" onclick="closeMicPopover();openModelPicker();switchModelTab('voice');return false">More models →</a> to download whisper-tiny or others.</div>`;
+            return;
+        }
+        const current = (settingsConfig?.speech?.whisperModel || 'whisper-tiny').toLowerCase();
+        // Sort: cached first, then by file size ascending (faster first).
+        voice.sort((a, b) => {
+            if (a.cached !== b.cached) return a.cached ? -1 : 1;
+            return (a.fileSizeGb || 0) - (b.fileSizeGb || 0);
+        });
+        list.innerHTML = voice.map(m => {
+            const active = m.alias.toLowerCase() === current && m.cached;
+            const sizeText = m.fileSizeGb ? `${m.fileSizeGb} GB` : '';
+            if (!m.cached) {
+                return `<div class="mic-whisper-item" title="Not downloaded">
+                    <span class="name" style="color:var(--muted)">${esc(m.alias)}</span>
+                    <span class="size">${esc(sizeText)}</span>
+                    <button class="download" onclick="closeMicPopover();openModelPicker();switchModelTab('voice')">Get</button>
+                </div>`;
+            }
+            return `<div class="mic-whisper-item ${active ? 'active' : ''}" onclick="selectMicWhisperModel('${esc(m.alias)}')">
+                <span class="check">${active ? '✓' : ''}</span>
+                <span class="name">${esc(m.alias)}</span>
+                <span class="size">${esc(sizeText)}</span>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        list.innerHTML = `<div class="mic-whisper-empty">Couldn’t load voice models (${esc(e.message)})</div>`;
+    }
+}
+
+async function selectMicWhisperModel(alias) {
+    // settingsConfig may be null on first use (user hasn't opened Settings yet).
+    // Hydrate from the server before checking equality so we don't compare
+    // against a stale local cache.
+    if (!settingsConfig) {
+        try { await loadSettingsConfig(); } catch {}
+    }
+    const currentAlias = (settingsConfig?.speech?.whisperModel || '').toLowerCase();
+    if (currentAlias === alias.toLowerCase()) return;
+    try {
+        const res = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ speech: { whisperModel: alias } })
+        });
+        if (!res.ok) {
+            const err = await res.text();
+            addChat('error', 'alert-circle', `Couldn’t change voice model: ${esc(err.slice(0, 200))}`);
+            return;
+        }
+        // Server response is the source of truth — refresh the local cache so
+        // populateMicWhisperModels' next render reflects the new active variant.
+        try {
+            const updated = await res.json();
+            if (updated && typeof updated === 'object') settingsConfig = updated;
+        } catch {}
+    } catch (e) {
+        addChat('error', 'alert-circle', `Couldn’t reach the backend to change voice model.`);
+        return;
+    }
+    // Refresh the variant list to update checkmarks and trigger the warmup
+    // card so the user sees the new variant being loaded.
+    populateMicWhisperModels();
+    // Force whisper warmup card to show even if the previous one was dismissed —
+    // a model change is a meaningful new event.
+    try { sessionStorage.removeItem('taskbean-warmup-dismissed-whisper'); } catch {}
+    _whisperWarmupShown = false;
+    showWarmupCard('whisper');
 }
 
 async function startVolumeMeter(deviceId) {
     stopVolumeMeter();
     try {
-        const constraints = { audio: deviceId ? { deviceId: { exact: deviceId } } : true };
-        _micVolumeStream = await navigator.mediaDevices.getUserMedia(constraints);
-        _micVolumeCtx = new AudioContext();
-        const source = _micVolumeCtx.createMediaStreamSource(_micVolumeStream);
-        const analyser = _micVolumeCtx.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
+        let analyser;
+        // If a recording is already in flight, reuse its analyser node so we
+        // don't open a second getUserMedia stream (which causes a brief
+        // mic-indicator flash and is wasteful). The recording owns the
+        // stream/AudioContext lifecycle in this case.
+        if (window._whisperRecording && window._whisperRecording.analyser) {
+            analyser = window._whisperRecording.analyser;
+            _micVolumeBorrowed = true;
+        } else {
+            const constraints = { audio: deviceId ? { deviceId: { exact: deviceId } } : true };
+            _micVolumeStream = await navigator.mediaDevices.getUserMedia(constraints);
+            _micVolumeCtx = new AudioContext();
+            const source = _micVolumeCtx.createMediaStreamSource(_micVolumeStream);
+            analyser = _micVolumeCtx.createAnalyser();
+            analyser.fftSize = 256;
+            source.connect(analyser);
+            _micVolumeBorrowed = false;
+        }
         const data = new Uint8Array(analyser.frequencyBinCount);
         const fill = document.getElementById('micVolumeFill');
 
@@ -7389,14 +8084,46 @@ async function startVolumeMeter(deviceId) {
 }
 
 function stopVolumeMeter() {
+    // When the analyser was borrowed from an active recording, the stream
+    // and AudioContext belong to _whisperRecording and will be torn down
+    // when recording stops — don't close them here.
+    if (_micVolumeBorrowed) {
+        _micVolumeBorrowed = false;
+        return;
+    }
     if (_micVolumeStream) { _micVolumeStream.getTracks().forEach(t => t.stop()); _micVolumeStream = null; }
     if (_micVolumeCtx) { _micVolumeCtx.close().catch(()=>{}); _micVolumeCtx = null; }
 }
 
-// Close mic popover on outside click
+// Close mic popover on outside click. Excludes both the mic button itself
+// (#micBtn) and the chevron that owns this popover (#micSettingsBtn) so
+// clicking either doesn't double-fire (the button's own onclick already
+// does the toggle, then this listener would close the just-opened popover).
 document.addEventListener('click', (e) => {
-    if (_micPopoverOpen && !e.target.closest?.('.mic-popover') && !e.target.closest?.('#micBtn')) closeMicPopover();
+    if (_micPopoverOpen
+        && !e.target.closest?.('.mic-popover')
+        && !e.target.closest?.('#micBtn')
+        && !e.target.closest?.('#micSettingsBtn')) {
+        closeMicPopover();
+    }
 });
+
+// Sync _micPopoverOpen with the native popover's actual visibility.
+// Without this, anything that closes the popover via the native API
+// (Escape key, light-dismiss, programmatic hidePopover from elsewhere)
+// leaves _micPopoverOpen stuck at true. Next chevron click then takes
+// the close branch on an already-closed popover and does nothing -
+// the user has to click a third time to actually re-open. Classic
+// every-other-click flake the user reported.
+(() => {
+    const pop = document.getElementById('micPopover');
+    if (!pop) return;
+    pop.addEventListener('toggle', (e) => {
+        const open = e.newState === 'open';
+        _micPopoverOpen = open;
+        if (!open) stopVolumeMeter();
+    });
+})();
 
 // ═══════════════════════════════════════════════════════════════════
 // Quick Model Picker — cached models for fast switching
@@ -7435,7 +8162,9 @@ async function openQuickModelPicker() {
         const { models } = await res.json();
         _allModels = models;
 
-        const cached = models.filter(m => m.cached);
+        // Voice models (Whisper variants etc.) live in the mic popover, not
+        // the chat-model picker. They're never selectable as the chat model.
+        const cached = models.filter(m => m.cached && (m.modality || 'chat') === 'chat');
         if (cached.length === 0) {
             list.innerHTML = '<div style="padding:12px;text-align:center;font-size:11px;color:var(--muted)">No cached models</div>';
             lucide.createIcons();
@@ -7494,6 +8223,8 @@ function _setComposerModelDisplay({ alias, device, modelId } = {}) {
         resolvedAlias = found?.alias || _stripModelSuffix(modelId);
     }
     lbl.textContent = resolvedAlias || 'Model';
+    // Once we have a real label, drop any "Loading…" muted opacity.
+    if (resolvedAlias) lbl.style.opacity = '';
 
     // Resolve device — prefer explicit, then catalog lookup, then infer from id.
     let resolvedDevice = device || null;
@@ -7502,7 +8233,15 @@ function _setComposerModelDisplay({ alias, device, modelId } = {}) {
             .find(m => m.modelId === modelId);
         resolvedDevice = found?.device || _inferDeviceFromModelId(modelId);
     }
-    if (dev) dev.textContent = (resolvedDevice || '').toUpperCase();
+    if (dev) {
+        const text = (resolvedDevice || '').toUpperCase();
+        dev.textContent = text;
+        // Hide the chip entirely when we have no device hint instead of
+        // rendering an empty 1x5 px pill (showed up as a phantom gap next
+        // to the alias on the very first health snapshot before /api/models
+        // had resolved the catalog).
+        dev.style.display = text ? '' : 'none';
+    }
 }
 
 // Strip "-generic-{cpu,gpu,npu}" tail and ":N" suffix to recover a vanity
@@ -8014,9 +8753,34 @@ function updateStatusBarHealth(ev) {
     // Whisper load state drives an additional device chip when its
     // execution device differs from the chat model's.
     if (typeof ev.whisperLoaded === 'boolean') {
+        const wasLoaded = _whisperLoaded;
         _whisperLoaded = ev.whisperLoaded;
         _whisperDevice = ev.whisperDevice || null;
+        window._whisperDevice = _whisperDevice;
+        if (typeof ev.whisperAlias === 'string') window._whisperLoadedAlias = ev.whisperAlias;
         _updateDeviceChipsVisibility();
+        // Don't blast the user with a warmup card on every hard refresh —
+        // give the silent background warmup 3s to finish first. Only show
+        // the card if Whisper is still unloaded after that grace window
+        // AND the user's engine actually depends on it.
+        if (!wasLoaded && !_whisperLoaded && ev.foundryReady && _whisperWarmupShown !== true && !_whisperWarmupGracePending) {
+            const eng = (settingsConfig?.speech?.engine || 'auto').toLowerCase();
+            if (eng === 'auto' || eng === 'whisper') {
+                _whisperWarmupGracePending = true;
+                setTimeout(() => {
+                    _whisperWarmupGracePending = false;
+                    if (!_whisperLoaded && _whisperWarmupShown !== true) {
+                        _whisperWarmupShown = true;
+                        showWarmupCard('whisper');
+                    }
+                }, 3000);
+            }
+        }
+        if (_whisperLoaded) _whisperWarmupShown = true;
+    }
+    if (typeof ev.liveModelLoaded === 'boolean') {
+        _liveModelLoaded = ev.liveModelLoaded;
+        _liveModelDevice = ev.liveModelDevice || null;
     }
 }
 
@@ -8026,6 +8790,12 @@ let _currentModelDevice = null;
 // Tracks whether Whisper-tiny has been lazy-loaded for voice transcription.
 let _whisperLoaded = false;
 let _whisperDevice = null;
+let _whisperWarmupShown = false;
+let _whisperWarmupGracePending = false;
+// Tracks the live (Nemotron) streaming ASR model. Lazy-loaded only when the
+// user opts into the live tier.
+let _liveModelLoaded = false;
+let _liveModelDevice = null;
 
 function _updateModelDeviceIcon(modelId) {
     const iconEl = document.getElementById('modelDeviceIcon');
@@ -8047,6 +8817,7 @@ function _updateDeviceChipsVisibility() {
     const active = new Set();
     if (_currentModelDevice && map[_currentModelDevice]) active.add(_currentModelDevice);
     if (_whisperLoaded && _whisperDevice && map[_whisperDevice]) active.add(_whisperDevice);
+    if (_liveModelLoaded && _liveModelDevice && map[_liveModelDevice]) active.add(_liveModelDevice);
 
     // Respect user's status-bar item preferences (Settings → Status bar).
     let enabledKeys = null;
@@ -9857,6 +10628,8 @@ function populateSettingsFromConfig(cfg) {
     if (engineSel) engineSel.value = speechCfg.engine || 'auto';
     const fallbackSel = document.getElementById('settingsSpeechFallback');
     if (fallbackSel) fallbackSel.value = speechCfg.fallback || 'whisper';
+    const actionSel = document.getElementById('settingsSpeechAction');
+    if (actionSel) actionSel.value = speechCfg.action || 'compose';
     populateMicDevices();
 }
 
@@ -9884,6 +10657,13 @@ async function updateSpeechSetting(key, value) {
     const current = settingsConfig?.speech || {};
     current[key] = value || null;
     await updateSettingsConfig('speech', current);
+    // Surface the warmup card the first time the user opts into a model
+    // that needs downloading. The backend's /api/speech/warmup is idempotent
+    // and emits {type:'done', cached:true} immediately if already loaded.
+    if (key === 'engine') {
+        if (value === 'live') showWarmupCard('live');
+        else if (value === 'whisper' || value === 'auto') showWarmupCard('whisper');
+    }
 }
 
 async function populateMicDevices() {
@@ -10408,6 +11188,22 @@ async function initApp() {
         if (health.inference?.parallelToolCallFailures >= 2 && health.inference?.parallelToolCalls) {
             showParallelToolCallSuggestion({ failureCount: health.inference.parallelToolCallFailures });
         }
+        // Seed the composer pill from the FIRST /api/health response so the
+        // "Model" placeholder + empty-chip flash on hard refresh resolves
+        // immediately instead of waiting for the SSE stream to deliver the
+        // first health.snapshot event.
+        if (health.model || health.modelAlias) {
+            try {
+                _setComposerModelDisplay({
+                    alias: health.modelAlias,
+                    device: health.modelDevice,
+                    modelId: health.model,
+                });
+                if (health.model) _updateModelDeviceIcon(health.model);
+                const lblEl = document.getElementById('modelLabel');
+                if (lblEl) lblEl.textContent = health.modelAlias || health.model;
+            } catch (e) { console.debug('[boot] composer pill seed failed:', e); }
+        }
     } catch {}
 
     // Data polling intervals — guarded by serverReachable to avoid wasted requests
@@ -10527,6 +11323,7 @@ initApp();
 const MODEL_FILTER_KEY = 'foundry-model-filters';
 
 // Filter state — devices persisted, others reset per session
+let _modelTab = 'chat';  // 'chat' | 'voice' — modality tab in the model picker modal
 let _modelFilters = (() => {
     try {
         const saved = JSON.parse(localStorage.getItem(MODEL_FILTER_KEY) || '{}');
@@ -10756,17 +11553,48 @@ function persistDeviceFilter() {
     try { localStorage.setItem(MODEL_FILTER_KEY, JSON.stringify({ devices: _modelFilters.devices })); } catch {}
 }
 
+function switchModelTab(tab) {
+    if (tab !== 'chat' && tab !== 'voice') return;
+    _modelTab = tab;
+    const chatBtn = document.getElementById('modelTabChat');
+    const voiceBtn = document.getElementById('modelTabVoice');
+    if (chatBtn) { chatBtn.classList.toggle('active', tab === 'chat'); chatBtn.setAttribute('aria-selected', String(tab === 'chat')); }
+    if (voiceBtn) { voiceBtn.classList.toggle('active', tab === 'voice'); voiceBtn.setAttribute('aria-selected', String(tab === 'voice')); }
+    // Hide chat-specific filters when on the Voice tab.
+    const toolsBtn = document.getElementById('modelToolCallBtn');
+    const filterBar = document.getElementById('modelFilters');
+    if (toolsBtn) toolsBtn.style.display = tab === 'voice' ? 'none' : '';
+    if (filterBar) filterBar.style.display = tab === 'voice' ? 'none' : '';
+    // Re-render with the active tab.
+    buildFilterBar(_allModels);
+    applyFiltersAndRender();
+    _syncHeaderFilterButtons();
+}
+
 function applyFiltersAndRender() {
+    const tab = _modelTab || 'chat';
     const filtered = _allModels.filter(m => {
+        // Modality tab gates everything else. Voice models never appear in
+        // the Chat tab; chat models never appear in the Voice tab. Models
+        // without an explicit modality default to chat (back-compat).
+        const modality = m.modality || 'chat';
+        if (tab === 'chat' && modality !== 'chat') return false;
+        if (tab === 'voice' && modality !== 'voice') return false;
         if (!_modelFilters.devices.includes(m.device)) return false;
-        if (_modelFilters.tools && !m.tasks.includes('tools')) return false;
+        // Tools/family/context filters are nonsensical for ASR models, so
+        // skip them on the Voice tab.
+        if (tab === 'chat') {
+            if (_modelFilters.tools && !m.tasks.includes('tools')) return false;
+            if (_modelFilters.ctxKey) {
+                const range = CTX_RANGES.find(r => r.key === _modelFilters.ctxKey);
+                if (range && !range.test(m.maxInputTokens)) return false;
+            }
+            if (_modelFilters.family && m.family !== _modelFilters.family) return false;
+            if (_toolCallFilterOn && !m.tasks.includes('tools')) return false;
+        }
         if (_modelFilters.sizeKey) {
             const range = SIZE_RANGES.find(r => r.key === _modelFilters.sizeKey);
             if (range && !range.test(m.fileSizeGb)) return false;
-        }
-        if (_modelFilters.ctxKey) {
-            const range = CTX_RANGES.find(r => r.key === _modelFilters.ctxKey);
-            if (range && !range.test(m.maxInputTokens)) return false;
         }
         if (_modelFilters.family && m.family !== _modelFilters.family) return false;
         // Header-level filters (compat + tool calling)
