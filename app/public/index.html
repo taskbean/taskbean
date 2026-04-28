@@ -2817,7 +2817,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
           <div class="input-bar-right">
             <button class="composer-model-pill" id="composerModelPill" onclick="toggleQuickModelPicker()" title="Switch model">
               <span class="composer-model-status" id="composerModelStatus" aria-hidden="true"></span>
-              <span id="composerModelLabel">Model</span>
+              <span id="composerModelLabel" style="opacity:.6">Loading…</span>
               <span class="composer-model-device" id="composerModelDevice" aria-hidden="true"></span>
               <i data-lucide="chevron-up" class="icon-sm" style="opacity:.4;width:10px;height:10px"></i>
             </button>
@@ -8193,6 +8193,8 @@ function _setComposerModelDisplay({ alias, device, modelId } = {}) {
         resolvedAlias = found?.alias || _stripModelSuffix(modelId);
     }
     lbl.textContent = resolvedAlias || 'Model';
+    // Once we have a real label, drop any "Loading…" muted opacity.
+    if (resolvedAlias) lbl.style.opacity = '';
 
     // Resolve device — prefer explicit, then catalog lookup, then infer from id.
     let resolvedDevice = device || null;
@@ -11155,6 +11157,22 @@ async function initApp() {
         const health = await fetch('/api/health', { signal: AbortSignal.timeout(3000) }).then(r => r.json());
         if (health.inference?.parallelToolCallFailures >= 2 && health.inference?.parallelToolCalls) {
             showParallelToolCallSuggestion({ failureCount: health.inference.parallelToolCallFailures });
+        }
+        // Seed the composer pill from the FIRST /api/health response so the
+        // "Model" placeholder + empty-chip flash on hard refresh resolves
+        // immediately instead of waiting for the SSE stream to deliver the
+        // first health.snapshot event.
+        if (health.model || health.modelAlias) {
+            try {
+                _setComposerModelDisplay({
+                    alias: health.modelAlias,
+                    device: health.modelDevice,
+                    modelId: health.model,
+                });
+                if (health.model) _updateModelDeviceIcon(health.model);
+                const lblEl = document.getElementById('modelLabel');
+                if (lblEl) lblEl.textContent = health.modelAlias || health.model;
+            } catch (e) { console.debug('[boot] composer pill seed failed:', e); }
         }
     } catch {}
 
