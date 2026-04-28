@@ -348,15 +348,39 @@ async def _npu_usage_sampler() -> None:
 # ── Health ────────────────────────────────────────────────────────────────────
 
 def _health_data() -> dict[str, Any]:
+    whisper_loaded = _whisper_model is not None
+    # Friendly model alias (e.g. "qwen3-0.6b") + execution device tag for
+    # the composer pill / status bar — the full MODEL_ID is for API calls,
+    # the alias is for display.
+    model_id = agent_mod.MODEL_ID
+    model_alias = agent_mod.MODEL_ALIAS or model_id
+    if model_id:
+        _id_lc = model_id.lower()
+        if "npu" in _id_lc or "vitis" in _id_lc:
+            model_device = "NPU"
+        elif "gpu" in _id_lc or "migraphx" in _id_lc:
+            model_device = "GPU"
+        else:
+            model_device = "CPU"
+    else:
+        model_device = None
     return {
         "type": "health.snapshot",
-        "model": agent_mod.MODEL_ID,
+        "model": model_id,
+        "modelAlias": model_alias,
+        "modelDevice": model_device,
         "serviceUrl": agent_mod.SERVICE_BASE_URL,
         "foundryReady": agent_mod.foundry_ready,
         "modelReady": agent_mod.model_ready,
         "startupError": agent_mod.startup_error,
         "mcpAvailable": _markitdown_available(),
         "uptimeMs": int(time.time() * 1000) - telem.SERVER_START,
+        # Voice transcription model — lazy-loaded the first time the user
+        # picks the Whisper engine. The status bar uses this to decide
+        # whether to surface its execution device chip alongside the chat
+        # model's. Whisper-tiny ships as a CPU build today.
+        "whisperLoaded": whisper_loaded,
+        "whisperDevice": "CPU" if whisper_loaded else None,
     }
 
 
