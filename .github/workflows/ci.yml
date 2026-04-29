@@ -61,12 +61,18 @@ jobs:
           cache: pip
 
       - name: Install minimal test deps
-        # test_usage_scanners.py only needs pytest + stdlib, but
-        # conftest.py imports uvicorn/httpx/pytest-asyncio at collection.
+        # 51 of 53 tests in test_usage_scanners.py exercise the pure-stdlib
+        # scanner modules and conftest helpers (uvicorn/httpx/pytest-asyncio).
+        # The remaining 2 tests (test_api_todos_merges_db_rows,
+        # test_agent_toggle_rejects_string_true) `import main` which pulls
+        # the full FastAPI app + opentelemetry + agent-framework + winotify
+        # (Windows-only) + tiktoken + many heavy ML deps. We deselect those
+        # 2 in this generic Linux/macOS/Windows job — they run in dev where
+        # full requirements.txt is installed.
         run: pip install pytest pytest-asyncio uvicorn httpx
 
       - name: Run usage-scanner tests
-        run: pytest test_usage_scanners.py -v
+        run: pytest test_usage_scanners.py -v --deselect test_usage_scanners.py::test_api_todos_merges_db_rows --deselect test_usage_scanners.py::test_agent_toggle_rejects_string_true
 
   # Single required status check for branch protection. Configure
   # "Require status checks to pass before merging" → "ci-required" in
