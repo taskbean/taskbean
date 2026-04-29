@@ -1,62 +1,152 @@
-[
-  {
-    "query": "fix the authentication bug in src/auth/middleware.ts where JWT tokens aren't being refreshed properly. users are getting logged out after 15 minutes",
-    "should_trigger": true
+{
+  "_meta": {
+    "schema": "skill-creator trigger-eval",
+    "skill": "taskbean",
+    "last_eval": {
+      "date": "2026-04-28",
+      "agent": "copilot",
+      "trigger_keyword": "bean add",
+      "runs_per_query": 3,
+      "summary": { "total": 30, "passed": 14, "failed": 16 },
+      "by_class": {
+        "negative": { "total": 15, "passed": 14, "rate": 0.93 },
+        "positive": { "total": 15, "passed": 2,  "rate": 0.13 }
+      },
+      "iteration_history": [
+        { "iter": 1, "desc": "Phase 2 rewrite, word-bound detector",  "total": "18/30", "positive": "4/15",  "negative": "14/15" },
+        { "iter": 2, "desc": "pushy 'ALWAYS LOG FIRST' body",          "total": "17/30", "positive": "3/15",  "negative": "14/15" },
+        { "iter": 3, "desc": "lean verb-heavy description",            "total": "16/30", "positive": "2/15",  "negative": "14/15" },
+        { "iter": 5, "desc": "helpfulness reframing (current)",        "total": "14/30", "positive": "2/15",  "negative": "14/15" }
+      ],
+      "findings": [
+        "Negative class converged at 14/15 (~93%) across all iterations — the description's DO-NOT guidance is consistently respected.",
+        "Positive class is structurally bounded at ~13-27% under Copilot CLI regardless of description framing (imperative, lean verb-list, or helpfulness reframing).",
+        "Many failing positive prompts reference specific file paths (e.g. 'src/auth/middleware.ts', 'the dark mode toggle') that don't exist in the taskbean repo. Copilot grounds in the actual repo, finds the file missing, and asks for clarification instead of starting work — so it never reaches the step that would call `bean add`. This is an eval methodology issue more than a skill description issue.",
+        "Future work: rewrite positive prompts to be self-contained (no specific file paths) OR run evals from a fixture project where referenced files exist."
+      ],
+      "invocation": "cd C:\\Users\\nbrady\\personal\\taskbean && $env:PYTHONPATH='C:\\Users\\nbrady\\.agents\\skills\\skill-creator'; python -m scripts.run_eval --eval-set cli\\evals\\trigger-eval.json --skill-path .agents\\skills\\taskbean --agent copilot --trigger-keyword 'bean add' --runs-per-query 3 --num-workers 4"
+    }
   },
-  {
-    "query": "I need you to do three things: update the README with the new API endpoints, add input validation to the /users POST endpoint, and write tests for the validation logic",
-    "should_trigger": true
-  },
-  {
-    "query": "can you look into why the CI pipeline is failing? i think it's something with the docker build step. also the eslint config needs updating to the flat config format",
-    "should_trigger": true
-  },
-  {
-    "query": "refactor the entire payment processing module to use the new Stripe SDK v2. there are about 8 files that need to be updated and the webhook handler needs to be rewritten",
-    "should_trigger": true
-  },
-  {
-    "query": "hey can you set up the new microservice for the notifications feature? needs dockerfile, kubernetes manifests, the grpc proto definitions, and a basic health check endpoint",
-    "should_trigger": true
-  },
-  {
-    "query": "im getting a weird error when i run npm test -- something about a missing module. can you debug it and also while youre at it update our jest config to use the new v30 syntax",
-    "should_trigger": true
-  },
-  {
-    "query": "migrate our database from postgres 14 to 16, update the connection pooling config, and make sure the backup scripts still work with the new version",
-    "should_trigger": true
-  },
-  {
-    "query": "i need to prepare for my 1-on-1 tomorrow, can you help me draft talking points about what our team accomplished this sprint?",
-    "should_trigger": false
-  },
-  {
-    "query": "what's the difference between JWT and OAuth2? can you explain it simply?",
-    "should_trigger": false
-  },
-  {
-    "query": "read src/auth/middleware.ts and explain what it does",
-    "should_trigger": false
-  },
-  {
-    "query": "generate a weekly summary of my git commits across all repos",
-    "should_trigger": false
-  },
-  {
-    "query": "help me write a cover letter for a senior engineer position at Stripe. I've been doing a lot of backend work with Node.js and TypeScript",
-    "should_trigger": false
-  },
-  {
-    "query": "what are the best practices for structuring a monorepo with turborepo? I'm just researching, not building anything yet",
-    "should_trigger": false
-  },
-  {
-    "query": "review this PR diff and tell me if there are any security issues. dont change anything, just review it",
-    "should_trigger": false
-  },
-  {
-    "query": "install the taskbean CLI tool globally on my system and configure it for this project",
-    "should_trigger": false
-  }
-]
+  "evals": [
+    {
+      "query": "the JWT tokens aren't being refreshed properly so users are getting logged out after 15 minutes. fix the auth middleware to keep them logged in",
+      "should_trigger": true
+    },
+    {
+      "query": "I need you to do three things: update the README with the new API endpoints, add input validation to the /users POST endpoint, and write tests for the validation logic",
+      "should_trigger": true
+    },
+    {
+      "query": "can you look into why the CI pipeline is failing? i think it's something with the docker build step. also the eslint config needs updating to the flat config format",
+      "should_trigger": true
+    },
+    {
+      "query": "refactor the payment processing module to use the new Stripe SDK v2. there are about 8 files that need to be updated and the webhook handler needs to be rewritten",
+      "should_trigger": true
+    },
+    {
+      "query": "set up a new microservice for the notifications feature — needs a dockerfile, kubernetes manifests, grpc proto definitions, and a basic health check endpoint",
+      "should_trigger": true
+    },
+    {
+      "query": "im getting a weird error when i run npm test — something about a missing module. can you debug it and also update our jest config to use the new v30 syntax",
+      "should_trigger": true
+    },
+    {
+      "query": "migrate our database from postgres 14 to 16, update the connection pooling config, and make sure the backup scripts still work with the new version",
+      "should_trigger": true
+    },
+    {
+      "query": "write unit tests for the parser module — coverage is at 40% and we need it above 80%",
+      "should_trigger": true
+    },
+    {
+      "query": "set up GitHub Actions to run the test suite on every PR and block merge if anything fails",
+      "should_trigger": true
+    },
+    {
+      "query": "I started fixing the auth bug yesterday but didn't finish. can you pick it up where I left off and ship it?",
+      "should_trigger": true
+    },
+    {
+      "query": "the API docs are out of date — update them to match the v2 endpoint changes we made last sprint",
+      "should_trigger": true
+    },
+    {
+      "query": "implement a rate limiter for the /api/login endpoint. 5 attempts per minute per IP, return 429 with retry-after header",
+      "should_trigger": true
+    },
+    {
+      "query": "this regex /(\\d+)\\.(\\d+)/ is matching too greedily and breaking version parsing. fix it",
+      "should_trigger": true
+    },
+    {
+      "query": "convert the bash deploy script over to a Github Actions workflow so we can stop running it manually",
+      "should_trigger": true
+    },
+    {
+      "query": "the dark mode toggle isn't persisting across sessions. dig into why and fix it",
+      "should_trigger": true
+    },
+    {
+      "query": "i need to prepare for my 1-on-1 tomorrow, can you help me draft talking points about what our team accomplished this sprint?",
+      "should_trigger": false
+    },
+    {
+      "query": "what's the difference between JWT and OAuth2? can you explain it simply?",
+      "should_trigger": false
+    },
+    {
+      "query": "read src/auth/middleware.ts and explain what it does",
+      "should_trigger": false
+    },
+    {
+      "query": "generate a weekly summary of my git commits across all repos",
+      "should_trigger": false
+    },
+    {
+      "query": "help me write a cover letter for a senior engineer position at Stripe. I've been doing a lot of backend work with Node.js and TypeScript",
+      "should_trigger": false
+    },
+    {
+      "query": "what are the best practices for structuring a monorepo with turborepo? I'm just researching, not building anything yet",
+      "should_trigger": false
+    },
+    {
+      "query": "review this PR diff and tell me if there are any security issues. dont change anything, just review it",
+      "should_trigger": false
+    },
+    {
+      "query": "install the taskbean CLI tool globally on my system and configure it for this project",
+      "should_trigger": false
+    },
+    {
+      "query": "open package.json and show me what dependencies we're using",
+      "should_trigger": false
+    },
+    {
+      "query": "if I were to refactor the auth layer to use sessions instead of JWTs, how would you approach it? just brainstorming, dont change anything yet",
+      "should_trigger": false
+    },
+    {
+      "query": "draft a release announcement blog post for v2.0 that highlights the new features",
+      "should_trigger": false
+    },
+    {
+      "query": "write me a short summary of what I worked on this week so I can paste it into my status report",
+      "should_trigger": false
+    },
+    {
+      "query": "what's the right way to structure an eslint flat config for a monorepo with multiple packages?",
+      "should_trigger": false
+    },
+    {
+      "query": "compare the trade-offs between PostgreSQL and DynamoDB for a high-write workload. no decision yet, just want to think through it",
+      "should_trigger": false
+    },
+    {
+      "query": "show me how the bean done command works under the hood",
+      "should_trigger": false
+    }
+  ]
+}

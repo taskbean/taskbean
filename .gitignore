@@ -50,6 +50,19 @@ test-results/
 # Dependency installation markers
 .deps-installed
 
+# Local-only skill junctions (skill-creator lives in ~/.agents and is junctioned in)
+.agents/skills/skill-creator/
+
+# Per-agent install dirs (`bean install --agent all` creates these locally;
+# the canonical SKILL.md lives at .agents/skills/taskbean/ and gets copied
+# into these by the install command — no need to commit duplicates)
+.claude/
+.github/skills/
+
+# Eval artifacts — agents may scaffold real files when running positive
+# trigger-eval prompts (e.g. "set up a notifications microservice")
+services/notifications/
+
 # Stray shell-output files that have been accidentally committed before
 datetime
 .taskbean.json
