@@ -38,3 +38,51 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+  python-tests:
+    name: Python usage-scanner tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Pure-stdlib scanner tests — safe on Linux/macOS/Windows.
+        # The rest of app/agent/test_*.py needs Foundry Local + Windows
+        # NPU stack and is intentionally not in CI.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: app/agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install minimal test deps
+        # test_usage_scanners.py only needs pytest + stdlib, but
+        # conftest.py imports uvicorn/httpx/pytest-asyncio at collection.
+        run: pip install pytest pytest-asyncio uvicorn httpx
+
+      - name: Run usage-scanner tests
+        run: pytest test_usage_scanners.py -v
+
+  # Single required status check for branch protection. Configure
+  # "Require status checks to pass before merging" → "ci-required" in
+  # the repo's branch-protection rules so a green tick here blocks merge
+  # if any matrix leg above fails.
+  ci-required:
+    name: CI required
+    if: always()
+    needs: [cli-tests, python-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any dependency failed
+        run: |
+          echo "cli-tests: ${{ needs.cli-tests.result }}"
+          echo "python-tests: ${{ needs.python-tests.result }}"
+          if [ "${{ needs.cli-tests.result }}" != "success" ] || \
+             [ "${{ needs.python-tests.result }}" != "success" ]; then
+            exit 1
+          fi
