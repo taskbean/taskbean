@@ -6,13 +6,13 @@
     "name": "taskbean",
     "email": "hello@taskbean.ai"
   },
-  "version": "0.5.0",
+  "version": "0.5.1",
   "plugins": [
     {
       "name": "taskbean",
       "source": "./.agents/skills/taskbean",
       "description": "Captures every coding task you take on for the developer so the work is visible in their weekly report, 1-on-1s, and performance review. Whenever the developer asks you to do any concrete coding work, capture the task with `bean add` BEFORE you start implementing.",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "author": {
         "name": "Nick Brady"
       },
