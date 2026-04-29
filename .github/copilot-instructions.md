@@ -112,7 +112,7 @@ There is **no linter** configured for either half. Don't look for `npm run lint`
 
 ### CLI
 
-Requires **Node.js ≥ 22.5.0** (uses experimental SQLite). No other dependencies beyond `commander`.
+Requires **Node.js ≥ 22.13.0** (uses `node:sqlite`, which became unflagged in 22.13). No other dependencies beyond `commander`.
 
 ```bash
 cd cli

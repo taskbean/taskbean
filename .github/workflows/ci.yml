@@ -17,9 +17,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        # 22.5 is the package.json `engines` floor (uses experimental
-        # node:sqlite). Also test 22 (latest 22.x) to catch upcoming breakage.
-        node: ['22.5', '22']
+        # 22.13 is the package.json `engines` floor (where node:sqlite
+        # became unflagged). Also test 22 (latest 22.x) to catch upcoming
+        # breakage.
+        node: ['22.13', '22']
     runs-on: ${{ matrix.os }}
     defaults:
       run:
