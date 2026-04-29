@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "taskbean",
+  "description": "taskbean — task management CLI for AI coding agents. Captures every coding task agents take on so the work is visible in the developer's weekly report, 1-on-1s, and performance review.",
+  "owner": {
+    "name": "taskbean",
+    "email": "hello@taskbean.ai"
+  },
+  "version": "0.5.0",
+  "plugins": [
+    {
+      "name": "taskbean",
+      "source": "./.agents/skills/taskbean",
+      "description": "Captures every coding task you take on for the developer so the work is visible in their weekly report, 1-on-1s, and performance review. Whenever the developer asks you to do any concrete coding work, capture the task with `bean add` BEFORE you start implementing.",
+      "version": "0.5.0",
+      "author": {
+        "name": "Nick Brady"
+      },
+      "category": "productivity",
+      "tags": ["task-management", "agent-skill", "productivity", "todo", "local-first", "claude-code", "copilot", "codex", "opencode"]
+    }
+  ]
+}
