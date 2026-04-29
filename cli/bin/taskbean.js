@@ -6,6 +6,7 @@ process.on('warning', (w) => { if (w.name !== 'ExperimentalWarning') console.war
 import { program } from 'commander';
 import { VERSION } from '../src/version.js';
 import { checkForUpdates, maybePrintUpgradeNotice } from '../src/lib/update-notifier.js';
+import { maybePrintSkillDriftNotice } from '../src/lib/skill-drift-notifier.js';
 import { addCommand } from '../src/commands/add.js';
 import { doneCommand } from '../src/commands/done.js';
 import { listCommand } from '../src/commands/list.js';
@@ -22,11 +23,13 @@ import { serveCommand } from '../src/commands/serve.js';
 import { packageCommand } from '../src/commands/package.js';
 import { upgradeCommand } from '../src/commands/upgrade.js';
 import { uninstallCommand } from '../src/commands/uninstall.js';
+import { updateSkillCommand } from '../src/commands/update-skill.js';
 
 // Fire-and-forget update check. Internally throttled to once per 24h, silent
 // in CI / non-TTY / when TASKBEAN_NO_UPGRADE_NOTICE=1.
 checkForUpdates();
 process.on('exit', maybePrintUpgradeNotice);
+process.on('exit', maybePrintSkillDriftNotice);
 
 program
   .name('bean')
@@ -229,5 +232,14 @@ program
   .option('--force', 'Skip confirmation (alias for --yes)')
   .option('--json', 'Machine-readable output')
   .action(uninstallCommand);
+
+program
+  .command('update-skill')
+  .description('Detect and refresh stale on-disk taskbean SKILL.md copies')
+  .option('--apply', 'Rewrite stale copies in place (default: report only)')
+  .option('--project', 'Only scan project-scoped skill dirs (cwd)')
+  .option('--global', 'Only scan global/user-scoped skill dirs (~)')
+  .option('--json', 'Machine-readable output')
+  .action(updateSkillCommand);
 
 program.parse();

@@ -938,6 +938,50 @@ async def version() -> dict:
     }
 
 
+@app.get("/api/skill-status")
+async def skill_status() -> dict:
+    """Report drift between the bundled SKILL.md and on-disk copies.
+
+    Shells out to `bean update-skill --json` (read-only mode, no writes).
+    Returns shape::
+
+        {
+          "available": true,
+          "bundled_version": "0.5.0",
+          "stale_count": 1,
+          "fresh_count": 2,
+          "present_count": 3,
+          "on_disk": [{path, scope, state, version?}],
+          "fix_command": "bean update-skill --apply"
+        }
+
+    On any failure (CLI not on PATH, parse error, timeout) returns
+    ``{"available": false, "reason": "..."}`` so the frontend can hide the
+    banner without surfacing scary errors during the demo.
+    """
+    exe = shutil.which("bean") or shutil.which("taskbean")
+    if not exe:
+        return {"available": False, "reason": "bean CLI not on PATH"}
+    try:
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            [exe, "update-skill", "--json"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except Exception as e:
+        return {"available": False, "reason": f"exec failed: {e}"}
+    raw = (proc.stdout or "").strip()
+    if not raw:
+        return {"available": False, "reason": "no output from bean update-skill --json"}
+    try:
+        data = json.loads(raw)
+    except Exception as e:
+        return {"available": False, "reason": f"json parse failed: {e}"}
+    data["available"] = True
+    data["fix_command"] = "bean update-skill --apply"
+    return data
+
+
 @app.get("/api/hardware")
 async def hardware_snapshot() -> dict:
     return _hardware_snapshot()

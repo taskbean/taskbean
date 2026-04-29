@@ -171,6 +171,26 @@ header {
   &.show { display: flex; align-items: center; gap: 6px; }
 }
 
+/* Skill drift banner — surfaced when the on-disk taskbean SKILL.md copies
+   are stale relative to the bundled CLI. Same visual language as the
+   connection banner but in accent color (info, not error). One-click copy
+   button for the fix command. */
+.skill-drift-banner {
+  display: none; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--accent-soft); color: var(--text); font-size: 11px;
+  &.show { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+}
+.skill-drift-banner code {
+  background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px;
+}
+.skill-drift-banner .skill-drift-copy {
+  background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); color: inherit; padding: 1px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0;
+}
+.skill-drift-banner .skill-drift-copy:hover { background: rgba(255,255,255,.25); }
+.skill-drift-banner .skill-drift-dismiss {
+  background: transparent; border: 0; color: inherit; padding: 0 4px; cursor: pointer; opacity: .7; margin-left: auto;
+}
+.skill-drift-banner .skill-drift-dismiss:hover { opacity: 1; }
+
 /* Update-available state on the Install nav button — uses accent color + a
    small pulsing dot to draw the eye without being intrusive. Respects
    prefers-reduced-motion (no pulse when reduced motion is on). */
@@ -2609,6 +2629,14 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
   <button onclick="retryFromBanner()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:inherit;padding:1px 8px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;margin-left:auto;flex-shrink:0">Reconnect</button>
 </div>
 
+<div id="skillDriftBanner" class="skill-drift-banner" role="status" aria-live="polite">
+  <i data-lucide="refresh-cw" class="icon-sm"></i>
+  <span id="skillDriftMessage">Your taskbean SKILL.md is out of date.</span>
+  <code id="skillDriftCommand">bean update-skill --apply</code>
+  <button class="skill-drift-copy" onclick="copySkillDriftCommand()">Copy</button>
+  <button class="skill-drift-dismiss" onclick="dismissSkillDriftBanner()" title="Dismiss" aria-label="Dismiss">×</button>
+</div>
+
 <div class="app-row">
 
 <!-- ═══ Nav Rail (left-docked) ═══ -->
@@ -3914,6 +3942,66 @@ async function retryFromBanner() {
         // Attempt protocol launch as fallback
         try { window.open('taskbean://start', '_self'); } catch {}
         addChat('info', 'play', 'Attempting to start server…');
+    }
+}
+
+// SKILL.md drift banner — shown when the on-disk taskbean SKILL.md copies
+// are older than the bundled CLI version. Polls /api/skill-status which
+// shells out to `bean update-skill --json` server-side. Banner is dismissible
+// per-session (sessionStorage) so a user who chooses to ignore it during a
+// session isn't nagged on every 5-minute refresh.
+async function refreshSkillDriftBanner() {
+    const banner = document.getElementById('skillDriftBanner');
+    if (!banner) return;
+    if (sessionStorage.getItem('skillDriftDismissed') === '1') {
+        banner.classList.remove('show');
+        return;
+    }
+    try {
+        const res = await fetch('/api/skill-status', { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) { banner.classList.remove('show'); return; }
+        const data = await res.json();
+        if (!data.available || !data.stale_count || data.stale_count <= 0) {
+            banner.classList.remove('show');
+            return;
+        }
+        const noun = data.stale_count === 1 ? 'copy is' : 'copies are';
+        const msg = document.getElementById('skillDriftMessage');
+        if (msg) msg.textContent = `${data.stale_count} taskbean SKILL.md ${noun} stale (bundled v${data.bundled_version}).`;
+        const cmdEl = document.getElementById('skillDriftCommand');
+        if (cmdEl && data.fix_command) cmdEl.textContent = data.fix_command;
+        banner.classList.add('show');
+    } catch {
+        banner.classList.remove('show');
+    }
+}
+
+function dismissSkillDriftBanner() {
+    sessionStorage.setItem('skillDriftDismissed', '1');
+    const banner = document.getElementById('skillDriftBanner');
+    if (banner) banner.classList.remove('show');
+}
+
+async function copySkillDriftCommand() {
+    const cmdEl = document.getElementById('skillDriftCommand');
+    const text = cmdEl?.textContent?.trim() || 'bean update-skill --apply';
+    try {
+        await navigator.clipboard.writeText(text);
+        const btn = document.querySelector('#skillDriftBanner .skill-drift-copy');
+        if (btn) {
+            const orig = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = orig; }, 1500);
+        }
+    } catch {
+        // Fallback: select the code element so user can Ctrl+C
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(cmdEl);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch {}
     }
 }
 
@@ -11210,6 +11298,12 @@ async function initApp() {
     setInterval(() => { if (serverReachable) refreshTodos(); }, 15_000);
     setInterval(() => { if (serverReachable) loadTemplates(); }, 30_000);
     setInterval(processReminderNotifications, 30_000);
+
+    // SKILL.md drift check — once at boot, then every 5 minutes (banner only
+    // appears when stale; clears automatically once the user runs
+    // `bean update-skill --apply`).
+    refreshSkillDriftBanner();
+    setInterval(() => { if (serverReachable) refreshSkillDriftBanner(); }, 5 * 60_000);
 
     // F1/F2: 10s cadence for Projects tab + Usage panel.
     // `#usageSection` lives inside `#tabContentProjects`, so it's visible exactly when
