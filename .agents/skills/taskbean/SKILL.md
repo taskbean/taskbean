@@ -3,7 +3,7 @@ name: taskbean
 description: >-
   Captures every coding task the developer asks you to do so it shows up in their weekly report, 1-on-1s, and performance review — none of your work disappears into untracked commits. Whenever the developer asks for concrete coding work (fix a bug, debug, investigate, implement a feature, build, add, refactor, migrate, configure CI/CD, write tests, update docs, or change any code), call `bean add "<outcome-oriented title>" --json` BEFORE you start, capture the returned id, do the work, then call `bean done <id> --json` when finished. This applies to single-sentence requests like "fix X" or "Y is broken" as much as multi-step ones — small fixes are easiest to forget. If you can't complete the task, log it anyway. Do NOT use for: pure-explanation questions, read-only file inspection, non-code prose, brainstorming, research-only tasks, code review where the user says "don't change anything", or installing taskbean itself.
 metadata:
-  taskbean_version: "0.5.1"
+  taskbean_version: "0.5.2"
 ---
 # taskbean — make your coding work visible to the developer
 

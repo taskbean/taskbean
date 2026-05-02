@@ -1,11 +1,11 @@
 {
   "name": "taskbean",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Task management CLI for AI coding agents. Push tasks from Copilot, Claude, or any agent.",
   "type": "module",
   "bin": {
-    "taskbean": "./bin/taskbean.js",
-    "bean": "./bin/taskbean.js"
+    "taskbean": "bin/taskbean.js",
+    "bean": "bin/taskbean.js"
   },
   "files": [
     "bin/",
@@ -48,7 +48,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/taskbean/taskbean.git",
+    "url": "git+https://github.com/taskbean/taskbean.git",
     "directory": "cli"
   },
   "homepage": "https://taskbean.ai",
