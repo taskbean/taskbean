@@ -171,25 +171,105 @@ header {
   &.show { display: flex; align-items: center; gap: 6px; }
 }
 
-/* Skill drift banner — surfaced when the on-disk taskbean SKILL.md copies
-   are stale relative to the bundled CLI. Same visual language as the
-   connection banner but in accent color (info, not error). One-click copy
-   button for the fix command. */
+/* Skill drift banner — surfaced when on-disk taskbean SKILL.md copies are
+   stale relative to the bundled CLI. Coffee-warm informational treatment:
+   subtle accent gradient, refresh-cw glyph as the brand mark, mono chips
+   for affected agents, primary "Update" action that silently re-runs
+   `bean update-skill --apply` server-side. Same visual language as the
+   connection banner but in accent color (info, not error). */
 .skill-drift-banner {
-  display: none; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--accent-soft); color: var(--text); font-size: 11px;
-  &.show { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  display: none; padding: 8px 14px; border-bottom: 1px solid var(--border);
+  background:
+    linear-gradient(90deg,
+      color-mix(in oklch, var(--accent) 18%, transparent) 0%,
+      color-mix(in oklch, var(--accent) 8%, transparent) 60%,
+      transparent 100%);
+  color: var(--text); font-size: 11px;
 }
+.skill-drift-banner.show { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.skill-drift-banner > .icon-sm { color: var(--accent); flex-shrink: 0; transition: transform .4s cubic-bezier(.4,.1,.3,1); }
+.skill-drift-banner.is-applying > .icon-sm { animation: skill-drift-spin 1s linear infinite; }
+@keyframes skill-drift-spin { to { transform: rotate(360deg); } }
+.skill-drift-banner #skillDriftMessage { font-weight: 600; letter-spacing: .005em; }
 .skill-drift-banner code {
-  background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px;
+  background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px;
+  font-family: 'DM Mono','Cascadia Code',ui-monospace,monospace; font-size: 10px; color: var(--accent);
+}
+/* Inline agent chips — one per stale on-disk copy */
+.skill-drift-chips { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.skill-drift-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+  padding: 1px 8px 1px 6px; font-size: 10px; color: var(--text);
+  font-family: 'DM Mono','Cascadia Code',ui-monospace,monospace;
+}
+.skill-drift-chip::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex-shrink: 0;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 25%, transparent);
+}
+.skill-drift-chip .scope { opacity: .55; font-size: 9px; }
+.skill-drift-chip-more {
+  font-size: 10px; color: var(--muted); padding: 1px 4px;
+  font-family: 'DM Mono','Cascadia Code',ui-monospace,monospace;
+}
+/* Disclosure details (shown when "view all" is clicked) */
+.skill-drift-details {
+  flex-basis: 100%; margin-top: 4px; padding: 8px 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  font-family: 'DM Mono','Cascadia Code',ui-monospace,monospace; font-size: 10px;
+  color: var(--muted); display: none; line-height: 1.65;
+}
+.skill-drift-banner.is-expanded .skill-drift-details { display: block; }
+.skill-drift-details .row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: baseline; padding: 1px 0; }
+.skill-drift-details .row .label { color: var(--text); }
+.skill-drift-details .row .ver { color: var(--accent); white-space: nowrap; }
+.skill-drift-details .row .ver .from { opacity: .5; text-decoration: line-through; margin-right: 4px; }
+.skill-drift-details .row .path { display: block; font-size: 9px; opacity: .55; margin-top: 1px; word-break: break-all; }
+/* Buttons — primary "Update" gets filled accent, others stay ghost */
+.skill-drift-banner button { font-family: inherit; }
+.skill-drift-banner .skill-drift-toggle {
+  background: transparent; border: 0; color: var(--muted); padding: 1px 6px; border-radius: 4px;
+  font-size: 10px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in oklch, var(--muted) 40%, transparent);
+}
+.skill-drift-banner .skill-drift-toggle:hover { color: var(--text); text-decoration-color: currentColor; }
+.skill-drift-banner .skill-drift-spacer { flex: 1; min-width: 8px; }
+.skill-drift-banner .skill-drift-update {
+  background: var(--accent); border: 1px solid var(--accent); color: #fff;
+  padding: 3px 12px; border-radius: 5px; font-size: 10px; font-weight: 700; cursor: pointer; flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: filter .15s, transform .15s, background .15s, border-color .15s;
+  letter-spacing: .02em; text-transform: uppercase;
+}
+.skill-drift-banner .skill-drift-update:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.skill-drift-banner .skill-drift-update:active { transform: translateY(0); filter: brightness(.95); }
+.skill-drift-banner .skill-drift-update:disabled { opacity: .65; cursor: wait; transform: none; filter: none; }
+.skill-drift-banner .skill-drift-update.is-success {
+  background: var(--green, #4ca96b); border-color: var(--green, #4ca96b);
+}
+.skill-drift-banner .skill-drift-update.is-error {
+  background: var(--surface2); color: var(--orange); border-color: var(--orange);
+}
+.skill-drift-banner .skill-drift-update .spinner {
+  width: 9px; height: 9px; border: 1.5px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%;
+  animation: skill-drift-spin .7s linear infinite;
 }
 .skill-drift-banner .skill-drift-copy {
-  background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); color: inherit; padding: 1px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0;
+  background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 2px 8px; border-radius: 5px;
+  font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: color .15s, border-color .15s, background .15s;
 }
-.skill-drift-banner .skill-drift-copy:hover { background: rgba(255,255,255,.25); }
+.skill-drift-banner .skill-drift-copy:hover { color: var(--text); border-color: var(--text); background: var(--surface2); }
 .skill-drift-banner .skill-drift-dismiss {
-  background: transparent; border: 0; color: inherit; padding: 0 4px; cursor: pointer; opacity: .7; margin-left: auto;
+  background: transparent; border: 0; color: var(--muted); padding: 0 4px; cursor: pointer; opacity: .7; font-size: 16px; line-height: 1;
+  transition: color .15s, opacity .15s;
 }
-.skill-drift-banner .skill-drift-dismiss:hover { opacity: 1; }
+.skill-drift-banner .skill-drift-dismiss:hover { opacity: 1; color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .skill-drift-banner > .icon-sm,
+  .skill-drift-banner.is-applying > .icon-sm,
+  .skill-drift-banner .skill-drift-update,
+  .skill-drift-banner .skill-drift-update .spinner { animation: none !important; transition: none !important; }
+}
 
 /* Update-available state on the Install nav button — uses accent color + a
    small pulsing dot to draw the eye without being intrusive. Respects
@@ -2632,9 +2712,13 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
 <div id="skillDriftBanner" class="skill-drift-banner" role="status" aria-live="polite">
   <i data-lucide="refresh-cw" class="icon-sm"></i>
   <span id="skillDriftMessage">Your taskbean SKILL.md is out of date.</span>
-  <code id="skillDriftCommand">bean update-skill --apply</code>
-  <button class="skill-drift-copy" onclick="copySkillDriftCommand()">Copy</button>
-  <button class="skill-drift-dismiss" onclick="dismissSkillDriftBanner()" title="Dismiss" aria-label="Dismiss">×</button>
+  <span id="skillDriftChips" class="skill-drift-chips" aria-hidden="true"></span>
+  <button class="skill-drift-toggle" id="skillDriftToggle" type="button" onclick="toggleSkillDriftDetails()" aria-expanded="false" aria-controls="skillDriftDetails" style="display:none">view all</button>
+  <span class="skill-drift-spacer"></span>
+  <button class="skill-drift-update" id="skillDriftUpdate" type="button" onclick="applySkillUpdate()">Update</button>
+  <button class="skill-drift-copy" type="button" onclick="copySkillDriftCommand()" title="Copy CLI command">Copy</button>
+  <button class="skill-drift-dismiss" type="button" onclick="dismissSkillDriftBanner()" title="Dismiss" aria-label="Dismiss">×</button>
+  <div id="skillDriftDetails" class="skill-drift-details" role="region" aria-label="Stale SKILL.md copies"></div>
 </div>
 
 <div class="app-row">
@@ -3947,9 +4031,37 @@ async function retryFromBanner() {
 
 // SKILL.md drift banner — shown when the on-disk taskbean SKILL.md copies
 // are older than the bundled CLI version. Polls /api/skill-status which
-// shells out to `bean update-skill --json` server-side. Banner is dismissible
-// per-session (sessionStorage) so a user who chooses to ignore it during a
-// session isn't nagged on every 5-minute refresh.
+// shells out to `bean update-skill --json` server-side. The banner now
+// renders per-agent chips so the user can see *which* installs are stale,
+// and exposes a one-click silent update via POST /api/skill-update.
+// Banner is dismissible per-session (sessionStorage) so a user who chooses
+// to ignore it during a session isn't nagged on every 5-minute refresh.
+
+// Path → friendly agent label. Mirrors the directory list in
+// cli/src/data/skill-dirs.js. `match` is a substring tested against the
+// normalized POSIX-style path so it works across platforms.
+const SKILL_DRIFT_AGENT_MAP = [
+    { match: '/.agents/skills/taskbean',                label: 'Agents' },
+    { match: '/.github/skills/taskbean',                label: 'Copilot Cloud' },
+    { match: '/.claude/skills/taskbean',                label: 'Claude Code' },
+    { match: '/.cursor/skills/taskbean',                label: 'Cursor' },
+    { match: '/.windsurf/skills/taskbean',              label: 'Windsurf' },
+    { match: '/.cline/skills/taskbean',                 label: 'Cline · Roo' },
+    { match: '/.codeium/windsurf/skills/taskbean',      label: 'Windsurf' },
+    { match: '/.config/agents/skills/taskbean',         label: 'Agents (XDG)' },
+];
+
+function skillDriftLabelFor(path) {
+    if (!path) return 'unknown';
+    const norm = String(path).replace(/\\/g, '/');
+    for (const m of SKILL_DRIFT_AGENT_MAP) {
+        if (norm.includes(m.match)) return m.label;
+    }
+    return 'taskbean';
+}
+
+let _skillDriftReport = null; // last report from /api/skill-status
+
 async function refreshSkillDriftBanner() {
     const banner = document.getElementById('skillDriftBanner');
     if (!banner) return;
@@ -3963,28 +4075,165 @@ async function refreshSkillDriftBanner() {
         const data = await res.json();
         if (!data.available || !data.stale_count || data.stale_count <= 0) {
             banner.classList.remove('show');
+            banner.classList.remove('is-expanded');
+            _skillDriftReport = null;
             return;
         }
-        const noun = data.stale_count === 1 ? 'copy is' : 'copies are';
-        const msg = document.getElementById('skillDriftMessage');
-        if (msg) msg.textContent = `${data.stale_count} taskbean SKILL.md ${noun} stale (bundled v${data.bundled_version}).`;
-        const cmdEl = document.getElementById('skillDriftCommand');
-        if (cmdEl && data.fix_command) cmdEl.textContent = data.fix_command;
-        banner.classList.add('show');
+        renderSkillDriftBanner(data);
     } catch {
         banner.classList.remove('show');
+    }
+}
+
+function renderSkillDriftBanner(data) {
+    const banner = document.getElementById('skillDriftBanner');
+    if (!banner) return;
+    _skillDriftReport = data;
+
+    // Stale entries from on_disk array: states 'stale' and 'unstamped'.
+    const stale = (data.on_disk || []).filter(r => r.state === 'stale' || r.state === 'unstamped');
+
+    const noun = data.stale_count === 1 ? 'copy' : 'copies';
+    const msg = document.getElementById('skillDriftMessage');
+    if (msg) msg.textContent = `${data.stale_count} SKILL.md ${noun} stale`;
+
+    // Render up to 3 agent chips inline, with "+N more" if truncated.
+    const chips = document.getElementById('skillDriftChips');
+    if (chips) {
+        chips.innerHTML = '';
+        const MAX_INLINE = 3;
+        const inline = stale.slice(0, MAX_INLINE);
+        const overflow = stale.length - inline.length;
+        for (const r of inline) {
+            const chip = document.createElement('span');
+            chip.className = 'skill-drift-chip';
+            chip.title = r.path;
+            const label = document.createTextNode(skillDriftLabelFor(r.path));
+            const scope = document.createElement('span');
+            scope.className = 'scope';
+            scope.textContent = r.scope || '';
+            chip.appendChild(label);
+            chip.appendChild(scope);
+            chips.appendChild(chip);
+        }
+        if (overflow > 0) {
+            const more = document.createElement('span');
+            more.className = 'skill-drift-chip-more';
+            more.textContent = `+${overflow} more`;
+            chips.appendChild(more);
+        }
+    }
+
+    // Show the toggle only when there's something worth expanding (i.e. we
+    // have any details to surface beyond what's already in the chips).
+    const toggle = document.getElementById('skillDriftToggle');
+    if (toggle) {
+        toggle.style.display = stale.length > 0 ? '' : 'none';
+        toggle.textContent = banner.classList.contains('is-expanded') ? 'hide' : (stale.length > 3 ? `view all (${stale.length})` : 'details');
+    }
+
+    // Render the disclosure list with full per-copy info.
+    const details = document.getElementById('skillDriftDetails');
+    if (details) {
+        details.innerHTML = '';
+        for (const r of stale) {
+            const row = document.createElement('div');
+            row.className = 'row';
+            const left = document.createElement('div');
+            const lbl = document.createElement('span');
+            lbl.className = 'label';
+            lbl.textContent = `${skillDriftLabelFor(r.path)} · ${r.scope || ''}`;
+            const path = document.createElement('span');
+            path.className = 'path';
+            path.textContent = r.path;
+            left.appendChild(lbl);
+            left.appendChild(path);
+            const ver = document.createElement('div');
+            ver.className = 'ver';
+            const fromTxt = r.version ? `v${r.version}` : '(unstamped)';
+            ver.innerHTML = `<span class="from">${fromTxt}</span>→ v${data.bundled_version}`;
+            row.appendChild(left);
+            row.appendChild(ver);
+            details.appendChild(row);
+        }
+    }
+
+    // Reset the Update button if it was left in a transient state.
+    const btn = document.getElementById('skillDriftUpdate');
+    if (btn && !btn.disabled) {
+        btn.classList.remove('is-success', 'is-error');
+        btn.textContent = 'Update';
+    }
+
+    banner.classList.add('show');
+    if (window.lucide) window.lucide.createIcons({ nameAttr: 'data-lucide' });
+}
+
+function toggleSkillDriftDetails() {
+    const banner = document.getElementById('skillDriftBanner');
+    const toggle = document.getElementById('skillDriftToggle');
+    if (!banner || !toggle) return;
+    const expanded = banner.classList.toggle('is-expanded');
+    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    if (_skillDriftReport) {
+        const total = (_skillDriftReport.on_disk || []).filter(r => r.state === 'stale' || r.state === 'unstamped').length;
+        toggle.textContent = expanded ? 'hide' : (total > 3 ? `view all (${total})` : 'details');
+    }
+}
+
+async function applySkillUpdate() {
+    const banner = document.getElementById('skillDriftBanner');
+    const btn = document.getElementById('skillDriftUpdate');
+    if (!banner || !btn || btn.disabled) return;
+
+    btn.disabled = true;
+    btn.classList.remove('is-success', 'is-error');
+    banner.classList.add('is-applying');
+    btn.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Updating…</span>';
+
+    try {
+        const res = await fetch('/api/skill-update', { method: 'POST', signal: AbortSignal.timeout(20000) });
+        const data = await res.json().catch(() => ({}));
+        const applied = (data.applied || []).length;
+        const failed = (data.failed || []).length;
+
+        if (!data.available || failed > 0) {
+            btn.classList.add('is-error');
+            btn.textContent = failed > 0 ? `${failed} failed` : 'Update failed';
+            banner.classList.remove('is-applying');
+            btn.disabled = false;
+            return;
+        }
+
+        btn.classList.add('is-success');
+        btn.textContent = applied === 1 ? 'Updated 1 ✓' : `Updated ${applied} ✓`;
+        banner.classList.remove('is-applying');
+
+        // Hold the success state briefly, then re-poll status. If everything
+        // is now fresh, the banner self-dismisses.
+        setTimeout(async () => {
+            btn.disabled = false;
+            await refreshSkillDriftBanner();
+        }, 1400);
+    } catch (e) {
+        banner.classList.remove('is-applying');
+        btn.classList.add('is-error');
+        btn.textContent = 'Network error';
+        btn.disabled = false;
     }
 }
 
 function dismissSkillDriftBanner() {
     sessionStorage.setItem('skillDriftDismissed', '1');
     const banner = document.getElementById('skillDriftBanner');
-    if (banner) banner.classList.remove('show');
+    if (banner) {
+        banner.classList.remove('show');
+        banner.classList.remove('is-expanded');
+    }
 }
 
 async function copySkillDriftCommand() {
-    const cmdEl = document.getElementById('skillDriftCommand');
-    const text = cmdEl?.textContent?.trim() || 'bean update-skill --apply';
+    const text = 'bean update-skill --apply';
     try {
         await navigator.clipboard.writeText(text);
         const btn = document.querySelector('#skillDriftBanner .skill-drift-copy');
@@ -3994,14 +4243,9 @@ async function copySkillDriftCommand() {
             setTimeout(() => { btn.textContent = orig; }, 1500);
         }
     } catch {
-        // Fallback: select the code element so user can Ctrl+C
-        try {
-            const range = document.createRange();
-            range.selectNodeContents(cmdEl);
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(range);
-        } catch {}
+        // Fallback: nothing to select since the <code> element was removed,
+        // but we can still alert as a last resort. In practice the banner is
+        // localhost-only so clipboard access should succeed.
     }
 }
 

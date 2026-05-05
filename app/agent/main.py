@@ -982,6 +982,37 @@ async def skill_status() -> dict:
     return data
 
 
+@app.post("/api/skill-update")
+async def skill_update() -> dict:
+    """Apply pending SKILL.md updates by shelling out to ``bean update-skill --apply --json``.
+
+    Returns the raw applied/failed report from the CLI so the UI can render
+    a precise success message ("Updated 3 copies") or an error state. On any
+    failure (CLI not on PATH, parse error, timeout) returns
+    ``{"available": false, "reason": "..."}`` to mirror /api/skill-status.
+    """
+    exe = shutil.which("bean") or shutil.which("taskbean")
+    if not exe:
+        return {"available": False, "reason": "bean CLI not on PATH"}
+    try:
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            [exe, "update-skill", "--apply", "--json"],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+    except Exception as e:
+        return {"available": False, "reason": f"exec failed: {e}"}
+    raw = (proc.stdout or "").strip()
+    if not raw:
+        return {"available": False, "reason": "no output from bean update-skill --apply --json"}
+    try:
+        data = json.loads(raw)
+    except Exception as e:
+        return {"available": False, "reason": f"json parse failed: {e}"}
+    data["available"] = True
+    return data
+
+
 @app.get("/api/hardware")
 async def hardware_snapshot() -> dict:
     return _hardware_snapshot()
