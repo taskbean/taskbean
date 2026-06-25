@@ -1,6 +1,6 @@
 {
   "name": "taskbean",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Task management CLI for AI coding agents. Push tasks from Copilot, Claude, or any agent.",
   "type": "module",
   "bin": {
@@ -11,6 +11,7 @@
     "bin/",
     "src/commands/add.js",
     "src/commands/block.js",
+    "src/commands/chronicle.js",
     "src/commands/done.js",
     "src/commands/edit.js",
     "src/commands/install.js",
@@ -26,6 +27,7 @@
     "src/commands/uninstall.js",
     "src/commands/update-skill.js",
     "src/commands/upgrade.js",
+    "src/chronicle/adapter.js",
     "src/data/attribution.js",
     "src/data/parse-date.js",
     "src/data/project.js",

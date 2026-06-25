@@ -71,6 +71,7 @@ bean add "fix auth bug before standup"
 bean done 1
 bean list
 bean report
+bean chronicle doctor --json  # diagnose local Copilot session data availability
 ```
 
 ### Updating taskbean
@@ -109,7 +110,7 @@ npm start
 taskbean/
 ├── cli/                    # Agent-facing CLI tool
 │   ├── bin/taskbean.js     # Entry point (aliased as `bean`)
-│   ├── src/commands/       # 16 commands: add, done, start, list, report...
+│   ├── src/commands/       # CLI commands: add, done, list, report, chronicle...
 │   ├── src/data/           # SQLite store, date parsing, project detection
 │   ├── pwa/                # Minimal dashboard for `bean serve`
 │   ├── scripts/            # Install scripts (curl|bash, PowerShell)
@@ -178,6 +179,10 @@ What's in the box:
 - Multi-agent usage tracking that watches Copilot CLI, Claude Code, Codex, and OpenCode session files on disk and attributes each task to the session that spawned it 📊
 
 On that last one: only metadata and aggregate token counts are stored. Prompts, tool outputs, and code blocks stay in the agent's own logs where you left them. Toggle agents on and off under **Settings → Agents**.
+
+### Chronicle/session diagnostics
+
+`bean chronicle doctor --json` checks whether local GitHub Copilot Chronicle/session data is discoverable without importing raw prompts, responses, or tool outputs into taskbean. It reports local `~/.copilot/session-state/` and `~/.copilot/session-store.db` availability, expected metadata tables, privacy defaults, and known limitations such as unavailable programmatic `/chronicle` API or unknown remote-sync policy state.
 
 ### How updates work
 
