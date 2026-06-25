@@ -33,6 +33,7 @@ bean done 1                           # complete first task
 bean list                             # show all tasks
 bean count                            # quick status counts
 bean report                           # daily markdown report
+bean chronicle doctor --json          # diagnose local Copilot session data
 ```
 
 ## All Commands
@@ -66,6 +67,14 @@ bean report --date week               # this week
 bean export --format json             # export as JSON
 bean export --format csv              # export as CSV
 ```
+
+### Chronicle Diagnostics
+```bash
+bean chronicle doctor                 # local session-data capability check
+bean chronicle doctor --json          # machine-readable diagnostics
+```
+
+`chronicle doctor` inspects only local Copilot session metadata/schema availability. It does not copy raw prompts, responses, or tool outputs into taskbean.
 
 ### Project Management
 ```bash

@@ -7,23 +7,30 @@ import { program } from 'commander';
 import { VERSION } from '../src/version.js';
 import { checkForUpdates, maybePrintUpgradeNotice } from '../src/lib/update-notifier.js';
 import { maybePrintSkillDriftNotice } from '../src/lib/skill-drift-notifier.js';
-import { addCommand } from '../src/commands/add.js';
-import { doneCommand } from '../src/commands/done.js';
-import { listCommand } from '../src/commands/list.js';
-import { editCommand } from '../src/commands/edit.js';
-import { removeCommand } from '../src/commands/remove.js';
-import { startCommand } from '../src/commands/start.js';
-import { blockCommand } from '../src/commands/block.js';
-import { remindCommand } from '../src/commands/remind.js';
-import { reportCommand } from '../src/commands/report.js';
-import { trackCommand, untrackCommand } from '../src/commands/track.js';
-import { installCommand } from '../src/commands/install.js';
-import { projectsCommand, hideCommand, showCommand, categorizeCommand, deleteCommand } from '../src/commands/projects.js';
-import { serveCommand } from '../src/commands/serve.js';
-import { packageCommand } from '../src/commands/package.js';
-import { upgradeCommand } from '../src/commands/upgrade.js';
-import { uninstallCommand } from '../src/commands/uninstall.js';
-import { updateSkillCommand } from '../src/commands/update-skill.js';
+
+// Load command modules after installing the warning handler above. Several
+// commands import node:sqlite through the shared store, and static ESM imports
+// would emit the ExperimentalWarning before this file's body runs.
+const { addCommand } = await import('../src/commands/add.js');
+const { doneCommand } = await import('../src/commands/done.js');
+const { listCommand } = await import('../src/commands/list.js');
+const { editCommand } = await import('../src/commands/edit.js');
+const { removeCommand } = await import('../src/commands/remove.js');
+const { startCommand } = await import('../src/commands/start.js');
+const { blockCommand } = await import('../src/commands/block.js');
+const { remindCommand } = await import('../src/commands/remind.js');
+const { reportCommand } = await import('../src/commands/report.js');
+const { chronicleDoctorCommand } = await import('../src/commands/chronicle.js');
+const { trackCommand, untrackCommand } = await import('../src/commands/track.js');
+const { installCommand } = await import('../src/commands/install.js');
+const {
+  projectsCommand, hideCommand, showCommand, categorizeCommand, deleteCommand,
+} = await import('../src/commands/projects.js');
+const { serveCommand } = await import('../src/commands/serve.js');
+const { packageCommand } = await import('../src/commands/package.js');
+const { upgradeCommand } = await import('../src/commands/upgrade.js');
+const { uninstallCommand } = await import('../src/commands/uninstall.js');
+const { updateSkillCommand } = await import('../src/commands/update-skill.js');
 
 // Fire-and-forget update check. Internally throttled to once per 24h, silent
 // in CI / non-TTY / when TASKBEAN_NO_UPGRADE_NOTICE=1.
@@ -127,6 +134,16 @@ program
   .option('--json', 'Shorthand for --format json')
   .option('--project <path>', 'Filter to specific project')
   .action(reportCommand);
+
+const chronicle = program
+  .command('chronicle')
+  .description('Inspect and reconcile Chronicle/session evidence');
+
+chronicle
+  .command('doctor')
+  .description('Diagnose local Chronicle/session data availability')
+  .option('--json', 'Output as JSON')
+  .action(chronicleDoctorCommand);
 
 program
   .command('track')
