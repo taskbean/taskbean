@@ -169,8 +169,14 @@ function collectChronicleReport(since, until, tasks, scope = {}) {
     pendingParams.push(scope.project.name, scope.project.path);
   } else {
     pendingConditions.push(`(
-      s.suggested_project IS NULL
-      OR s.suggested_project NOT IN (SELECT name FROM projects WHERE hidden = 1)
+      (s.suggested_project IS NULL
+       OR s.suggested_project NOT IN (SELECT name FROM projects WHERE hidden = 1))
+      AND NOT EXISTS (
+        SELECT 1 FROM task_evidence te
+        JOIN projects p ON p.path = te.project_path
+        WHERE te.suggestion_id = s.id
+          AND p.hidden = 1
+      )
     )`);
   }
 

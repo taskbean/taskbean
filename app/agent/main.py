@@ -16,6 +16,11 @@ Endpoints mirror the original Node.js server:
   GET  /api/copilot-usage
   GET  /api/task-detail/:id
   GET  /api/task-detail/:id/export
+  GET  /api/chronicle/suggestions
+  POST /api/chronicle/suggestions/:id/approve
+  POST /api/chronicle/suggestions/:id/link
+  POST /api/chronicle/suggestions/:id/ignore
+  GET  /api/reports/preview
   GET  /api/templates
   POST /api/templates/activate
   POST /api/templates/deactivate
@@ -40,14 +45,16 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File, WebSocket, WebSocketDisconnect
@@ -2014,27 +2021,109 @@ def _ensure_projects_schema(conn):
         pass  # safe no-op if table doesn't exist yet
 
 
+def _taskbean_db_path() -> str:
+    home = os.environ.get("TASKBEAN_HOME") or os.path.join(os.path.expanduser("~"), ".taskbean")
+    return os.environ.get("TASKBEAN_DB") or os.path.join(home, "taskbean.db")
+
+
+def _ensure_chronicle_schema(conn) -> None:
+    """Keep app write paths compatible with the CLI Chronicle schema."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS projects (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          path TEXT NOT NULL UNIQUE,
+          tracked INTEGER DEFAULT 0,
+          skill_installed INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+        """
+    )
+    _ensure_projects_schema(conn)
+    for col_ddl in (
+        "ALTER TABLE todos ADD COLUMN status TEXT DEFAULT 'pending'",
+        "ALTER TABLE todos ADD COLUMN project_path TEXT",
+    ):
+        try:
+            conn.execute(col_ddl)
+        except sqlite3.OperationalError:
+            pass
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS reconciliation_suggestions (
+          id TEXT PRIMARY KEY,
+          evidence_key TEXT NOT NULL UNIQUE,
+          suggested_title TEXT NOT NULL,
+          suggested_project TEXT,
+          suggested_status TEXT DEFAULT 'pending',
+          source_session_ids TEXT NOT NULL DEFAULT '[]',
+          evidence_summary TEXT NOT NULL,
+          confidence REAL NOT NULL DEFAULT 0,
+          state TEXT NOT NULL DEFAULT 'pending',
+          linked_todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          decided_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_reconciliation_state_created "
+        "ON reconciliation_suggestions(state, created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_reconciliation_updated "
+        "ON reconciliation_suggestions(updated_at)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS task_evidence (
+          id TEXT PRIMARY KEY,
+          todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+          suggestion_id TEXT REFERENCES reconciliation_suggestions(id) ON DELETE CASCADE,
+          source TEXT NOT NULL,
+          source_session_id TEXT NOT NULL,
+          repo TEXT,
+          project_path TEXT,
+          branch TEXT,
+          pr_refs TEXT NOT NULL DEFAULT '[]',
+          issue_refs TEXT NOT NULL DEFAULT '[]',
+          files_changed TEXT NOT NULL DEFAULT '[]',
+          summary TEXT,
+          confidence REAL NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          UNIQUE (source, source_session_id, suggestion_id)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_task_evidence_todo ON task_evidence(todo_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_task_evidence_suggestion ON task_evidence(suggestion_id)")
+
+
 def _get_taskbean_db():
     """Open the shared taskbean SQLite DB (read-only)."""
     import sqlite3
-    db_path = os.path.join(os.path.expanduser("~"), ".taskbean", "taskbean.db")
+    db_path = _taskbean_db_path()
     if not os.path.exists(db_path):
         return None
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5.0)
     conn.row_factory = sqlite3.Row
-    return conn
     return conn
 
 
 def _get_taskbean_db_rw():
     """Open the shared taskbean SQLite DB (read-write)."""
     import sqlite3
-    db_path = os.path.join(os.path.expanduser("~"), ".taskbean", "taskbean.db")
+    db_path = _taskbean_db_path()
     if not os.path.exists(db_path):
         return None
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=5.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("PRAGMA foreign_keys = ON")
     _ensure_projects_schema(conn)
+    _ensure_chronicle_schema(conn)
     return conn
 
 
@@ -2631,6 +2720,565 @@ async def get_copilot_usage(date: str = "today") -> dict:
         return {"available": False, "error": str(e)}
 
 
+# ── Chronicle reconciliation API ─────────────────────────────────────────────
+
+
+_CHRONICLE_STATES = {"pending", "approved", "linked", "ignored"}
+_CHRONICLE_TASK_STATUSES = {"pending", "in_progress", "blocked", "done"}
+
+
+class ChronicleApproveBody(BaseModel):
+    title: str | None = None
+    project: str | None = None
+    projectPath: str | None = None
+    status: str | None = None
+    priority: str | None = None
+    notes: str | None = None
+    tags: list[str] | None = None
+
+
+class ChronicleLinkBody(BaseModel):
+    todoId: str
+    project: str | None = None
+
+
+def _parse_json_array(value: Any) -> list:
+    if isinstance(value, list):
+        return value
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _table_exists(conn, name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (name,),
+    ).fetchone()
+    return row is not None
+
+
+def _serialize_evidence(row) -> dict:
+    return {
+        "id": row["id"],
+        "todo_id": row["todo_id"],
+        "suggestion_id": row["suggestion_id"],
+        "source": row["source"],
+        "source_session_id": row["source_session_id"],
+        "repo": row["repo"],
+        "project_path": row["project_path"],
+        "branch": row["branch"],
+        "pr_refs": _parse_json_array(row["pr_refs"]),
+        "issue_refs": _parse_json_array(row["issue_refs"]),
+        "files_changed": _parse_json_array(row["files_changed"]),
+        "summary": row["summary"],
+        "confidence": float(row["confidence"] or 0),
+        "created_at": row["created_at"],
+    }
+
+
+def _serialize_suggestion(row, evidence: list | None = None) -> dict:
+    result = {
+        "id": row["id"],
+        "evidence_key": row["evidence_key"],
+        "suggested_title": row["suggested_title"],
+        "suggested_project": row["suggested_project"],
+        "suggested_status": row["suggested_status"],
+        "source_session_ids": _parse_json_array(row["source_session_ids"]),
+        "evidence_summary": row["evidence_summary"],
+        "confidence": float(row["confidence"] or 0),
+        "state": row["state"],
+        "linked_todo_id": row["linked_todo_id"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "decided_at": row["decided_at"],
+    }
+    if evidence is not None:
+        result["evidence"] = [_serialize_evidence(e) for e in evidence]
+    return result
+
+
+def _evidence_rows_for_suggestion(conn, suggestion_id: str) -> list:
+    if not _table_exists(conn, "task_evidence"):
+        return []
+    return conn.execute(
+        "SELECT * FROM task_evidence WHERE suggestion_id = ? ORDER BY created_at, id",
+        (suggestion_id,),
+    ).fetchall()
+
+
+def _evidence_for_task(task_id: str) -> list[dict]:
+    conn = _get_taskbean_db()
+    if not conn:
+        return []
+    try:
+        if not _table_exists(conn, "task_evidence"):
+            return []
+        rows = conn.execute(
+            "SELECT * FROM task_evidence WHERE todo_id = ? ORDER BY created_at, id",
+            (task_id,),
+        ).fetchall()
+        return [_serialize_evidence(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def _resolve_suggestion_from_db(conn, suggestion_id: str):
+    exact = conn.execute(
+        "SELECT * FROM reconciliation_suggestions WHERE id = ?",
+        (suggestion_id,),
+    ).fetchone()
+    if exact:
+        return exact
+    if len(suggestion_id) < 8:
+        raise HTTPException(status_code=404, detail=f"Suggestion {suggestion_id} not found")
+    matches = conn.execute(
+        "SELECT * FROM reconciliation_suggestions WHERE id LIKE ? ORDER BY id",
+        (f"{suggestion_id}%",),
+    ).fetchall()
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise HTTPException(status_code=409, detail=f"Suggestion id {suggestion_id} is ambiguous")
+    raise HTTPException(status_code=404, detail=f"Suggestion {suggestion_id} not found")
+
+
+def _require_pending_suggestion(row) -> None:
+    if row["state"] != "pending":
+        raise HTTPException(status_code=409, detail=f"Suggestion {row['id']} is already {row['state']}")
+
+
+def _validate_chronicle_task_status(status: str | None) -> str:
+    value = status or "pending"
+    if value not in _CHRONICLE_TASK_STATUSES:
+        allowed = ", ".join(sorted(_CHRONICLE_TASK_STATUSES))
+        raise HTTPException(status_code=400, detail=f"Task status must be one of: {allowed}")
+    return value
+
+
+def _normalize_tags(tags: list[str] | None) -> str:
+    if not tags:
+        return "[]"
+    return json.dumps([t.strip() for t in tags if isinstance(t, str) and t.strip()])
+
+
+def _ensure_project_row(conn, name: str | None, path: str | None) -> None:
+    if not name or not path:
+        return
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO projects (id, name, path, tracked, skill_installed)
+        VALUES (?, ?, ?, 1, 0)
+        """,
+        (str(uuid4()), name, path),
+    )
+
+
+def _project_for_approval(conn, suggestion, body: ChronicleApproveBody, evidence_rows: list) -> tuple[str | None, str | None]:
+    if body.projectPath:
+        return body.project or Path(body.projectPath).name, body.projectPath
+    if body.project:
+        row = _find_project(conn, body.project)
+        return (row["name"], row["path"]) if row else (body.project, None)
+
+    first_evidence = evidence_rows[0] if evidence_rows else None
+    if first_evidence and first_evidence["project_path"]:
+        return suggestion["suggested_project"] or Path(first_evidence["project_path"]).name, first_evidence["project_path"]
+    if suggestion["suggested_project"]:
+        row = _find_project(conn, suggestion["suggested_project"])
+        return (row["name"], row["path"]) if row else (suggestion["suggested_project"], None)
+    return None, None
+
+
+def _task_for_link(conn, todo_id: str):
+    row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Task {todo_id} not found")
+    return row
+
+
+def _suggestion_with_evidence(conn, suggestion) -> dict:
+    return _serialize_suggestion(suggestion, _evidence_rows_for_suggestion(conn, suggestion["id"]))
+
+
+def _serialize_task_row(row) -> dict:
+    task = dict(row)
+    for key in ("completed", "reminder", "reminder_fired"):
+        if key in task:
+            task[key] = bool(task[key])
+    if "tags" in task:
+        task["tags"] = _parse_json_array(task["tags"])
+    return task
+
+
+def _group_tasks(tasks: list[dict]) -> dict:
+    return {
+        "completed": [t for t in tasks if t.get("completed")],
+        "in_progress": [t for t in tasks if not t.get("completed") and t.get("status") == "in_progress"],
+        "blocked": [t for t in tasks if not t.get("completed") and t.get("status") == "blocked"],
+        "pending": [
+            t for t in tasks
+            if not t.get("completed") and (not t.get("status") or t.get("status") == "pending")
+        ],
+    }
+
+
+def _chronicle_availability() -> dict:
+    session_store = Path(os.path.expanduser("~")) / ".copilot" / "session-store.db"
+    available = session_store.exists()
+    return {
+        "available": available,
+        "reason": None if available else "local session-store database not available",
+        "limitations": [
+            "Taskbean stores task metadata, evidence summaries, file paths, branch names, and refs only.",
+            "Raw prompts, assistant responses, tool outputs, and command output are not returned by these APIs.",
+        ],
+    }
+
+
+def _collect_chronicle_report(conn, since: str, until: str, tasks: list[dict], project_scope: dict | None) -> dict:
+    availability = _chronicle_availability()
+    if not _table_exists(conn, "task_evidence") or not _table_exists(conn, "reconciliation_suggestions"):
+        return {
+            **availability,
+            "summary": {"linkedEvidence": 0, "pendingSuggestions": 0},
+            "evidence": [],
+            "pendingSuggestions": [],
+        }
+
+    task_ids = [t["id"] for t in tasks]
+    evidence_rows = []
+    if task_ids:
+        placeholders = ",".join("?" for _ in task_ids)
+        evidence_rows = conn.execute(
+            f"SELECT * FROM task_evidence WHERE todo_id IN ({placeholders}) ORDER BY todo_id, created_at, id",
+            task_ids,
+        ).fetchall()
+
+    pending_conditions = ["s.state = 'pending'", "date(s.created_at) BETWEEN ? AND ?"]
+    pending_params: list[Any] = [since, until]
+    if project_scope:
+        pending_conditions.append(
+            """
+            (
+              s.suggested_project = ?
+              OR EXISTS (
+                SELECT 1 FROM task_evidence te
+                 WHERE te.suggestion_id = s.id
+                   AND te.project_path = ?
+              )
+            )
+            """
+        )
+        pending_params.extend([project_scope.get("name"), project_scope.get("path")])
+    else:
+        hidden_filter = (
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'projects'"
+        )
+        has_projects = conn.execute(hidden_filter).fetchone() is not None
+        has_hidden = False
+        if has_projects:
+            has_hidden = "hidden" in {row[1] for row in conn.execute("PRAGMA table_info('projects')").fetchall()}
+        if has_hidden:
+            pending_conditions.append(
+                """
+                (
+                  (s.suggested_project IS NULL OR s.suggested_project NOT IN (
+                    SELECT name FROM projects WHERE hidden = 1
+                  ))
+                  AND NOT EXISTS (
+                    SELECT 1 FROM task_evidence te
+                    JOIN projects p ON p.path = te.project_path
+                    WHERE te.suggestion_id = s.id
+                      AND p.hidden = 1
+                  )
+                )
+                """
+            )
+
+    pending_rows = conn.execute(
+        f"""
+        SELECT s.* FROM reconciliation_suggestions s
+         WHERE {' AND '.join(pending_conditions)}
+         ORDER BY s.created_at, s.id
+        """,
+        pending_params,
+    ).fetchall()
+
+    evidence = [_serialize_evidence(r) for r in evidence_rows]
+    pending = [_serialize_suggestion(r) for r in pending_rows]
+    return {
+        **availability,
+        "summary": {"linkedEvidence": len(evidence), "pendingSuggestions": len(pending)},
+        "evidence": evidence,
+        "pendingSuggestions": pending,
+    }
+
+
+def _date_range_for_report(date: str) -> tuple[str, str, str]:
+    today = datetime.now().date()
+    if date == "yesterday":
+        day = today - timedelta(days=1)
+        return day.isoformat(), day.isoformat(), "Yesterday"
+    if date == "week":
+        return (today - timedelta(days=7)).isoformat(), today.isoformat(), "This Week"
+    if date == "all":
+        return "1970-01-01", "2099-12-31", "All Time"
+    return today.isoformat(), today.isoformat(), "Today"
+
+
+@app.get("/api/chronicle/suggestions")
+async def get_chronicle_suggestions(status: str = "pending") -> dict:
+    if status != "all" and status not in _CHRONICLE_STATES:
+        raise HTTPException(status_code=400, detail="Suggestion status must be pending, approved, linked, ignored, or all")
+    conn = _get_taskbean_db()
+    if not conn:
+        return {"status": status, "count": 0, "suggestions": []}
+    try:
+        if not _table_exists(conn, "reconciliation_suggestions"):
+            return {"status": status, "count": 0, "suggestions": []}
+        if status == "all":
+            rows = conn.execute(
+                "SELECT * FROM reconciliation_suggestions ORDER BY state, created_at, id"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM reconciliation_suggestions WHERE state = ? ORDER BY created_at, id",
+                (status,),
+            ).fetchall()
+        suggestions = [_suggestion_with_evidence(conn, r) for r in rows]
+        return {"status": status, "count": len(suggestions), "suggestions": suggestions}
+    finally:
+        conn.close()
+
+
+@app.post("/api/chronicle/suggestions/{suggestion_id}/approve")
+async def approve_chronicle_suggestion(suggestion_id: str, body: ChronicleApproveBody) -> dict:
+    conn = _get_taskbean_db_rw()
+    if not conn:
+        raise HTTPException(status_code=500, detail="database unavailable")
+    committed = False
+    todo_id = str(uuid4())
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        suggestion = _resolve_suggestion_from_db(conn, suggestion_id)
+        _require_pending_suggestion(suggestion)
+        evidence_rows = _evidence_rows_for_suggestion(conn, suggestion["id"])
+        status = _validate_chronicle_task_status(body.status or suggestion["suggested_status"])
+        project_name, project_path = _project_for_approval(conn, suggestion, body, evidence_rows)
+        _ensure_project_row(conn, project_name, project_path)
+
+        now = _iso_now()
+        completed = 1 if status == "done" else 0
+        conn.execute(
+            """
+            INSERT INTO todos (
+              id, title, completed, source, priority, notes, tags,
+              project, project_path, status, created_at
+            ) VALUES (?, ?, ?, 'chronicle', ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                todo_id,
+                body.title or suggestion["suggested_title"],
+                completed,
+                body.priority or "none",
+                body.notes,
+                _normalize_tags(body.tags),
+                project_name,
+                project_path,
+                status,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            UPDATE reconciliation_suggestions
+               SET state = 'approved',
+                   linked_todo_id = ?,
+                   decided_at = ?,
+                   updated_at = ?
+             WHERE id = ? AND state = 'pending'
+            """,
+            (todo_id, now, now, suggestion["id"]),
+        )
+        conn.execute(
+            "UPDATE task_evidence SET todo_id = ? WHERE suggestion_id = ?",
+            (todo_id, suggestion["id"]),
+        )
+        conn.execute("COMMIT")
+        committed = True
+
+        task = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
+        updated = conn.execute(
+            "SELECT * FROM reconciliation_suggestions WHERE id = ?",
+            (suggestion["id"],),
+        ).fetchone()
+        return {
+            "action": "approve",
+            "suggestion": _suggestion_with_evidence(conn, updated),
+            "task": _serialize_task_row(task),
+        }
+    finally:
+        if not committed:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+        conn.close()
+
+
+@app.post("/api/chronicle/suggestions/{suggestion_id}/link")
+async def link_chronicle_suggestion(suggestion_id: str, body: ChronicleLinkBody) -> dict:
+    conn = _get_taskbean_db_rw()
+    if not conn:
+        raise HTTPException(status_code=500, detail="database unavailable")
+    committed = False
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        suggestion = _resolve_suggestion_from_db(conn, suggestion_id)
+        _require_pending_suggestion(suggestion)
+        task = _task_for_link(conn, body.todoId)
+        now = _iso_now()
+        conn.execute(
+            """
+            UPDATE reconciliation_suggestions
+               SET state = 'linked',
+                   linked_todo_id = ?,
+                   decided_at = ?,
+                   updated_at = ?
+             WHERE id = ? AND state = 'pending'
+            """,
+            (task["id"], now, now, suggestion["id"]),
+        )
+        conn.execute(
+            "UPDATE task_evidence SET todo_id = ? WHERE suggestion_id = ?",
+            (task["id"], suggestion["id"]),
+        )
+        conn.execute("COMMIT")
+        committed = True
+
+        updated = conn.execute(
+            "SELECT * FROM reconciliation_suggestions WHERE id = ?",
+            (suggestion["id"],),
+        ).fetchone()
+        return {
+            "action": "link",
+            "suggestion": _suggestion_with_evidence(conn, updated),
+            "task": _serialize_task_row(task),
+        }
+    finally:
+        if not committed:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+        conn.close()
+
+
+@app.post("/api/chronicle/suggestions/{suggestion_id}/ignore")
+async def ignore_chronicle_suggestion(suggestion_id: str) -> dict:
+    conn = _get_taskbean_db_rw()
+    if not conn:
+        raise HTTPException(status_code=500, detail="database unavailable")
+    committed = False
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        suggestion = _resolve_suggestion_from_db(conn, suggestion_id)
+        _require_pending_suggestion(suggestion)
+        now = _iso_now()
+        conn.execute(
+            """
+            UPDATE reconciliation_suggestions
+               SET state = 'ignored',
+                   decided_at = ?,
+                   updated_at = ?
+             WHERE id = ? AND state = 'pending'
+            """,
+            (now, now, suggestion["id"]),
+        )
+        conn.execute("COMMIT")
+        committed = True
+
+        updated = conn.execute(
+            "SELECT * FROM reconciliation_suggestions WHERE id = ?",
+            (suggestion["id"],),
+        ).fetchone()
+        return {"action": "ignore", "suggestion": _suggestion_with_evidence(conn, updated)}
+    finally:
+        if not committed:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+        conn.close()
+
+
+@app.get("/api/reports/preview")
+async def get_report_preview(date: str = "week", project: str | None = None, include_chronicle: bool = True) -> dict:
+    since, until, label = _date_range_for_report(date)
+    empty = {
+        "period": label,
+        "since": since,
+        "until": until,
+        "tasks": [],
+        "taskGroups": _group_tasks([]),
+    }
+    conn = _get_taskbean_db()
+    if not conn:
+        if include_chronicle:
+            availability = _chronicle_availability()
+            empty["chronicle"] = {
+                **availability,
+                "summary": {"linkedEvidence": 0, "pendingSuggestions": 0},
+                "evidence": [],
+                "pendingSuggestions": [],
+            }
+        return empty
+
+    try:
+        project_scope = None
+        where = ["date(created_at) BETWEEN ? AND ?"]
+        params: list[Any] = [since, until]
+        if project:
+            row = _find_project(conn, project)
+            project_scope = {"name": row["name"], "path": row["path"]} if row else {"name": project, "path": None}
+            where.append("project = ?")
+            params.append(project_scope["name"])
+        else:
+            has_projects = _table_exists(conn, "projects")
+            has_hidden = False
+            if has_projects:
+                has_hidden = "hidden" in {row[1] for row in conn.execute("PRAGMA table_info('projects')").fetchall()}
+            if has_hidden:
+                where.append("(project IS NULL OR project NOT IN (SELECT name FROM projects WHERE hidden = 1))")
+
+        rows = conn.execute(
+            f"SELECT * FROM todos WHERE {' AND '.join(where)} ORDER BY project, completed, created_at",
+            params,
+        ).fetchall()
+        tasks = [_serialize_task_row(r) for r in rows]
+        payload = {
+            "period": label,
+            "since": since,
+            "until": until,
+            "tasks": tasks,
+            "taskGroups": _group_tasks(tasks),
+        }
+        if include_chronicle:
+            payload["chronicle"] = _collect_chronicle_report(conn, since, until, tasks, project_scope)
+        return payload
+    finally:
+        conn.close()
+
+
 # ── Task Detail (enriched with Copilot session data) ─────────────────────────
 
 
@@ -2855,6 +3503,7 @@ async def _build_task_detail(task_id: str) -> dict:
     # stamped by the CLI attribution pipeline. Joins agent_sessions and
     # aggregates agent_turns to produce a single summary row.
     source_card = await asyncio.to_thread(_build_source_card, task)
+    evidence = await asyncio.to_thread(_evidence_for_task, task["id"])
 
     return {
         "task": {
@@ -2873,6 +3522,7 @@ async def _build_task_detail(task_id: str) -> dict:
         "refs": refs,
         "tools": tools,
         "checkpoint": checkpoint,
+        "evidence": evidence,
     }
 
 

@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
@@ -14,13 +14,13 @@ The slice is complete when the app can list pending suggestions, decide them, sh
 
 ## Acceptance criteria
 
-- [ ] The app API can return reconciliation suggestions filtered by status.
-- [ ] The app API can approve, link, and ignore suggestions using the same decision semantics as the CLI.
-- [ ] The app API can return linked evidence as part of task detail data.
-- [ ] The app API can return a weekly report preview with canonical tasks, linked evidence, pending suggestions, and Chronicle availability.
-- [ ] API responses do not include raw prompt/response content by default.
-- [ ] API errors for invalid suggestions, invalid task links, and repeated decisions are explicit and consistent.
-- [ ] FastAPI integration tests cover suggestion listing, decision actions, task evidence detail, report preview, unavailable evidence, and privacy non-leakage.
+- [x] The app API can return reconciliation suggestions filtered by status.
+- [x] The app API can approve, link, and ignore suggestions using the same decision semantics as the CLI.
+- [x] The app API can return linked evidence as part of task detail data.
+- [x] The app API can return a weekly report preview with canonical tasks, linked evidence, pending suggestions, and Chronicle availability.
+- [x] API responses do not include raw prompt/response content by default.
+- [x] API errors for invalid suggestions, invalid task links, and repeated decisions are explicit and consistent.
+- [x] FastAPI integration tests cover suggestion listing, decision actions, task evidence detail, report preview, unavailable evidence, and privacy non-leakage.
 
 ## Blocked by
 

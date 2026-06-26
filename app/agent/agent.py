@@ -7,6 +7,7 @@ import logging
 import re
 import sys
 import uuid
+from types import SimpleNamespace
 from typing import Any
 
 # Windows strftime uses %#d to remove leading zeros; POSIX uses %-d.
@@ -639,7 +640,7 @@ class DynamicAgentProxy(AgentFrameworkAgent):
     def __init__(self):
         # Don't call super().__init__() — we don't have an agent yet.
         # The proxy resolves the real AgentFrameworkAgent at run time.
-        pass
+        self.config = SimpleNamespace(snapshot_store=None)
 
     async def run(self, input_data: dict[str, Any]):
         inst = _agui_singleton

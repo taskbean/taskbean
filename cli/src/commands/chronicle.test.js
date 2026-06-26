@@ -564,6 +564,37 @@ describe('bean report --include-chronicle', () => {
 
     beanJson(['add', 'Temporary taskbean task', '--project', 'taskbean'], home);
     beanJson(['projects', 'hide', 'taskbean'], home);
+    const db = taskbeanDb(home);
+    const hiddenProject = db.prepare(
+      "SELECT path FROM projects WHERE name = 'taskbean' AND hidden = 1"
+    ).get();
+    db.prepare(`
+      INSERT INTO reconciliation_suggestions (
+        id, evidence_key, suggested_title, suggested_project, suggested_status,
+        source_session_ids, evidence_summary, confidence, state, created_at, updated_at
+      ) VALUES (?, ?, ?, NULL, 'pending', ?, ?, 0.7, 'pending', ?, ?)
+    `).run(
+      'hidden-null-project-suggestion',
+      'hidden-null-project-evidence',
+      'Hidden evidence without suggested project',
+      '["s-hidden"]',
+      'Hidden project evidence summary',
+      '2026-01-01T10:30:00Z',
+      '2026-01-01T10:30:00Z'
+    );
+    db.prepare(`
+      INSERT INTO task_evidence (
+        id, todo_id, suggestion_id, source, source_session_id, repo, project_path,
+        branch, pr_refs, issue_refs, files_changed, summary, confidence, created_at
+      ) VALUES (?, NULL, ?, 'copilot', 's-hidden', 'taskbean/taskbean', ?,
+        'hidden-branch', '[]', '[]', '[]', 'Hidden project evidence summary', 0.7, ?)
+    `).run(
+      'hidden-null-project-evidence',
+      'hidden-null-project-suggestion',
+      hiddenProject.path,
+      '2026-01-01T10:30:00Z'
+    );
+    db.close();
     const hiddenDefault = beanJson(['report', '--date', 'all', '--include-chronicle'], home);
     assert.equal(hiddenDefault.chronicle.pendingSuggestions.length, 0);
   });
