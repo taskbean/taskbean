@@ -20,7 +20,7 @@ const { startCommand } = await import('../src/commands/start.js');
 const { blockCommand } = await import('../src/commands/block.js');
 const { remindCommand } = await import('../src/commands/remind.js');
 const { reportCommand } = await import('../src/commands/report.js');
-const { chronicleDoctorCommand } = await import('../src/commands/chronicle.js');
+const { chronicleDoctorCommand, chronicleReconcileCommand } = await import('../src/commands/chronicle.js');
 const { trackCommand, untrackCommand } = await import('../src/commands/track.js');
 const { installCommand } = await import('../src/commands/install.js');
 const {
@@ -144,6 +144,14 @@ chronicle
   .description('Diagnose local Chronicle/session data availability')
   .option('--json', 'Output as JSON')
   .action(chronicleDoctorCommand);
+
+chronicle
+  .command('reconcile')
+  .description('Create review-only suggestions from local Chronicle/session evidence')
+  .option('--since <date>', 'Start date, YYYY-MM-DD (default: 7 days ago)')
+  .option('--until <date>', 'End date, YYYY-MM-DD (default: today)')
+  .option('--json', 'Output as JSON')
+  .action(chronicleReconcileCommand);
 
 program
   .command('track')

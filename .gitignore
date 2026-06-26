@@ -67,3 +67,6 @@ services/notifications/
 datetime
 .taskbean.json
 app/playwright-report/
+
+# Local hook/runtime cache
+.impeccable/

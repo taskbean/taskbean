@@ -180,6 +180,64 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         """
     )
 
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS reconciliation_suggestions (
+          id TEXT PRIMARY KEY,
+          evidence_key TEXT NOT NULL UNIQUE,
+          suggested_title TEXT NOT NULL,
+          suggested_project TEXT,
+          suggested_status TEXT DEFAULT 'pending',
+          source_session_ids TEXT NOT NULL DEFAULT '[]',
+          evidence_summary TEXT NOT NULL,
+          confidence REAL NOT NULL DEFAULT 0,
+          state TEXT NOT NULL DEFAULT 'pending',
+          linked_todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          decided_at TEXT
+        )
+        """
+    )
+    for idx in (
+        "CREATE INDEX IF NOT EXISTS idx_reconciliation_state_created ON reconciliation_suggestions(state, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_reconciliation_updated ON reconciliation_suggestions(updated_at)",
+    ):
+        try:
+            conn.execute(idx)
+        except sqlite3.OperationalError:
+            pass
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS task_evidence (
+          id TEXT PRIMARY KEY,
+          todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+          suggestion_id TEXT REFERENCES reconciliation_suggestions(id) ON DELETE CASCADE,
+          source TEXT NOT NULL,
+          source_session_id TEXT NOT NULL,
+          repo TEXT,
+          project_path TEXT,
+          branch TEXT,
+          pr_refs TEXT NOT NULL DEFAULT '[]',
+          issue_refs TEXT NOT NULL DEFAULT '[]',
+          files_changed TEXT NOT NULL DEFAULT '[]',
+          summary TEXT,
+          confidence REAL NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          UNIQUE (source, source_session_id, suggestion_id)
+        )
+        """
+    )
+    for idx in (
+        "CREATE INDEX IF NOT EXISTS idx_task_evidence_todo ON task_evidence(todo_id)",
+        "CREATE INDEX IF NOT EXISTS idx_task_evidence_suggestion ON task_evidence(suggestion_id)",
+    ):
+        try:
+            conn.execute(idx)
+        except sqlite3.OperationalError:
+            pass
+
 
 @contextmanager
 def immediate_txn(conn: sqlite3.Connection):

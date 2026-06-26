@@ -201,6 +201,50 @@ export function getDb() {
     )
   `);
 
+  // Chronicle-backed reconciliation. Suggestions are review-only proposals;
+  // they must not mutate todos until a later explicit approval/link action.
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS reconciliation_suggestions (
+      id TEXT PRIMARY KEY,
+      evidence_key TEXT NOT NULL UNIQUE,
+      suggested_title TEXT NOT NULL,
+      suggested_project TEXT,
+      suggested_status TEXT DEFAULT 'pending',
+      source_session_ids TEXT NOT NULL DEFAULT '[]',
+      evidence_summary TEXT NOT NULL,
+      confidence REAL NOT NULL DEFAULT 0,
+      state TEXT NOT NULL DEFAULT 'pending',
+      linked_todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      decided_at TEXT
+    )
+  `);
+  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_reconciliation_state_created ON reconciliation_suggestions(state, created_at)'); } catch {}
+  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_reconciliation_updated ON reconciliation_suggestions(updated_at)'); } catch {}
+
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS task_evidence (
+      id TEXT PRIMARY KEY,
+      todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+      suggestion_id TEXT REFERENCES reconciliation_suggestions(id) ON DELETE CASCADE,
+      source TEXT NOT NULL,
+      source_session_id TEXT NOT NULL,
+      repo TEXT,
+      project_path TEXT,
+      branch TEXT,
+      pr_refs TEXT NOT NULL DEFAULT '[]',
+      issue_refs TEXT NOT NULL DEFAULT '[]',
+      files_changed TEXT NOT NULL DEFAULT '[]',
+      summary TEXT,
+      confidence REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      UNIQUE (source, source_session_id, suggestion_id)
+    )
+  `);
+  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_task_evidence_todo ON task_evidence(todo_id)'); } catch {}
+  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_task_evidence_suggestion ON task_evidence(suggestion_id)'); } catch {}
+
   return _db;
 }
 
