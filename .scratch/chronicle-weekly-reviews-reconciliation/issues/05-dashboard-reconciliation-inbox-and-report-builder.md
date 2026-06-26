@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
@@ -14,14 +14,14 @@ The slice is complete when a user can complete the core review flow visually wit
 
 ## Acceptance criteria
 
-- [ ] The dashboard shows a reconciliation inbox with pending suggestions, confidence, and concise evidence summaries.
-- [ ] The dashboard supports approve, edit-and-approve, link-to-existing-task, and ignore actions.
-- [ ] Decided suggestions leave the pending inbox without requiring a full page reload.
-- [ ] Task detail shows a source/evidence card when Chronicle/session evidence is linked.
-- [ ] The weekly report builder supports toggles for canonical tasks, linked evidence, and pending suggestion appendix.
-- [ ] The user can copy or export the generated Markdown report draft.
-- [ ] Empty, unavailable, loading, and error states are clear and privacy-safe.
-- [ ] Playwright tests cover the inbox review flow, evidence card visibility, report preview toggles, and Markdown copy/export behavior.
+- [x] The dashboard shows a reconciliation inbox with pending suggestions, confidence, and concise evidence summaries.
+- [x] The dashboard supports approve, edit-and-approve, link-to-existing-task, and ignore actions.
+- [x] Decided suggestions leave the pending inbox without requiring a full page reload.
+- [x] Task detail shows a source/evidence card when Chronicle/session evidence is linked.
+- [x] The weekly report builder supports toggles for canonical tasks, linked evidence, and pending suggestion appendix.
+- [x] The user can copy or export the generated Markdown report draft.
+- [x] Empty, unavailable, loading, and error states are clear and privacy-safe.
+- [x] Playwright tests cover the inbox review flow, evidence card visibility, report preview toggles, and Markdown copy/export behavior.
 
 ## Blocked by
 
