@@ -1,5 +1,11 @@
 import { discoverChronicleCapabilities } from '../chronicle/adapter.js';
 import { reconcileChronicleSessions } from '../chronicle/reconcile.js';
+import {
+  approveSuggestion,
+  ignoreSuggestion,
+  linkSuggestion,
+  listSuggestions,
+} from '../chronicle/suggestions.js';
 
 function renderStatus(label, item) {
   const suffix = item.path ? ` (${item.path})` : '';
@@ -94,4 +100,52 @@ export function chronicleReconcileCommand(opts) {
     }
     process.exitCode = 1;
   }
+}
+
+function handleSuggestionCommand(opts, fn) {
+  try {
+    const result = fn();
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.log(renderSuggestionText(result));
+    }
+  } catch (err) {
+    const payload = { error: err.code || 'chronicle_suggestion_failed', message: err.message };
+    if (opts.json) {
+      console.log(JSON.stringify(payload));
+    } else {
+      console.error(`Error: ${err.message}`);
+    }
+    process.exitCode = 1;
+  }
+}
+
+function renderSuggestionText(result) {
+  if (Array.isArray(result.suggestions)) {
+    if (!result.suggestions.length) return 'No Chronicle reconciliation suggestions found.';
+    return result.suggestions
+      .map(s => `${s.id} (${s.state}, confidence ${s.confidence}): ${s.suggested_title}`)
+      .join('\n');
+  }
+  if (result.action === 'approve') return `Approved suggestion ${result.suggestion.id} into task ${result.task.id}`;
+  if (result.action === 'link') return `Linked suggestion ${result.suggestion.id} to task ${result.task.id}`;
+  if (result.action === 'ignore') return `Ignored suggestion ${result.suggestion.id}`;
+  return JSON.stringify(result, null, 2);
+}
+
+export function chronicleSuggestionsCommand(opts) {
+  handleSuggestionCommand(opts, () => listSuggestions(opts));
+}
+
+export function chronicleApproveCommand(suggestionId, opts) {
+  handleSuggestionCommand(opts, () => approveSuggestion(suggestionId, opts));
+}
+
+export function chronicleLinkCommand(suggestionId, todoId, opts) {
+  handleSuggestionCommand(opts, () => linkSuggestion(suggestionId, todoId, opts));
+}
+
+export function chronicleIgnoreCommand(suggestionId, opts) {
+  handleSuggestionCommand(opts, () => ignoreSuggestion(suggestionId));
 }

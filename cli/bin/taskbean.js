@@ -20,7 +20,14 @@ const { startCommand } = await import('../src/commands/start.js');
 const { blockCommand } = await import('../src/commands/block.js');
 const { remindCommand } = await import('../src/commands/remind.js');
 const { reportCommand } = await import('../src/commands/report.js');
-const { chronicleDoctorCommand, chronicleReconcileCommand } = await import('../src/commands/chronicle.js');
+const {
+  chronicleApproveCommand,
+  chronicleDoctorCommand,
+  chronicleIgnoreCommand,
+  chronicleLinkCommand,
+  chronicleReconcileCommand,
+  chronicleSuggestionsCommand,
+} = await import('../src/commands/chronicle.js');
 const { trackCommand, untrackCommand } = await import('../src/commands/track.js');
 const { installCommand } = await import('../src/commands/install.js');
 const {
@@ -152,6 +159,42 @@ chronicle
   .option('--until <date>', 'End date, YYYY-MM-DD (default: today)')
   .option('--json', 'Output as JSON')
   .action(chronicleReconcileCommand);
+
+chronicle
+  .command('suggestions')
+  .description('List Chronicle reconciliation suggestions')
+  .option('--status <status>', 'pending, approved, linked, ignored, or all', 'pending')
+  .option('--json', 'Output as JSON')
+  .action(chronicleSuggestionsCommand);
+
+chronicle
+  .command('approve')
+  .description('Approve a Chronicle suggestion into a Taskbean task')
+  .argument('<suggestion-id>', 'Suggestion id')
+  .option('--title <title>', 'Task title override')
+  .option('--project <path-or-name>', 'Task project override')
+  .option('--priority <priority>', 'Task priority')
+  .option('--notes <notes>', 'Task notes')
+  .option('--tags <tags>', 'Comma-separated task tags')
+  .option('--status <status>', 'pending, in_progress, blocked, or done')
+  .option('--json', 'Output as JSON')
+  .action(chronicleApproveCommand);
+
+chronicle
+  .command('link')
+  .description('Link a Chronicle suggestion to an existing Taskbean task')
+  .argument('<suggestion-id>', 'Suggestion id')
+  .argument('<todo-id>', 'Task id or index')
+  .option('--project <path-or-name>', 'Project for resolving task indexes')
+  .option('--json', 'Output as JSON')
+  .action(chronicleLinkCommand);
+
+chronicle
+  .command('ignore')
+  .description('Ignore a Chronicle reconciliation suggestion')
+  .argument('<suggestion-id>', 'Suggestion id')
+  .option('--json', 'Output as JSON')
+  .action(chronicleIgnoreCommand);
 
 program
   .command('track')

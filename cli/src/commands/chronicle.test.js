@@ -1,6 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -145,6 +145,16 @@ function beanJson(args, home) {
     env: { ...process.env, HOME: home, USERPROFILE: home },
   }).trim();
   return JSON.parse(output);
+}
+
+function beanJsonError(args, home) {
+  const result = spawnSync(process.execPath, [BEAN, ...args, '--json'], {
+    encoding: 'utf-8',
+    cwd: TEST_HOME,
+    env: { ...process.env, HOME: home, USERPROFILE: home },
+  });
+  assert.notEqual(result.status, 0);
+  return JSON.parse(result.stdout.trim());
 }
 
 function taskbeanDb(home) {
@@ -342,5 +352,105 @@ describe('bean chronicle reconcile', () => {
     assert.equal(result.available, true);
     assert.equal(result.counts.discovered, 1);
     assert.equal(result.suggestions.length, 1);
+  });
+});
+
+describe('bean chronicle suggestions decisions', () => {
+  function seedSuggestion(homeName) {
+    const home = fixtureHome(homeName);
+    createSessionStore(home, { withSession: true });
+    const reconcile = beanJson([
+      'chronicle', 'reconcile',
+      '--since', '2026-01-01',
+      '--until', '2026-01-02',
+    ], home);
+    assert.equal(reconcile.suggestions.length, 1);
+    return { home, suggestion: reconcile.suggestions[0] };
+  }
+
+  it('lists suggestions by status with evidence', () => {
+    const { home, suggestion } = seedSuggestion('decisions-list');
+    const pending = beanJson(['chronicle', 'suggestions'], home);
+    assert.equal(pending.status, 'pending');
+    assert.equal(pending.count, 1);
+    assert.equal(pending.suggestions[0].id, suggestion.id);
+    assert.equal(pending.suggestions[0].evidence.length, 1);
+    assert.equal(pending.suggestions[0].evidence[0].source_session_id, 's1');
+
+    const all = beanJson(['chronicle', 'suggestions', '--status', 'all'], home);
+    assert.equal(all.count, 1);
+  });
+
+  it('approves a suggestion into an editable Taskbean task', () => {
+    const { home, suggestion } = seedSuggestion('decisions-approve');
+    const approved = beanJson([
+      'chronicle', 'approve', suggestion.id,
+      '--title', 'Reviewed Chronicle reconciliation work',
+      '--priority', 'high',
+      '--notes', 'Ready for weekly review',
+      '--tags', 'chronicle,review',
+      '--status', 'done',
+    ], home);
+
+    assert.equal(approved.action, 'approve');
+    assert.equal(approved.suggestion.state, 'approved');
+    assert.equal(approved.suggestion.linked_todo_id, approved.task.id);
+    assert.ok(approved.suggestion.decided_at);
+    assert.equal(approved.task.title, 'Reviewed Chronicle reconciliation work');
+    assert.equal(approved.task.priority, 'high');
+    assert.equal(approved.task.notes, 'Ready for weekly review');
+    assert.deepEqual(JSON.parse(approved.task.tags), ['chronicle', 'review']);
+    assert.equal(approved.task.status, 'done');
+    assert.equal(approved.task.completed, 1);
+    assert.equal(approved.task.source, 'chronicle');
+    assert.equal(approved.suggestion.evidence[0].todo_id, approved.task.id);
+
+    const pending = beanJson(['chronicle', 'suggestions'], home);
+    assert.equal(pending.count, 0);
+
+    const repeated = beanJsonError(['chronicle', 'approve', suggestion.id], home);
+    assert.equal(repeated.error, 'suggestion_already_decided');
+  });
+
+  it('links a suggestion to an existing task without creating a duplicate', () => {
+    const { home, suggestion } = seedSuggestion('decisions-link');
+    const task = beanJson(['add', 'Existing weekly review task'], home);
+    const linked = beanJson(['chronicle', 'link', suggestion.id, task.id], home);
+
+    assert.equal(linked.action, 'link');
+    assert.equal(linked.suggestion.state, 'linked');
+    assert.equal(linked.suggestion.linked_todo_id, task.id);
+    assert.equal(linked.suggestion.evidence[0].todo_id, task.id);
+    assert.equal(linked.task.id, task.id);
+
+    const db = taskbeanDb(home);
+    try {
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM todos').get().c, 1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('ignores suggestions and reports invalid decision errors', () => {
+    const { home, suggestion } = seedSuggestion('decisions-ignore');
+    const ignored = beanJson(['chronicle', 'ignore', suggestion.id], home);
+    assert.equal(ignored.action, 'ignore');
+    assert.equal(ignored.suggestion.state, 'ignored');
+    assert.ok(ignored.suggestion.decided_at);
+
+    const pending = beanJson(['chronicle', 'suggestions'], home);
+    assert.equal(pending.count, 0);
+
+    const invalidSuggestion = beanJsonError(['chronicle', 'ignore', 'missing-suggestion'], home);
+    assert.equal(invalidSuggestion.error, 'suggestion_not_found');
+
+    const repeated = beanJsonError(['chronicle', 'link', suggestion.id, 'missing-task'], home);
+    assert.equal(repeated.error, 'suggestion_already_decided');
+  });
+
+  it('reports missing task errors when linking pending suggestions', () => {
+    const { home, suggestion } = seedSuggestion('decisions-missing-task');
+    const missingTask = beanJsonError(['chronicle', 'link', suggestion.id, 'missing-task'], home);
+    assert.equal(missingTask.error, 'task_not_found');
   });
 });

@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
@@ -14,14 +14,14 @@ The slice is complete when the review inbox is actionable from the CLI and decid
 
 ## Acceptance criteria
 
-- [ ] A public CLI command lists suggestions by status with deterministic JSON.
-- [ ] A public approval command creates a Taskbean task from a suggestion only after explicit approval.
-- [ ] Approval supports editing the report-facing task fields before creation where practical.
-- [ ] A public link command attaches suggestion evidence to an existing task without creating a duplicate task.
-- [ ] A public ignore command marks a suggestion ignored and removes it from the pending inbox.
-- [ ] Approved, linked, and ignored suggestions retain decision timestamps and enough metadata to audit the decision.
-- [ ] Invalid suggestion IDs, missing task IDs, and already-decided suggestions surface clear errors and do not silently no-op.
-- [ ] CLI tests cover list, approve, edit-and-approve, link, ignore, repeated decisions, invalid IDs, and evidence attachment.
+- [x] A public CLI command lists suggestions by status with deterministic JSON.
+- [x] A public approval command creates a Taskbean task from a suggestion only after explicit approval.
+- [x] Approval supports editing the report-facing task fields before creation where practical.
+- [x] A public link command attaches suggestion evidence to an existing task without creating a duplicate task.
+- [x] A public ignore command marks a suggestion ignored and removes it from the pending inbox.
+- [x] Approved, linked, and ignored suggestions retain decision timestamps and enough metadata to audit the decision.
+- [x] Invalid suggestion IDs, missing task IDs, and already-decided suggestions surface clear errors and do not silently no-op.
+- [x] CLI tests cover list, approve, edit-and-approve, link, ignore, repeated decisions, invalid IDs, and evidence attachment.
 
 ## Blocked by
 
