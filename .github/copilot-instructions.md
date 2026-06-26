@@ -239,13 +239,13 @@ CLI workflow:
 bean chronicle doctor --json
 bean chronicle reconcile --since 2026-04-20 --until 2026-04-26 --json
 bean chronicle suggestions --status pending --json
-bean chronicle approve <suggestion-id> --json
+bean chronicle approve <suggestion-id> --work-date 2026-04-20 --json
 bean chronicle link <suggestion-id> <todo-id> --json
 bean chronicle ignore <suggestion-id> --json
 bean report --date week --include-chronicle --json
 ```
 
-Do not treat pending suggestions as completed work. Use JSON output for automation and Markdown output for human report drafts only. Privacy posture stays metadata-only: no raw prompts, assistant responses, tool outputs, or command output are copied into Taskbean's database by default. If local Chronicle/session data is missing, blocked by policy, not synced from a cloud agent, or outside the requested period, reconciliation should report zero/unavailable suggestions and normal reports should continue from canonical tasks.
+Do not treat pending suggestions as completed work. Exact session matches to existing Taskbean tasks are auto-linked as evidence and suppressed from the pending inbox; heuristic/fuzzy matches remain pending for review. Suggestions and evidence carry `occurred_at` work time, reports filter pending suggestions by work time, and approval defaults the created task's date to work time unless CLI/API/UI approval provides a work-date override. Use JSON output for automation and Markdown output for human report drafts only. Privacy posture stays metadata-only: no raw prompts, assistant responses, tool outputs, or command output are copied into Taskbean's database by default. If local Chronicle/session data is missing, blocked by policy, not synced from a cloud agent, or outside the requested period, reconciliation should report zero/unavailable suggestions and normal reports should continue from canonical tasks. Privacy hardening follow-up: keep reconciliation's metadata/summary allowlist and doctor diagnostics' raw-content denylist in sync as Chronicle schemas evolve.
 
 App surfaces:
 

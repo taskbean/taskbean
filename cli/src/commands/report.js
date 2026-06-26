@@ -111,6 +111,7 @@ function serializeEvidence(row) {
     files_changed: parseJsonArray(row.files_changed),
     summary: row.summary,
     confidence: Number(row.confidence),
+    occurred_at: row.occurred_at,
     created_at: row.created_at,
   };
 }
@@ -127,6 +128,7 @@ function serializeSuggestion(row) {
     confidence: Number(row.confidence),
     state: row.state,
     linked_todo_id: row.linked_todo_id,
+    occurred_at: row.occurred_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
     decided_at: row.decided_at,
@@ -150,12 +152,12 @@ function collectChronicleReport(since, until, tasks, scope = {}) {
     ? allRows(
       `SELECT * FROM task_evidence
         WHERE todo_id IN (${taskIds.map(() => '?').join(',')})
-        ORDER BY todo_id, created_at, id`,
+        ORDER BY todo_id, COALESCE(occurred_at, created_at), id`,
       taskIds
     )
     : [];
 
-  const pendingConditions = ['s.state = \'pending\'', 'date(s.created_at) BETWEEN ? AND ?'];
+  const pendingConditions = ['s.state = \'pending\'', 'date(COALESCE(s.occurred_at, s.created_at)) BETWEEN ? AND ?'];
   const pendingParams = [since, until];
   if (scope.project) {
     pendingConditions.push(`(
@@ -183,7 +185,7 @@ function collectChronicleReport(since, until, tasks, scope = {}) {
   const pendingRows = allRows(
     `SELECT s.* FROM reconciliation_suggestions s
       WHERE ${pendingConditions.join(' AND ')}
-      ORDER BY s.created_at, s.id`,
+      ORDER BY COALESCE(s.occurred_at, s.created_at), s.id`,
     pendingParams
   );
 

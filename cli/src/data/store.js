@@ -215,12 +215,16 @@ export function getDb() {
       confidence REAL NOT NULL DEFAULT 0,
       state TEXT NOT NULL DEFAULT 'pending',
       linked_todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+      occurred_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       decided_at TEXT
     )
   `);
+  try { _db.exec('ALTER TABLE reconciliation_suggestions ADD COLUMN occurred_at TEXT'); } catch {}
+  try { _db.exec('UPDATE reconciliation_suggestions SET occurred_at = created_at WHERE occurred_at IS NULL'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_reconciliation_state_created ON reconciliation_suggestions(state, created_at)'); } catch {}
+  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_reconciliation_state_occurred ON reconciliation_suggestions(state, occurred_at)'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_reconciliation_updated ON reconciliation_suggestions(updated_at)'); } catch {}
 
   _db.exec(`
@@ -238,10 +242,13 @@ export function getDb() {
       files_changed TEXT NOT NULL DEFAULT '[]',
       summary TEXT,
       confidence REAL NOT NULL DEFAULT 0,
+      occurred_at TEXT,
       created_at TEXT NOT NULL,
       UNIQUE (source, source_session_id, suggestion_id)
     )
   `);
+  try { _db.exec('ALTER TABLE task_evidence ADD COLUMN occurred_at TEXT'); } catch {}
+  try { _db.exec('UPDATE task_evidence SET occurred_at = created_at WHERE occurred_at IS NULL'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_task_evidence_todo ON task_evidence(todo_id)'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_task_evidence_suggestion ON task_evidence(suggestion_id)'); } catch {}
 

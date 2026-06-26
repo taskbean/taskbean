@@ -90,13 +90,13 @@ When the developer explicitly asks to reconcile Chronicle/session data or prepar
 ```bash
 bean chronicle reconcile --since 2026-04-20 --until 2026-04-26 --json
 bean chronicle suggestions --status pending --json
-bean chronicle approve <suggestion-id> --json
+bean chronicle approve <suggestion-id> --work-date 2026-04-20 --json
 bean chronicle link <suggestion-id> <todo-id> --json
 bean chronicle ignore <suggestion-id> --json
 bean report --date week --include-chronicle --json
 ```
 
-Pending Chronicle suggestions are review-only. Do **not** present them as completed work or canonical tasks until the developer approves or links them. Chronicle evidence is metadata/summary only: Taskbean does not import raw prompts, responses, tool outputs, or command output by default. If Chronicle data is unavailable or blocked by policy, continue with normal Taskbean tasks and report the limitation.
+Pending Chronicle suggestions are review-only. Do **not** present them as completed work or canonical tasks until the developer approves or links them. Exact session matches may be auto-linked as evidence to existing Taskbean tasks and omitted from the pending inbox; fuzzy matches remain pending. Chronicle evidence is metadata/summary only and uses `occurred_at` work time for reports and approval defaults. Use `--work-date` when the developer needs to correct that work date. Taskbean does not import raw prompts, responses, tool outputs, or command output by default. If Chronicle data is unavailable or blocked by policy, continue with normal Taskbean tasks and report the limitation.
 
 ## Avoiding duplicates
 

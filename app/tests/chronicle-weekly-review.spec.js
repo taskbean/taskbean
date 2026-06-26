@@ -20,6 +20,7 @@ function makeSuggestions() {
       evidence_summary: 'Implemented API endpoints from Chronicle metadata',
       confidence: 0.82,
       state: 'pending',
+      occurred_at: '2026-01-01T10:00:00Z',
       evidence: [{
         id: 'tev-1',
         source: 'copilot',
@@ -29,6 +30,7 @@ function makeSuggestions() {
         issue_refs: ['#40'],
         summary: 'Safe evidence summary',
         confidence: 0.82,
+        occurred_at: '2026-01-01T10:00:00Z',
       }],
     },
     {
@@ -39,6 +41,7 @@ function makeSuggestions() {
       evidence_summary: 'Found evidence that belongs on an existing task',
       confidence: 0.74,
       state: 'pending',
+      occurred_at: '2026-01-02T09:00:00Z',
       evidence: [],
     },
   ];
@@ -68,12 +71,14 @@ const REPORT_PREVIEW = {
       files_changed: ['app/agent/main.py'],
       summary: 'Safe evidence summary',
       confidence: 0.82,
+      occurred_at: '2026-01-01T10:00:00Z',
     }],
     pendingSuggestions: [{
       id: 'sug-pending-0001',
       suggested_title: 'Needs review suggestion',
       evidence_summary: 'Potential untracked Chronicle work',
       confidence: 0.68,
+      occurred_at: '2026-01-03T10:00:00Z',
     }],
   },
 };
@@ -177,6 +182,7 @@ test.describe('Chronicle weekly review dashboard', () => {
     await expect(card).toContainText('Review Chronicle API');
     await expect(card).toContainText('82%');
     await expect(card).toContainText('Implemented API endpoints');
+    await expect(card.locator('#chronicle-work-date-sug-approve-0001')).toHaveValue('2026-01-01');
 
     await card.locator('#chronicle-title-sug-approve-0001').fill('');
     await card.locator('button', { hasText: 'Approve' }).click();
@@ -187,7 +193,11 @@ test.describe('Chronicle weekly review dashboard', () => {
     await card.locator('button', { hasText: 'Approve' }).click();
 
     await expect(page.locator('[data-review-card="sug-approve-0001"]')).toHaveCount(0);
-    expect(state.approveBody).toMatchObject({ title: 'Edited Chronicle API task', status: 'pending' });
+    expect(state.approveBody).toMatchObject({
+      title: 'Edited Chronicle API task',
+      status: 'pending',
+      workDate: '2026-01-01',
+    });
   });
 
   test('links a suggestion to an existing task and ignores noise without reloading', async ({ page }) => {

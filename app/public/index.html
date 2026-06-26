@@ -1058,7 +1058,7 @@ header {
 .review-evidence-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 7px; font-size: 9.5px; color: var(--muted); }
 .review-evidence-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 999px; background: var(--surface); border: 1px solid color-mix(in oklch, var(--border) 65%, transparent); max-width: 100%; }
 .review-evidence-chip i { width: 10px; height: 10px; flex-shrink: 0; }
-.review-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin-top: 9px; }
+.review-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 130px; gap: 6px; margin-top: 9px; }
 .review-field {
   min-width: 0; height: 28px; border: 1px solid var(--border); border-radius: 7px;
   background: var(--surface); color: var(--text); font-family: inherit; font-size: 11px;
@@ -5889,6 +5889,12 @@ function _chronicleEvidenceChips(evidence) {
     }).join('');
 }
 
+function _chronicleWorkDate(suggestion) {
+    const evidence = suggestion?.evidence || [];
+    const value = evidence.find(ev => ev?.occurred_at)?.occurred_at || suggestion?.occurred_at || suggestion?.created_at;
+    return String(value || '').slice(0, 10);
+}
+
 function renderChronicleInbox() {
     const el = document.getElementById('chronicleInbox');
     const countEl = document.getElementById('chronicleInboxCount');
@@ -5914,6 +5920,7 @@ function renderChronicleInbox() {
         const domId = _safeDomId(s.id);
         const confidence = Math.round((s.confidence || 0) * 100);
         const status = s.suggested_status || 'pending';
+        const workDate = _chronicleWorkDate(s);
         return `<article class="review-card" data-review-card="${esc(s.id)}">
             <div class="review-card-title">
                 <i data-lucide="sparkles" class="icon-sm" style="color:var(--accent);flex-shrink:0" aria-hidden="true"></i>
@@ -5927,6 +5934,7 @@ function renderChronicleInbox() {
                 <select class="review-field" id="chronicle-status-${domId}" aria-label="Task status">
                     ${['pending','in_progress','blocked','done'].map(v => `<option value="${v}" ${status === v ? 'selected' : ''}>${v.replace('_', ' ')}</option>`).join('')}
                 </select>
+                <input class="review-field" id="chronicle-work-date-${domId}" type="date" value="${esc(workDate)}" aria-label="Work date">
             </div>
             <div class="review-action-row">
                 <select class="review-field" id="chronicle-link-${domId}" aria-label="Existing task to link">
@@ -5994,6 +6002,7 @@ async function approveChronicleSuggestion(id) {
     const domId = _safeDomId(id);
     const title = document.getElementById(`chronicle-title-${domId}`)?.value?.trim();
     const status = document.getElementById(`chronicle-status-${domId}`)?.value || 'pending';
+    const workDate = document.getElementById(`chronicle-work-date-${domId}`)?.value || null;
     _setChronicleCardError(id, '');
     if (!title) {
         _setChronicleCardError(id, 'Title is required.');
@@ -6004,7 +6013,7 @@ async function approveChronicleSuggestion(id) {
         const res = await fetch('/api/chronicle/suggestions/' + encodeURIComponent(id) + '/approve', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, status, tags: ['weekly-review'] }),
+            body: JSON.stringify({ title, status, workDate, tags: ['weekly-review'] }),
         });
         if (!res.ok) {
             const body = await res.json().catch(() => ({}));

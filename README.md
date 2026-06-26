@@ -197,10 +197,11 @@ bean chronicle reconcile --since 2026-04-20 --until 2026-04-20 --json
 bean chronicle suggestions --status pending --json
 ```
 
-Each pending suggestion includes a stable `id`, `suggested_title`, `evidence_summary`, `confidence`, source session ids, and privacy-safe evidence metadata such as branch, refs, and changed file paths. A suggestion is not a task until you explicitly approve it or link it:
+Each pending suggestion includes a stable `id`, `suggested_title`, `evidence_summary`, `confidence`, source session ids, `occurred_at` work time, and privacy-safe evidence metadata such as branch, refs, and changed file paths. Exact session matches to existing Taskbean tasks are auto-linked as evidence and suppressed from the pending inbox; fuzzy matches still stay pending for human review. A suggestion is not a task until you explicitly approve it or link it:
 
 ```bash
 bean chronicle approve <suggestion-id> --status done --tags weekly-review --json
+bean chronicle approve <suggestion-id> --work-date 2026-04-20 --json
 bean chronicle link <suggestion-id> <todo-id> --json
 bean chronicle ignore <suggestion-id> --json
 ```
@@ -213,13 +214,14 @@ bean report --date week --include-chronicle --json  # tasks plus linked evidence
 bean report --date week --include-chronicle         # Markdown draft for copying
 ```
 
-Automation should consume JSON and inspect fields like `counts.pending`, `suggestions`, `taskGroups`, `chronicle.summary`, and `chronicle.pendingSuggestions`; do not scrape Markdown output. A simple local cadence is: run `chronicle reconcile --json` daily, review the pending inbox in the dashboard or with `chronicle suggestions --json`, and run the evidence-enriched weekly report before a 1-on-1 or status update. For monthly improvement reviews, keep the weekly JSON reports as artifacts or use `--date all` and filter the JSON downstream.
+Automation should consume JSON and inspect fields like `counts.pending`, `counts.linked`, `suggestions`, `taskGroups`, `chronicle.summary`, and `chronicle.pendingSuggestions`; do not scrape Markdown output. Pending suggestions and linked evidence are filtered by work time (`occurred_at`), not by the date reconciliation or approval happened. Approving a suggestion defaults the created task's date to the evidence work time; use `--work-date` or the dashboard work-date field when you need to correct it. A simple local cadence is: run `chronicle reconcile --json` daily, review the pending inbox in the dashboard or with `chronicle suggestions --json`, and run the evidence-enriched weekly report before a 1-on-1 or status update. For monthly improvement reviews, keep the weekly JSON reports as artifacts or use `--date all` and filter the JSON downstream.
 
 Privacy and availability:
 
 - Taskbean stores task metadata, evidence summaries, confidence scores, source session ids, branch names, refs, and file paths. It does not copy raw prompts, assistant responses, tool outputs, or command output into `~/.taskbean/taskbean.db` by default.
 - Chronicle/session evidence is local-machine evidence. If local Copilot session files are missing, enterprise policy blocks access, the user opts out, or the work happened only in a cloud agent with no local sync, reconciliation returns an unavailable/zero-suggestion JSON result and reports continue from canonical Taskbean tasks.
 - Business/Enterprise retention and sync behavior is controlled outside Taskbean. Use `bean chronicle doctor --json` to see what this machine can access, and treat unknown remote-sync state as a limitation rather than proof that no work happened.
+- Privacy hardening follow-up: when Chronicle schemas evolve, keep reconciliation's metadata/summary allowlist and doctor diagnostics' raw-content denylist in sync so new fields do not weaken the metadata-only guarantee.
 
 ### How updates work
 

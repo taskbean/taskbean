@@ -2062,15 +2062,29 @@ def _ensure_chronicle_schema(conn) -> None:
           confidence REAL NOT NULL DEFAULT 0,
           state TEXT NOT NULL DEFAULT 'pending',
           linked_todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+          occurred_at TEXT,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL,
           decided_at TEXT
         )
         """
     )
+    for col_ddl in (
+        "ALTER TABLE reconciliation_suggestions ADD COLUMN occurred_at TEXT",
+        "ALTER TABLE task_evidence ADD COLUMN occurred_at TEXT",
+    ):
+        try:
+            conn.execute(col_ddl)
+        except sqlite3.OperationalError:
+            pass
+    conn.execute("UPDATE reconciliation_suggestions SET occurred_at = created_at WHERE occurred_at IS NULL")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_reconciliation_state_created "
         "ON reconciliation_suggestions(state, created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_reconciliation_state_occurred "
+        "ON reconciliation_suggestions(state, occurred_at)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_reconciliation_updated "
@@ -2092,11 +2106,13 @@ def _ensure_chronicle_schema(conn) -> None:
           files_changed TEXT NOT NULL DEFAULT '[]',
           summary TEXT,
           confidence REAL NOT NULL DEFAULT 0,
+          occurred_at TEXT,
           created_at TEXT NOT NULL,
           UNIQUE (source, source_session_id, suggestion_id)
         )
         """
     )
+    conn.execute("UPDATE task_evidence SET occurred_at = created_at WHERE occurred_at IS NULL")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_task_evidence_todo ON task_evidence(todo_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_task_evidence_suggestion ON task_evidence(suggestion_id)")
 
@@ -2731,6 +2747,7 @@ class ChronicleApproveBody(BaseModel):
     title: str | None = None
     project: str | None = None
     projectPath: str | None = None
+    workDate: str | None = None
     status: str | None = None
     priority: str | None = None
     notes: str | None = None
@@ -2758,6 +2775,10 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _row_value(row, key: str, default=None):
+    return row[key] if key in row.keys() else default
+
+
 def _table_exists(conn, name: str) -> bool:
     row = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
@@ -2781,6 +2802,7 @@ def _serialize_evidence(row) -> dict:
         "files_changed": _parse_json_array(row["files_changed"]),
         "summary": row["summary"],
         "confidence": float(row["confidence"] or 0),
+        "occurred_at": _row_value(row, "occurred_at"),
         "created_at": row["created_at"],
     }
 
@@ -2797,6 +2819,7 @@ def _serialize_suggestion(row, evidence: list | None = None) -> dict:
         "confidence": float(row["confidence"] or 0),
         "state": row["state"],
         "linked_todo_id": row["linked_todo_id"],
+        "occurred_at": _row_value(row, "occurred_at"),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "decided_at": row["decided_at"],
@@ -2810,7 +2833,7 @@ def _evidence_rows_for_suggestion(conn, suggestion_id: str) -> list:
     if not _table_exists(conn, "task_evidence"):
         return []
     return conn.execute(
-        "SELECT * FROM task_evidence WHERE suggestion_id = ? ORDER BY created_at, id",
+        "SELECT * FROM task_evidence WHERE suggestion_id = ? ORDER BY COALESCE(occurred_at, created_at), id",
         (suggestion_id,),
     ).fetchall()
 
@@ -2823,7 +2846,7 @@ def _evidence_for_task(task_id: str) -> list[dict]:
         if not _table_exists(conn, "task_evidence"):
             return []
         rows = conn.execute(
-            "SELECT * FROM task_evidence WHERE todo_id = ? ORDER BY created_at, id",
+            "SELECT * FROM task_evidence WHERE todo_id = ? ORDER BY COALESCE(occurred_at, created_at), id",
             (task_id,),
         ).fetchall()
         return [_serialize_evidence(r) for r in rows]
@@ -2868,6 +2891,20 @@ def _normalize_tags(tags: list[str] | None) -> str:
     if not tags:
         return "[]"
     return json.dumps([t.strip() for t in tags if isinstance(t, str) and t.strip()])
+
+
+def _created_at_for_chronicle_approval(suggestion, evidence_rows: list, body: ChronicleApproveBody) -> str:
+    if body.workDate:
+        try:
+            parsed = datetime.strptime(body.workDate, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="workDate must be YYYY-MM-DD")
+        return parsed.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    for evidence in evidence_rows:
+        occurred_at = _row_value(evidence, "occurred_at")
+        if occurred_at:
+            return occurred_at
+    return _row_value(suggestion, "occurred_at") or _iso_now()
 
 
 def _ensure_project_row(conn, name: str | None, path: str | None) -> None:
@@ -2959,11 +2996,11 @@ def _collect_chronicle_report(conn, since: str, until: str, tasks: list[dict], p
     if task_ids:
         placeholders = ",".join("?" for _ in task_ids)
         evidence_rows = conn.execute(
-            f"SELECT * FROM task_evidence WHERE todo_id IN ({placeholders}) ORDER BY todo_id, created_at, id",
+            f"SELECT * FROM task_evidence WHERE todo_id IN ({placeholders}) ORDER BY todo_id, COALESCE(occurred_at, created_at), id",
             task_ids,
         ).fetchall()
 
-    pending_conditions = ["s.state = 'pending'", "date(s.created_at) BETWEEN ? AND ?"]
+    pending_conditions = ["s.state = 'pending'", "date(COALESCE(s.occurred_at, s.created_at)) BETWEEN ? AND ?"]
     pending_params: list[Any] = [since, until]
     if project_scope:
         pending_conditions.append(
@@ -3008,7 +3045,7 @@ def _collect_chronicle_report(conn, since: str, until: str, tasks: list[dict], p
         f"""
         SELECT s.* FROM reconciliation_suggestions s
          WHERE {' AND '.join(pending_conditions)}
-         ORDER BY s.created_at, s.id
+         ORDER BY COALESCE(s.occurred_at, s.created_at), s.id
         """,
         pending_params,
     ).fetchall()
@@ -3047,11 +3084,11 @@ async def get_chronicle_suggestions(status: str = "pending") -> dict:
             return {"status": status, "count": 0, "suggestions": []}
         if status == "all":
             rows = conn.execute(
-                "SELECT * FROM reconciliation_suggestions ORDER BY state, created_at, id"
+                "SELECT * FROM reconciliation_suggestions ORDER BY state, COALESCE(occurred_at, created_at), id"
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM reconciliation_suggestions WHERE state = ? ORDER BY created_at, id",
+                "SELECT * FROM reconciliation_suggestions WHERE state = ? ORDER BY COALESCE(occurred_at, created_at), id",
                 (status,),
             ).fetchall()
         suggestions = [_suggestion_with_evidence(conn, r) for r in rows]
@@ -3077,6 +3114,7 @@ async def approve_chronicle_suggestion(suggestion_id: str, body: ChronicleApprov
         _ensure_project_row(conn, project_name, project_path)
 
         now = _iso_now()
+        created_at = _created_at_for_chronicle_approval(suggestion, evidence_rows, body)
         completed = 1 if status == "done" else 0
         conn.execute(
             """
@@ -3095,7 +3133,7 @@ async def approve_chronicle_suggestion(suggestion_id: str, body: ChronicleApprov
                 project_name,
                 project_path,
                 status,
-                now,
+                created_at,
             ),
         )
         conn.execute(

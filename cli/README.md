@@ -85,7 +85,7 @@ bean chronicle ignore <id> --json     # dismiss a suggestion
 
 `chronicle doctor` inspects only local Copilot session metadata/schema availability. It does not copy raw prompts, responses, or tool outputs into taskbean.
 
-Chronicle reconciliation turns local session metadata into a review inbox. Pending suggestions are not Taskbean tasks and do not appear in canonical task reports until you approve or link them.
+Chronicle reconciliation turns local session metadata into a review inbox. Pending suggestions are not Taskbean tasks and do not appear in canonical task reports until you approve or link them. Exact session matches to existing tasks are auto-linked as evidence and suppressed from the pending inbox; fuzzy matches stay pending for review.
 
 Daily reconciliation:
 
@@ -99,6 +99,7 @@ Decision commands:
 ```bash
 bean chronicle approve <suggestion-id> --status done --tags weekly-review --json
 bean chronicle approve <suggestion-id> --title "ship Chronicle report preview" --project "taskbean" --json
+bean chronicle approve <suggestion-id> --work-date 2026-04-20 --json
 bean chronicle link <suggestion-id> <todo-id> --json
 bean chronicle ignore <suggestion-id> --json
 ```
@@ -110,11 +111,11 @@ bean report --date week --json
 bean report --date week --include-chronicle --json
 ```
 
-Prefer JSON for scripts. Useful automation fields include `counts.discovered`, `counts.created`, `counts.updated`, `counts.pending`, `count`, `suggestions`, `taskGroups`, `chronicle.summary`, and `chronicle.pendingSuggestions`. Do not scrape Markdown report text. For monthly improvement reviews, keep weekly JSON reports as artifacts or use `--date all` and filter the JSON downstream.
+Prefer JSON for scripts. Useful automation fields include `counts.discovered`, `counts.created`, `counts.updated`, `counts.linked`, `counts.pending`, `count`, `suggestions`, `taskGroups`, `chronicle.summary`, and `chronicle.pendingSuggestions`. Do not scrape Markdown report text. Suggestions and evidence carry `occurred_at` work time; reports filter pending suggestions by that work time, and approval defaults the created task's date to it unless `--work-date` overrides it. For monthly improvement reviews, keep weekly JSON reports as artifacts or use `--date all` and filter the JSON downstream.
 
 Unavailable states are expected on some machines. If session data is missing, blocked by policy, not synced from a cloud agent, or outside the requested date range, reconciliation returns no pending suggestions and reports still work from Taskbean's task database. Run `bean chronicle doctor --json` before setting up automation to verify local data availability.
 
-Privacy defaults: Taskbean stores metadata and summaries needed for review, including source session ids, timestamps, branch/ref/file-path signals, confidence, and decision status. It does not copy raw prompts, assistant responses, tool outputs, or command output into its database by default. Treat `--include-chronicle` output as review evidence, not as a raw transcript.
+Privacy defaults: Taskbean stores metadata and summaries needed for review, including source session ids, timestamps, branch/ref/file-path signals, confidence, and decision status. It does not copy raw prompts, assistant responses, tool outputs, or command output into its database by default. Treat `--include-chronicle` output as review evidence, not as a raw transcript. When Chronicle schemas evolve, keep reconciliation's metadata/summary allowlist and doctor diagnostics' raw-content denylist in sync.
 
 ### Project Management
 ```bash

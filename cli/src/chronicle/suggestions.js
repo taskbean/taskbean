@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { basename } from 'path';
+import { basename, isAbsolute } from 'path';
 import { allRows, ensureProject, getDb, getRow, run } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { resolveTask } from '../data/resolve-task.js';
@@ -34,6 +34,7 @@ function serializeSuggestion(row, evidence = []) {
     confidence: Number(row.confidence),
     state: row.state,
     linked_todo_id: row.linked_todo_id,
+    occurred_at: row.occurred_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
     decided_at: row.decided_at,
@@ -56,20 +57,21 @@ function serializeEvidence(row) {
     files_changed: parseJsonArray(row.files_changed),
     summary: row.summary,
     confidence: Number(row.confidence),
+    occurred_at: row.occurred_at,
     created_at: row.created_at,
   };
 }
 
 function evidenceForSuggestion(suggestionId) {
   return allRows(
-    'SELECT * FROM task_evidence WHERE suggestion_id = ? ORDER BY created_at, id',
+    'SELECT * FROM task_evidence WHERE suggestion_id = ? ORDER BY COALESCE(occurred_at, created_at), id',
     [suggestionId]
   );
 }
 
 function evidenceForSuggestionFromDb(db, suggestionId) {
   return db.prepare(
-    'SELECT * FROM task_evidence WHERE suggestion_id = ? ORDER BY created_at, id'
+    'SELECT * FROM task_evidence WHERE suggestion_id = ? ORDER BY COALESCE(occurred_at, created_at), id'
   ).all(suggestionId);
 }
 
@@ -121,7 +123,7 @@ function validateTaskStatus(status) {
 }
 
 function projectForApproval(suggestion, opts, evidenceRows = null) {
-  if (opts.project) return resolveProject(opts.project);
+  if (opts.project) return projectFromOverride(opts.project);
   const evidence = (evidenceRows || evidenceForSuggestion(suggestion.id))[0];
   if (evidence?.project_path) {
     return {
@@ -129,8 +131,44 @@ function projectForApproval(suggestion, opts, evidenceRows = null) {
       name: suggestion.suggested_project || basename(evidence.project_path),
     };
   }
-  if (suggestion.suggested_project) return resolveProject(suggestion.suggested_project);
+  if (suggestion.suggested_project) return projectFromName(suggestion.suggested_project);
   return resolveProject();
+}
+
+function projectFromOverride(value) {
+  const looksLikePath = isAbsolute(value)
+    || value.includes('/')
+    || value.includes('\\')
+    || value.startsWith('.');
+  if (looksLikePath) return resolveProject(value);
+  return projectFromName(value);
+}
+
+function projectFromName(name) {
+  const row = getRow(
+    'SELECT name, path FROM projects WHERE name = ? ORDER BY tracked DESC, created_at DESC LIMIT 1',
+    [name]
+  );
+  return row || { name, path: null };
+}
+
+function parseWorkDate(value) {
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    fail('invalid_work_date', '--work-date must be YYYY-MM-DD');
+  }
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    fail('invalid_work_date', '--work-date must be a valid calendar date');
+  }
+  return `${value}T00:00:00.000Z`;
+}
+
+function createdAtForApproval(suggestion, evidenceRows, opts) {
+  return parseWorkDate(opts.workDate)
+    || evidenceRows.find(e => e.occurred_at)?.occurred_at
+    || suggestion.occurred_at
+    || new Date().toISOString();
 }
 
 export function listSuggestions(opts = {}) {
@@ -140,8 +178,8 @@ export function listSuggestions(opts = {}) {
   }
 
   const rows = status === 'all'
-    ? allRows('SELECT * FROM reconciliation_suggestions ORDER BY state, created_at, id')
-    : allRows('SELECT * FROM reconciliation_suggestions WHERE state = ? ORDER BY created_at, id', [status]);
+    ? allRows('SELECT * FROM reconciliation_suggestions ORDER BY state, COALESCE(occurred_at, created_at), id')
+    : allRows('SELECT * FROM reconciliation_suggestions WHERE state = ? ORDER BY COALESCE(occurred_at, created_at), id', [status]);
 
   return {
     status,
@@ -162,9 +200,10 @@ export function approveSuggestion(suggestionId, opts = {}) {
     const evidenceRows = evidenceForSuggestionFromDb(db, suggestion.id);
     const status = validateTaskStatus(opts.status || suggestion.suggested_status || 'pending');
     const project = projectForApproval(suggestion, opts, evidenceRows);
-    ensureProject(project.path, project.name);
+    if (project.path && project.name) ensureProject(project.path, project.name);
 
     const now = new Date().toISOString();
+    const createdAt = createdAtForApproval(suggestion, evidenceRows, opts);
     const title = opts.title || suggestion.suggested_title;
     const priority = opts.priority || 'none';
     const notes = opts.notes !== undefined ? opts.notes || null : null;
@@ -186,7 +225,7 @@ export function approveSuggestion(suggestionId, opts = {}) {
       project.name,
       project.path,
       status,
-      now
+      createdAt
     );
     db.prepare(`
       UPDATE reconciliation_suggestions

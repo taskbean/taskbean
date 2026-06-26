@@ -178,6 +178,7 @@ chronicle
   .option('--notes <notes>', 'Task notes')
   .option('--tags <tags>', 'Comma-separated task tags')
   .option('--status <status>', 'pending, in_progress, blocked, or done')
+  .option('--work-date <date>', 'Work date override, YYYY-MM-DD')
   .option('--json', 'Output as JSON')
   .action(chronicleApproveCommand);
 

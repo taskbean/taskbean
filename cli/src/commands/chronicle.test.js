@@ -264,9 +264,11 @@ describe('bean chronicle reconcile', () => {
     assert.equal(first.counts.discovered, 1);
     assert.equal(first.counts.created, 1);
     assert.equal(first.counts.updated, 0);
+    assert.equal(first.counts.linked, 0);
     assert.equal(first.counts.pending, 1);
     assert.equal(first.suggestions.length, 1);
     assert.equal(first.suggestions[0].state, 'pending');
+    assert.equal(first.suggestions[0].occurred_at, '2026-01-01T10:00:00Z');
     assert.equal(first.suggestions[0].suggested_title, 'Implemented Chronicle reconciliation review inbox');
     assert.equal(first.suggestions[0].suggested_project, 'taskbean');
     assert.equal(first.suggestions[0].source_session_ids[0], 'copilot-session-store:s1');
@@ -283,6 +285,7 @@ describe('bean chronicle reconcile', () => {
         suggestions: db.prepare('SELECT * FROM reconciliation_suggestions').all(),
         evidence: db.prepare('SELECT * FROM task_evidence').all(),
       });
+
       assert.equal(persisted.includes('DO-NOT-EXPORT-USER-PROMPT'), false);
       assert.equal(persisted.includes('DO-NOT-EXPORT-ASSISTANT-RESPONSE'), false);
       assert.equal(persisted.includes('DO-NOT-EXPORT-TOOL-OUTPUT'), false);
@@ -299,6 +302,7 @@ describe('bean chronicle reconcile', () => {
     assert.equal(second.counts.discovered, 1);
     assert.equal(second.counts.created, 0);
     assert.equal(second.counts.updated, 0);
+    assert.equal(second.counts.linked, 0);
     assert.equal(second.suggestions.length, 1);
 
     const after = taskbeanDb(home);
@@ -308,6 +312,47 @@ describe('bean chronicle reconcile', () => {
       assert.equal(after.prepare('SELECT COUNT(*) AS c FROM todos').get().c, 0);
     } finally {
       after.close();
+    }
+  });
+
+  it('auto-links exact session matches instead of creating pending inbox noise', () => {
+    const home = fixtureHome('reconcile-exact-match');
+    createSessionStore(home, { withSession: true });
+    const task = beanJson([
+      'add',
+      'Already tracked Chronicle work',
+      '--agent',
+      'copilot',
+      '--session-id',
+      's1',
+    ], home);
+
+    const result = beanJson([
+      'chronicle', 'reconcile',
+      '--since', '2026-01-01',
+      '--until', '2026-01-02',
+    ], home);
+
+    assert.equal(result.available, true);
+    assert.equal(result.counts.discovered, 1);
+    assert.equal(result.counts.created, 1);
+    assert.equal(result.counts.linked, 1);
+    assert.equal(result.counts.pending, 0);
+    assert.equal(result.suggestions.length, 1);
+    assert.equal(result.suggestions[0].state, 'linked');
+    assert.equal(result.suggestions[0].linked_todo_id, task.id);
+
+    const pending = beanJson(['chronicle', 'suggestions'], home);
+    assert.equal(pending.count, 0);
+
+    const db = taskbeanDb(home);
+    try {
+      const evidence = db.prepare('SELECT * FROM task_evidence').get();
+      assert.equal(evidence.todo_id, task.id);
+      assert.equal(evidence.occurred_at, '2026-01-01T10:00:00Z');
+      assert.equal(db.prepare('SELECT COUNT(*) AS c FROM todos').get().c, 1);
+    } finally {
+      db.close();
     }
   });
 
@@ -325,6 +370,7 @@ describe('bean chronicle reconcile', () => {
     assert.equal(result.available, false);
     assert.deepEqual(result.suggestions, []);
     assert.equal(result.counts.discovered, 0);
+    assert.equal(result.counts.linked, 0);
   });
 
   it('tolerates partial optional session-store tables', () => {
@@ -411,6 +457,7 @@ describe('bean chronicle suggestions decisions', () => {
     assert.equal(approved.task.status, 'done');
     assert.equal(approved.task.completed, 1);
     assert.equal(approved.task.source, 'chronicle');
+    assert.equal(approved.task.created_at, '2026-01-01T10:00:00Z');
     assert.equal(approved.suggestion.evidence[0].todo_id, approved.task.id);
 
     const pending = beanJson(['chronicle', 'suggestions'], home);
@@ -418,6 +465,17 @@ describe('bean chronicle suggestions decisions', () => {
 
     const repeated = beanJsonError(['chronicle', 'approve', suggestion.id], home);
     assert.equal(repeated.error, 'suggestion_already_decided');
+  });
+
+  it('uses an explicit work date override when approving', () => {
+    const { home, suggestion } = seedSuggestion('decisions-approve-work-date');
+    const approved = beanJson([
+      'chronicle', 'approve', suggestion.id,
+      '--title', 'Retroactive Chronicle work',
+      '--work-date', '2026-01-03',
+    ], home);
+
+    assert.equal(approved.task.created_at, '2026-01-03T00:00:00.000Z');
   });
 
   it('links a suggestion to an existing task without creating a duplicate', () => {
@@ -534,6 +592,22 @@ describe('bean report --include-chronicle', () => {
     const md = beanOutput(['report', '--date', 'all', '--include-chronicle'], home);
     assert.match(md, /## Needs review/);
     assert.match(md, /Implemented Chronicle reconciliation review inbox/);
+  });
+
+  it('filters pending suggestions by work time rather than reconcile time', () => {
+    const home = fixtureHome('report-pending-work-time');
+    createSessionStore(home, { withSession: true });
+    beanJson([
+      'chronicle', 'reconcile',
+      '--since', '2026-01-01',
+      '--until', '2026-01-02',
+    ], home);
+
+    const today = beanJson(['report', '--date', 'today', '--include-chronicle'], home);
+    assert.equal(today.chronicle.pendingSuggestions.length, 0);
+
+    const all = beanJson(['report', '--date', 'all', '--include-chronicle'], home);
+    assert.equal(all.chronicle.pendingSuggestions.length, 1);
   });
 
   it('scopes pending suggestions to requested or visible projects', () => {

@@ -247,6 +247,7 @@ function buildSuggestion(db, session) {
   const evidenceKey = `${SOURCE}:${session.sessionId}`;
   const suggestionId = hashId('rec', [evidenceKey]);
   const evidenceId = hashId('ev', [evidenceKey]);
+  const occurredAt = session.occurred_at || new Date().toISOString();
 
   return {
     id: suggestionId,
@@ -257,6 +258,7 @@ function buildSuggestion(db, session) {
     source_session_ids: [sourceSessionId],
     evidence_summary: evidenceSummary(session, refs, files, summary),
     confidence,
+    occurred_at: occurredAt,
     evidence: {
       id: evidenceId,
       suggestion_id: suggestionId,
@@ -270,6 +272,7 @@ function buildSuggestion(db, session) {
       files_changed: files,
       summary,
       confidence,
+      occurred_at: occurredAt,
     },
   };
 }
@@ -286,6 +289,7 @@ function serializeSuggestion(row) {
     confidence: Number(row.confidence),
     state: row.state,
     linked_todo_id: row.linked_todo_id,
+    occurred_at: row.occurred_at,
   };
 }
 
@@ -295,7 +299,8 @@ function sameSuggestion(existing, suggestion) {
     && existing.suggested_status === suggestion.suggested_status
     && existing.source_session_ids === JSON.stringify(suggestion.source_session_ids)
     && existing.evidence_summary === suggestion.evidence_summary
-    && Number(existing.confidence) === suggestion.confidence;
+    && Number(existing.confidence) === suggestion.confidence
+    && (existing.occurred_at || null) === (suggestion.occurred_at || null);
 }
 
 function sameEvidence(existing, evidence) {
@@ -306,38 +311,43 @@ function sameEvidence(existing, evidence) {
     && existing.issue_refs === JSON.stringify(evidence.issue_refs)
     && existing.files_changed === JSON.stringify(evidence.files_changed)
     && existing.summary === evidence.summary
-    && Number(existing.confidence) === evidence.confidence;
+    && Number(existing.confidence) === evidence.confidence
+    && (existing.occurred_at || null) === (evidence.occurred_at || null);
 }
 
 function persistSuggestions(suggestions) {
   const taskbean = getDb();
   const now = new Date().toISOString();
-  const counts = { created: 0, updated: 0 };
+  const counts = { created: 0, updated: 0, linked: 0 };
   const ids = [];
 
   taskbean.exec('BEGIN IMMEDIATE');
   try {
     for (const suggestion of suggestions) {
+      const autoLinkedTask = findExactTaskForSession(taskbean, suggestion.evidence.source_session_id);
+      const autoLinkedTodoId = autoLinkedTask?.id || null;
       const existing = taskbean.prepare(
         'SELECT * FROM reconciliation_suggestions WHERE evidence_key = ?'
       ).get(suggestion.evidence_key);
 
       const suggestionChanged = !existing || !sameSuggestion(existing, suggestion);
       const suggestionId = existing?.id || suggestion.id;
+      const shouldAutoLink = autoLinkedTodoId && (!existing || existing.state === 'pending');
 
       if (!existing) {
         counts.created += 1;
       } else if (suggestionChanged) {
         counts.updated += 1;
       }
+      if (shouldAutoLink) counts.linked += 1;
 
       if (!existing) {
         taskbean.prepare(`
           INSERT INTO reconciliation_suggestions (
             id, evidence_key, suggested_title, suggested_project, suggested_status,
-            source_session_ids, evidence_summary, confidence, state,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+            source_session_ids, evidence_summary, confidence, state, linked_todo_id,
+            occurred_at, created_at, updated_at, decided_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           suggestion.id,
           suggestion.evidence_key,
@@ -347,8 +357,12 @@ function persistSuggestions(suggestions) {
           JSON.stringify(suggestion.source_session_ids),
           suggestion.evidence_summary,
           suggestion.confidence,
+          autoLinkedTodoId ? 'linked' : 'pending',
+          autoLinkedTodoId,
+          suggestion.occurred_at,
           now,
-          now
+          now,
+          autoLinkedTodoId ? now : null
         );
       } else if (suggestionChanged) {
         taskbean.prepare(`
@@ -359,6 +373,7 @@ function persistSuggestions(suggestions) {
                  source_session_ids = ?,
                  evidence_summary = ?,
                  confidence = ?,
+                 occurred_at = ?,
                  updated_at = ?
            WHERE id = ?
         `).run(
@@ -368,9 +383,21 @@ function persistSuggestions(suggestions) {
           JSON.stringify(suggestion.source_session_ids),
           suggestion.evidence_summary,
           suggestion.confidence,
+          suggestion.occurred_at,
           now,
           suggestionId
         );
+      }
+
+      if (shouldAutoLink && existing) {
+        taskbean.prepare(`
+          UPDATE reconciliation_suggestions
+             SET state = 'linked',
+                 linked_todo_id = ?,
+                 decided_at = COALESCE(decided_at, ?),
+                 updated_at = ?
+           WHERE id = ? AND state = 'pending'
+        `).run(autoLinkedTodoId, now, now, suggestionId);
       }
 
       const e = suggestion.evidence;
@@ -381,11 +408,12 @@ function persistSuggestions(suggestions) {
       if (!existingEvidence) {
         taskbean.prepare(`
           INSERT INTO task_evidence (
-            id, suggestion_id, source, source_session_id, repo, project_path, branch,
-            pr_refs, issue_refs, files_changed, summary, confidence, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, todo_id, suggestion_id, source, source_session_id, repo, project_path, branch,
+            pr_refs, issue_refs, files_changed, summary, confidence, occurred_at, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           e.id,
+          autoLinkedTodoId,
           suggestionId,
           e.source,
           e.source_session_id,
@@ -397,6 +425,7 @@ function persistSuggestions(suggestions) {
           JSON.stringify(e.files_changed),
           e.summary,
           e.confidence,
+          e.occurred_at,
           now
         );
       } else if (!sameEvidence(existingEvidence, e)) {
@@ -410,7 +439,8 @@ function persistSuggestions(suggestions) {
                  issue_refs = ?,
                  files_changed = ?,
                  summary = ?,
-                 confidence = ?
+                 confidence = ?,
+                 occurred_at = ?
            WHERE id = ?
         `).run(
           e.repo,
@@ -421,11 +451,28 @@ function persistSuggestions(suggestions) {
           JSON.stringify(e.files_changed),
           e.summary,
           e.confidence,
+          e.occurred_at,
           existingEvidence.id
         );
       }
+      if (autoLinkedTodoId && existingEvidence?.todo_id !== autoLinkedTodoId) {
+        taskbean.prepare('UPDATE task_evidence SET todo_id = ? WHERE id = ?')
+          .run(autoLinkedTodoId, existingEvidence?.id || e.id);
+      }
 
       ids.push(suggestionId);
+    }
+
+    function findExactTaskForSession(db, nativeSessionId) {
+      const native = String(nativeSessionId || '').trim();
+      if (!native) return null;
+      return db.prepare(`
+        SELECT * FROM todos
+         WHERE session_id = ?
+            OR agent_session_id IN (?, ?)
+         ORDER BY created_at
+         LIMIT 1
+      `).get(native, `copilot:${native}`, `${SOURCE}:${native}`) || null;
     }
     taskbean.exec('COMMIT');
   } catch (err) {
@@ -451,7 +498,7 @@ export function reconcileChronicleSessions(opts = {}) {
     reason,
     since,
     until,
-    counts: { discovered: 0, created: 0, updated: 0, pending: 0 },
+    counts: { discovered: 0, created: 0, updated: 0, linked: 0, pending: 0 },
     suggestions: [],
     evidence: [],
     limitations: capabilities.limitations,
@@ -480,6 +527,7 @@ export function reconcileChronicleSessions(opts = {}) {
         discovered: sessions.length,
         created: persisted.created,
         updated: persisted.updated,
+        linked: persisted.linked,
         pending,
       },
       suggestions: persisted.suggestions,
