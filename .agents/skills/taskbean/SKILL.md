@@ -68,6 +68,9 @@ bean list --status pending --json                          # pending | in_progre
 bean list --count --json                                   # → {"done":12,"pending":3,"total":15}
 bean list --all --by-project --json
 bean chronicle doctor --json                               # diagnose local Copilot session data; no raw prompts/responses are imported
+bean chronicle reconcile --json                            # create review-only suggestions when explicitly requested
+bean chronicle suggestions --json                          # list pending reconciliation suggestions
+bean report --date week --include-chronicle --json          # weekly report with review evidence
 ```
 
 ## Chronicle/session diagnostics
@@ -79,6 +82,21 @@ bean chronicle doctor --json
 ```
 
 This is diagnostic and read-only. Use it to report local session-state/session-store availability, schema compatibility, and privacy limitations. Do **not** create, complete, link, or reconcile tasks from Chronicle data unless a specific Taskbean command for that action exists and the developer explicitly asks you to use it.
+
+## Chronicle-backed reviews (explicit only)
+
+When the developer explicitly asks to reconcile Chronicle/session data or prepare a weekly review, use JSON-first commands:
+
+```bash
+bean chronicle reconcile --since 2026-04-20 --until 2026-04-26 --json
+bean chronicle suggestions --status pending --json
+bean chronicle approve <suggestion-id> --work-date 2026-04-20 --json
+bean chronicle link <suggestion-id> <todo-id> --json
+bean chronicle ignore <suggestion-id> --json
+bean report --date week --include-chronicle --json
+```
+
+Pending Chronicle suggestions are review-only. Do **not** present them as completed work or canonical tasks until the developer approves or links them. Exact session matches may be auto-linked as evidence to existing Taskbean tasks and omitted from the pending inbox; fuzzy matches remain pending. Chronicle evidence is metadata/summary only and uses `occurred_at` work time for reports and approval defaults. Use `--work-date` when the developer needs to correct that work date. Taskbean does not import raw prompts, responses, tool outputs, or command output by default. If Chronicle data is unavailable or blocked by policy, continue with normal Taskbean tasks and report the limitation.
 
 ## Avoiding duplicates
 

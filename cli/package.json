@@ -28,6 +28,8 @@
     "src/commands/update-skill.js",
     "src/commands/upgrade.js",
     "src/chronicle/adapter.js",
+    "src/chronicle/reconcile.js",
+    "src/chronicle/suggestions.js",
     "src/data/attribution.js",
     "src/data/parse-date.js",
     "src/data/project.js",

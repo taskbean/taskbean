@@ -1032,6 +1032,63 @@ header {
 }
 .ptask-agent-badge i { width: 10px; height: 10px; }
 
+/* ── Chronicle weekly review ── */
+.review-section { margin: 4px 8px 10px; padding: 14px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); }
+.review-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.review-section-title { font-size: 12px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.review-section-title i { width: 14px; height: 14px; color: var(--accent); }
+.review-section-subtitle { font-size: 10px; color: var(--muted); line-height: 1.45; margin-top: 3px; }
+.review-refresh-btn, .review-action-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--bg);
+  color: var(--text); cursor: pointer; font-family: inherit; transition: all .15s;
+}
+.review-refresh-btn { width: 28px; height: 28px; flex-shrink: 0; }
+.review-refresh-btn:hover, .review-action-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.review-refresh-btn:focus-visible, .review-action-btn:focus-visible, .review-builder-option input:focus-visible, .review-field:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.review-refresh-btn i { width: 13px; height: 13px; }
+.review-subhead { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin: 12px 0 8px; }
+.review-subhead .count { margin-left: auto; font-family: 'DM Mono', monospace; color: var(--accent); font-weight: 600; }
+.review-inbox { display: flex; flex-direction: column; gap: 8px; }
+.review-card { padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); }
+.review-card.busy { opacity: .6; pointer-events: none; }
+.review-card-title { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.35; }
+.review-confidence { margin-left: auto; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--accent); white-space: nowrap; }
+.review-summary { font-size: 10.5px; color: var(--muted); line-height: 1.5; margin-top: 6px; }
+.review-evidence-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 7px; font-size: 9.5px; color: var(--muted); }
+.review-evidence-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 999px; background: var(--surface); border: 1px solid color-mix(in oklch, var(--border) 65%, transparent); max-width: 100%; }
+.review-evidence-chip i { width: 10px; height: 10px; flex-shrink: 0; }
+.review-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 130px; gap: 6px; margin-top: 9px; }
+.review-field {
+  min-width: 0; height: 28px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text); font-family: inherit; font-size: 11px;
+  padding: 0 8px;
+}
+.review-action-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; margin-top: 7px; }
+.review-action-btn { min-height: 28px; padding: 4px 9px; font-size: 10px; font-weight: 600; }
+.review-action-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.review-action-btn.primary:hover { opacity: .85; color: var(--bg); }
+.review-action-btn.danger { color: var(--red); }
+.review-action-btn.danger:hover { background: var(--red-soft); border-color: var(--red); }
+.review-action-btn i { width: 12px; height: 12px; }
+.review-card-error { margin-top: 7px; font-size: 10px; color: var(--red); line-height: 1.4; }
+.review-empty, .review-loading, .review-error {
+  padding: 18px 10px; text-align: center; color: var(--muted); font-size: 10.5px;
+  border: 1px dashed var(--border); border-radius: 8px; line-height: 1.5;
+}
+.review-empty i, .review-loading i, .review-error i { width: 22px; height: 22px; display: block; margin: 0 auto 6px; opacity: .6; }
+.review-error { color: var(--text); border-color: color-mix(in oklch, var(--red) 45%, var(--border)); }
+.review-error i { color: var(--red); }
+.review-builder { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.review-builder-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.review-builder-option { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: var(--muted); cursor: pointer; user-select: none; }
+.review-builder-option input { accent-color: var(--accent); }
+.review-builder-text {
+  width: 100%; min-height: 150px; resize: vertical; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); padding: 10px; font: 10.5px/1.5 'DM Mono', monospace;
+}
+.review-builder-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
+
 /* ── Settings: Agents section ── */
 .agent-settings-row {
   display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px;
@@ -1080,6 +1137,22 @@ header {
 .task-detail-source-field-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
 .task-detail-source-field-value { font-size: 11px; color: var(--text); font-family: 'DM Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-detail-source-field-value.accent { color: var(--accent); }
+.task-detail-evidence-card {
+  padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface2); margin-bottom: 16px;
+}
+.task-detail-evidence-head { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
+.task-detail-evidence-head i { width: 13px; height: 13px; color: var(--accent); }
+.task-detail-evidence-item { padding: 9px 0; border-top: 1px solid color-mix(in oklch, var(--border) 55%, transparent); }
+.task-detail-evidence-item:first-of-type { border-top: 0; padding-top: 0; }
+.task-detail-evidence-summary { font-size: 12px; line-height: 1.55; color: var(--text); }
+.task-detail-evidence-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.task-detail-evidence-meta span {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px;
+  background: var(--bg); color: var(--muted); border: 1px solid var(--border); font-size: 9.5px;
+  font-family: 'DM Mono', monospace; max-width: 100%;
+}
+.task-detail-evidence-meta i { width: 10px; height: 10px; flex-shrink: 0; color: var(--accent); }
 
 
 /* Disabled template cards (shown when eye toggle is on) */
@@ -2874,6 +2947,42 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         </div>
       </section>
       <div id="trackTipStatus" class="sr-only" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"></div>
+      <section class="review-section" id="chronicleReviewSection" aria-labelledby="chronicleReviewTitle">
+        <div class="review-section-head">
+          <div>
+            <div class="review-section-title" id="chronicleReviewTitle"><i data-lucide="history" aria-hidden="true"></i> Weekly review</div>
+            <div class="review-section-subtitle">Review Chronicle-backed suggestions before they become tasks. Evidence is metadata-only.</div>
+          </div>
+          <button type="button" class="review-refresh-btn" onclick="refreshChronicleReview()" title="Refresh weekly review" aria-label="Refresh weekly review">
+            <i data-lucide="refresh-cw" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="review-subhead"><i data-lucide="inbox" class="icon-sm" aria-hidden="true"></i> Reconciliation inbox <span class="count" id="chronicleInboxCount">0</span></div>
+        <div class="review-inbox" id="chronicleInbox">
+          <div class="review-loading"><i data-lucide="loader" aria-hidden="true"></i> Loading suggestions…</div>
+        </div>
+        <div class="review-builder">
+          <div class="review-subhead"><i data-lucide="file-text" class="icon-sm" aria-hidden="true"></i> Report builder</div>
+          <div class="review-builder-controls">
+            <button type="button" class="usage-period-btn active" data-report-period="week" onclick="switchChronicleReportPeriod('week')">Week</button>
+            <button type="button" class="usage-period-btn" data-report-period="today" onclick="switchChronicleReportPeriod('today')">Today</button>
+            <button type="button" class="usage-period-btn" data-report-period="all" onclick="switchChronicleReportPeriod('all')">All</button>
+            <select class="review-field" id="chronicleReportProject" onchange="loadChronicleReportPreview()" aria-label="Report project scope" style="max-width:160px">
+              <option value="">All projects</option>
+            </select>
+          </div>
+          <div class="review-builder-controls">
+            <label class="review-builder-option"><input type="checkbox" id="chronicleReportTasks" checked onchange="renderChronicleReportMarkdown()"> Tasks</label>
+            <label class="review-builder-option"><input type="checkbox" id="chronicleReportEvidence" checked onchange="renderChronicleReportMarkdown()"> Linked evidence</label>
+            <label class="review-builder-option"><input type="checkbox" id="chronicleReportPending" checked onchange="renderChronicleReportMarkdown()"> Needs-review appendix</label>
+          </div>
+          <textarea class="review-builder-text" id="chronicleReportMarkdown" readonly aria-label="Generated weekly review Markdown">Loading report…</textarea>
+          <div class="review-builder-actions">
+            <button type="button" class="review-action-btn" id="chronicleCopyReportBtn" onclick="copyChronicleReport()"><i data-lucide="clipboard-copy" aria-hidden="true"></i> Copy Markdown</button>
+            <button type="button" class="review-action-btn" onclick="exportChronicleReport()"><i data-lucide="download" aria-hidden="true"></i> Export</button>
+          </div>
+        </div>
+      </section>
       <div id="projectFilterBar" class="project-filter-bar" style="display:none"></div>
       <div id="projectList" class="project-list-container"></div>
     </div>
@@ -5371,6 +5480,13 @@ const AGENT_META = {
     opencode:      { label: 'OpenCode',    icon: 'terminal', install: 'https://github.com/sst/opencode' },
 };
 const AGENT_ORDER = ['copilot', 'claude-code', 'codex', 'opencode'];
+let _chronicleSuggestionsCache = [];
+let _chronicleSuggestionsLoading = false;
+let _chronicleReportCache = null;
+let _chronicleReportMarkdown = '';
+let _chronicleReportPeriod = 'week';
+let _chronicleReviewLoaded = false;
+let _chronicleReportRequestSeq = 0;
 
 // Lightweight fetch to populate _projectsCache and badge on startup (no full render)
 async function fetchProjectCount() {
@@ -5539,6 +5655,8 @@ async function renderProjects() {
     }
     lucide.createIcons();
     loadUsageStats();
+    renderChronicleProjectOptions();
+    if (!_chronicleReviewLoaded) refreshChronicleReview();
     if (_expandedProject) loadProjectTasks(_expandedProject);
 }
 
@@ -5746,6 +5864,360 @@ async function loadUsageStats() {
 function _emptyUsageTotals() {
     return { turns: 0, sessions: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningTokens: 0, totalTokens: 0, toolCalls: 0 };
 }
+
+function _safeDomId(value) {
+    return String(value || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function _chronicleSourceLabel(source) {
+    return AGENT_META[source]?.label || source || 'Chronicle';
+}
+
+function _chronicleEvidenceChips(evidence) {
+    const rows = evidence || [];
+    if (!rows.length) return '<span class="review-evidence-chip"><i data-lucide="shield-check"></i> metadata-only evidence</span>';
+    return rows.slice(0, 3).map(ev => {
+        const files = ev.files_changed || [];
+        const refs = [...(ev.pr_refs || []), ...(ev.issue_refs || [])].filter(Boolean);
+        const parts = [
+            `<span class="review-evidence-chip"><i data-lucide="${AGENT_META[ev.source]?.icon || 'bot'}"></i>${esc(_chronicleSourceLabel(ev.source))}</span>`,
+            ev.branch ? `<span class="review-evidence-chip"><i data-lucide="git-branch"></i>${esc(ev.branch)}</span>` : '',
+            files.length ? `<span class="review-evidence-chip" title="${esc(files.join(', '))}"><i data-lucide="files"></i>${files.length} file${files.length !== 1 ? 's' : ''}</span>` : '',
+            refs.length ? `<span class="review-evidence-chip"><i data-lucide="link"></i>${esc(refs.slice(0, 2).join(', '))}</span>` : '',
+        ].filter(Boolean);
+        return parts.join('');
+    }).join('');
+}
+
+function _chronicleWorkDate(suggestion) {
+    const evidence = suggestion?.evidence || [];
+    const value = evidence.find(ev => ev?.occurred_at)?.occurred_at || suggestion?.occurred_at || suggestion?.created_at;
+    return String(value || '').slice(0, 10);
+}
+
+function renderChronicleInbox() {
+    const el = document.getElementById('chronicleInbox');
+    const countEl = document.getElementById('chronicleInboxCount');
+    if (!el) return;
+    if (_chronicleSuggestionsLoading) {
+        el.innerHTML = '<div class="review-loading"><i data-lucide="loader" aria-hidden="true"></i> Loading suggestions…</div>';
+        if (countEl) countEl.textContent = '…';
+        lucide.createIcons();
+        return;
+    }
+    if (countEl) countEl.textContent = String(_chronicleSuggestionsCache.length);
+    if (!_chronicleSuggestionsCache.length) {
+        el.innerHTML = '<div class="review-empty"><i data-lucide="check-circle-2" aria-hidden="true"></i> No pending suggestions. Your Taskbean task list is reconciled.</div>';
+        lucide.createIcons();
+        return;
+    }
+    const taskOptions = localTodos
+        .slice()
+        .sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0) || String(a.title).localeCompare(String(b.title)))
+        .map(t => `<option value="${esc(t.id)}">${t.completed ? '✓ ' : ''}${esc(t.title || 'Untitled task')}${t.project ? ` · ${esc(t.project)}` : ''}</option>`)
+        .join('');
+    el.innerHTML = _chronicleSuggestionsCache.map(s => {
+        const domId = _safeDomId(s.id);
+        const confidence = Math.round((s.confidence || 0) * 100);
+        const status = s.suggested_status || 'pending';
+        const workDate = _chronicleWorkDate(s);
+        return `<article class="review-card" data-review-card="${esc(s.id)}">
+            <div class="review-card-title">
+                <i data-lucide="sparkles" class="icon-sm" style="color:var(--accent);flex-shrink:0" aria-hidden="true"></i>
+                <span>${esc(s.suggested_title)}</span>
+                <span class="review-confidence">${confidence}%</span>
+            </div>
+            <div class="review-summary">${esc(s.evidence_summary || 'Chronicle found task-shaped work from local session metadata.')}</div>
+            <div class="review-evidence-row">${_chronicleEvidenceChips(s.evidence)}</div>
+            <div class="review-edit-row">
+                <input class="review-field" id="chronicle-title-${domId}" value="${esc(s.suggested_title)}" aria-label="Suggestion title">
+                <select class="review-field" id="chronicle-status-${domId}" aria-label="Task status">
+                    ${['pending','in_progress','blocked','done'].map(v => `<option value="${v}" ${status === v ? 'selected' : ''}>${v.replace('_', ' ')}</option>`).join('')}
+                </select>
+                <input class="review-field" id="chronicle-work-date-${domId}" type="date" value="${esc(workDate)}" aria-label="Work date">
+            </div>
+            <div class="review-action-row">
+                <select class="review-field" id="chronicle-link-${domId}" aria-label="Existing task to link">
+                    <option value="">Link to existing task…</option>
+                    ${taskOptions || '<option value="" disabled>No tasks available</option>'}
+                </select>
+                <button type="button" class="review-action-btn primary" onclick="approveChronicleSuggestion('${esc(s.id)}')"><i data-lucide="check" aria-hidden="true"></i> Approve</button>
+                <button type="button" class="review-action-btn" onclick="linkChronicleSuggestion('${esc(s.id)}')"><i data-lucide="link" aria-hidden="true"></i> Link</button>
+                <button type="button" class="review-action-btn danger" onclick="ignoreChronicleSuggestion('${esc(s.id)}')"><i data-lucide="x" aria-hidden="true"></i> Ignore</button>
+            </div>
+            <div class="review-card-error" data-review-error style="display:none"></div>
+        </article>`;
+    }).join('');
+    lucide.createIcons();
+}
+
+async function loadChronicleSuggestions() {
+    const el = document.getElementById('chronicleInbox');
+    if (!el) return;
+    _chronicleSuggestionsLoading = true;
+    renderChronicleInbox();
+    try {
+        const res = await fetch('/api/chronicle/suggestions?status=pending', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Suggestion inbox failed (${res.status})`);
+        const data = await res.json();
+        _chronicleSuggestionsCache = data.suggestions || [];
+    } catch (err) {
+        _chronicleSuggestionsCache = [];
+        el.innerHTML = `<div class="review-error"><i data-lucide="triangle-alert" aria-hidden="true"></i> Could not load reconciliation suggestions. ${esc(err.message || '')}</div>`;
+        const countEl = document.getElementById('chronicleInboxCount');
+        if (countEl) countEl.textContent = '!';
+        lucide.createIcons();
+        return;
+    } finally {
+        _chronicleSuggestionsLoading = false;
+    }
+    renderChronicleInbox();
+}
+
+function _setChronicleCardBusy(id, busy) {
+    const card = document.querySelector(`[data-review-card="${CSS.escape(id)}"]`);
+    if (card) card.classList.toggle('busy', busy);
+}
+
+function _setChronicleCardError(id, message) {
+    const card = document.querySelector(`[data-review-card="${CSS.escape(id)}"]`);
+    const errEl = card?.querySelector?.('[data-review-error]');
+    if (!errEl) return;
+    errEl.textContent = message || '';
+    errEl.style.display = message ? '' : 'none';
+}
+
+function _removeChronicleSuggestion(id) {
+    _chronicleSuggestionsCache = _chronicleSuggestionsCache.filter(s => s.id !== id);
+    renderChronicleInbox();
+}
+
+async function _afterChronicleDecision(id) {
+    _removeChronicleSuggestion(id);
+    await Promise.all([refreshTodos(), loadChronicleReportPreview()]);
+    if (_expandedProject) loadProjectTasks(_expandedProject);
+}
+
+async function approveChronicleSuggestion(id) {
+    const domId = _safeDomId(id);
+    const title = document.getElementById(`chronicle-title-${domId}`)?.value?.trim();
+    const status = document.getElementById(`chronicle-status-${domId}`)?.value || 'pending';
+    const workDate = document.getElementById(`chronicle-work-date-${domId}`)?.value || null;
+    _setChronicleCardError(id, '');
+    if (!title) {
+        _setChronicleCardError(id, 'Title is required.');
+        return;
+    }
+    _setChronicleCardBusy(id, true);
+    try {
+        const res = await fetch('/api/chronicle/suggestions/' + encodeURIComponent(id) + '/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, status, workDate, tags: ['weekly-review'] }),
+        });
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.detail || `Approve failed (${res.status})`);
+        }
+        await _afterChronicleDecision(id);
+    } catch (err) {
+        _setChronicleCardBusy(id, false);
+        _setChronicleCardError(id, err.message || 'Approve failed');
+    }
+}
+
+async function linkChronicleSuggestion(id) {
+    const domId = _safeDomId(id);
+    const todoId = document.getElementById(`chronicle-link-${domId}`)?.value;
+    if (!todoId) {
+        _setChronicleCardError(id, 'Choose an existing task to link.');
+        return;
+    }
+    _setChronicleCardError(id, '');
+    _setChronicleCardBusy(id, true);
+    try {
+        const res = await fetch('/api/chronicle/suggestions/' + encodeURIComponent(id) + '/link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ todoId }),
+        });
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.detail || `Link failed (${res.status})`);
+        }
+        await _afterChronicleDecision(id);
+    } catch (err) {
+        _setChronicleCardBusy(id, false);
+        _setChronicleCardError(id, err.message || 'Link failed');
+    }
+}
+
+async function ignoreChronicleSuggestion(id) {
+    _setChronicleCardError(id, '');
+    _setChronicleCardBusy(id, true);
+    try {
+        const res = await fetch('/api/chronicle/suggestions/' + encodeURIComponent(id) + '/ignore', { method: 'POST' });
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.detail || `Ignore failed (${res.status})`);
+        }
+        await _afterChronicleDecision(id);
+    } catch (err) {
+        _setChronicleCardBusy(id, false);
+        _setChronicleCardError(id, err.message || 'Ignore failed');
+    }
+}
+
+function renderChronicleProjectOptions() {
+    const select = document.getElementById('chronicleReportProject');
+    if (!select) return;
+    const current = select.value;
+    const projects = _projectsCache.filter(p => !p.hidden);
+    select.innerHTML = '<option value="">All projects</option>' + projects.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+    select.value = projects.some(p => p.name === current) ? current : '';
+}
+
+function switchChronicleReportPeriod(period) {
+    _chronicleReportPeriod = period;
+    document.querySelectorAll('[data-report-period]').forEach(btn => btn.classList.toggle('active', btn.dataset.reportPeriod === period));
+    loadChronicleReportPreview();
+}
+
+async function loadChronicleReportPreview() {
+    const textarea = document.getElementById('chronicleReportMarkdown');
+    if (!textarea) return;
+    const requestSeq = ++_chronicleReportRequestSeq;
+    const project = document.getElementById('chronicleReportProject')?.value || '';
+    const qs = new URLSearchParams({ date: _chronicleReportPeriod, include_chronicle: 'true' });
+    if (project) qs.set('project', project);
+    textarea.value = 'Loading report…';
+    try {
+        const res = await fetch('/api/reports/preview?' + qs.toString(), { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Report preview failed (${res.status})`);
+        const data = await res.json();
+        if (requestSeq !== _chronicleReportRequestSeq) return;
+        _chronicleReportCache = data;
+        renderChronicleReportMarkdown();
+    } catch (err) {
+        if (requestSeq !== _chronicleReportRequestSeq) return;
+        _chronicleReportCache = null;
+        _chronicleReportMarkdown = `Could not build report preview: ${err.message || err}`;
+        textarea.value = _chronicleReportMarkdown;
+    }
+}
+
+function _reportTaskLine(t) {
+    const bits = [t.project ? `_${t.project}_` : '', t.status && !t.completed ? `\`${t.status}\`` : ''].filter(Boolean);
+    return `- ${t.completed ? '[x]' : '[ ]'} ${t.title || 'Untitled task'}${bits.length ? ` (${bits.join(' · ')})` : ''}`;
+}
+
+function _cleanMd(value) {
+    return String(value || '').replace(/\r?\n/g, ' ').trim();
+}
+
+function buildChronicleReportMarkdown(data) {
+    const includeTasks = document.getElementById('chronicleReportTasks')?.checked !== false;
+    const includeEvidence = document.getElementById('chronicleReportEvidence')?.checked !== false;
+    const includePending = document.getElementById('chronicleReportPending')?.checked !== false;
+    const lines = [`# Taskbean weekly review: ${data.period || 'Week'}`, '', `Window: ${data.since || '?'} to ${data.until || '?'}`, ''];
+    const groups = data.taskGroups || {};
+    if (includeTasks) {
+        lines.push('## Tasks');
+        const order = [
+            ['completed', 'Completed'],
+            ['in_progress', 'In progress'],
+            ['blocked', 'Blocked'],
+            ['pending', 'Pending'],
+        ];
+        let wrote = false;
+        for (const [key, label] of order) {
+            const tasks = groups[key] || [];
+            if (!tasks.length) continue;
+            wrote = true;
+            lines.push('', `### ${label}`, ...tasks.map(_reportTaskLine));
+        }
+        if (!wrote) lines.push('', 'No canonical Taskbean tasks in this window.');
+        lines.push('');
+    }
+    const chronicle = data.chronicle;
+    if (chronicle && !chronicle.available) {
+        lines.push('> Chronicle source unavailable: ' + _cleanMd(chronicle.reason || 'local session metadata was not available.'), '');
+    }
+    if (includeEvidence) {
+        lines.push('## Chronicle evidence');
+        const evidence = chronicle?.evidence || [];
+        if (evidence.length) {
+            const taskById = new Map((data.tasks || []).map(t => [t.id, t]));
+            for (const ev of evidence) {
+                const task = taskById.get(ev.todo_id);
+                const refs = [...(ev.pr_refs || []), ...(ev.issue_refs || [])].filter(Boolean).join(', ');
+                const files = (ev.files_changed || []).slice(0, 3).join(', ');
+                lines.push(`- ${task?.title ? _cleanMd(task.title) + ': ' : ''}${_cleanMd(ev.summary || 'Linked Chronicle evidence')} (${Math.round((ev.confidence || 0) * 100)}% confidence)`);
+                if (ev.branch || refs || files) lines.push(`  - ${[ev.branch ? `branch ${ev.branch}` : '', refs ? `refs ${refs}` : '', files ? `files ${files}` : ''].filter(Boolean).join('; ')}`);
+            }
+        } else {
+            lines.push('', 'No linked Chronicle evidence in this window.');
+        }
+        lines.push('');
+    }
+    if (includePending) {
+        lines.push('## Needs review');
+        const pending = chronicle?.pendingSuggestions || [];
+        if (pending.length) {
+            for (const s of pending) {
+                lines.push(`- [ ] ${_cleanMd(s.suggested_title)} (${Math.round((s.confidence || 0) * 100)}% confidence)`);
+                if (s.evidence_summary) lines.push(`  - ${_cleanMd(s.evidence_summary)}`);
+            }
+        } else {
+            lines.push('', 'No pending reconciliation suggestions.');
+        }
+        lines.push('');
+    }
+    lines.push('<!-- Generated from Taskbean. Raw prompts, assistant responses, tool outputs, and command output are intentionally omitted. -->');
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+}
+
+function renderChronicleReportMarkdown() {
+    const textarea = document.getElementById('chronicleReportMarkdown');
+    if (!textarea || !_chronicleReportCache) return;
+    _chronicleReportMarkdown = buildChronicleReportMarkdown(_chronicleReportCache);
+    textarea.value = _chronicleReportMarkdown;
+}
+
+async function copyChronicleReport() {
+    const btn = document.getElementById('chronicleCopyReportBtn');
+    try {
+        const text = _chronicleReportMarkdown || document.getElementById('chronicleReportMarkdown')?.value || '';
+        await navigator.clipboard.writeText(text);
+        if (btn) {
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i data-lucide="check" aria-hidden="true"></i> Copied';
+            lucide.createIcons();
+            setTimeout(() => { btn.innerHTML = original; lucide.createIcons(); }, 1400);
+        }
+    } catch (err) {
+        if (btn) btn.textContent = 'Copy failed';
+    }
+}
+
+function exportChronicleReport() {
+    const text = _chronicleReportMarkdown || document.getElementById('chronicleReportMarkdown')?.value || '';
+    const blob = new Blob([text], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `taskbean-weekly-review-${_chronicleReportPeriod}.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
+async function refreshChronicleReview() {
+    _chronicleReviewLoaded = true;
+    await Promise.all([loadChronicleSuggestions(), loadChronicleReportPreview()]);
+}
+
 async function toggleProjectExpand(name) {
     if (_expandedProject === name) {
         _expandedProject = null;
@@ -5926,6 +6398,7 @@ function buildTaskContext(data) {
     const files = data.files || [];
     const tools = data.tools || {};
     const cp = data.checkpoint;
+    const evidence = data.evidence || [];
 
     let ctx = `[Task Context] You are answering questions about a specific task the user is inspecting.\n`;
     ctx += `Task: "${t.title || 'unknown'}" (${t.completed ? 'completed' : 'in progress'})\n`;
@@ -5955,6 +6428,15 @@ function buildTaskContext(data) {
     if (Object.keys(tools).length) {
         const sorted = Object.entries(tools).sort((a, b) => b[1] - a[1]);
         ctx += `\nTools used: ${sorted.map(([n, c]) => `${n}(${c})`).join(', ')}\n`;
+    }
+
+    if (evidence.length) {
+        ctx += `\nChronicle Evidence (metadata and summaries only):\n`;
+        evidence.forEach(ev => {
+            ctx += `- ${ev.summary || 'Evidence summary unavailable'} (${Math.round((ev.confidence || 0) * 100)}% confidence)\n`;
+            if (ev.branch) ctx += `  Branch: ${ev.branch}\n`;
+            if (ev.files_changed?.length) ctx += `  Files: ${ev.files_changed.join(', ')}\n`;
+        });
     }
 
     if (cp?.overview) {
@@ -6147,6 +6629,7 @@ function renderTaskDetailCard(data) {
     const refs = data.refs || [];
     const tools = data.tools || {};
     const cp = data.checkpoint;
+    const evidence = data.evidence || [];
 
     const isDone = t.completed;
     const taskDate = t.created_at || t.createdAt || '';
@@ -6350,6 +6833,28 @@ function renderTaskDetailCard(data) {
         </div>`;
     }
 
+    let evidenceCardHtml = '';
+    if (evidence.length) {
+        const rows = evidence.map(ev => {
+            const refs = [...(ev.pr_refs || []), ...(ev.issue_refs || [])].filter(Boolean);
+            const files = ev.files_changed || [];
+            return `<div class="task-detail-evidence-item">
+                <div class="task-detail-evidence-summary">${esc(ev.summary || 'Linked Chronicle evidence')}</div>
+                <div class="task-detail-evidence-meta">
+                    <span><i data-lucide="${AGENT_META[ev.source]?.icon || 'bot'}"></i>${esc(_chronicleSourceLabel(ev.source))}</span>
+                    ${ev.branch ? `<span><i data-lucide="git-branch"></i>${esc(ev.branch)}</span>` : ''}
+                    ${refs.length ? `<span><i data-lucide="link"></i>${esc(refs.join(', '))}</span>` : ''}
+                    ${files.length ? `<span title="${esc(files.join(', '))}"><i data-lucide="files"></i>${files.length} file${files.length !== 1 ? 's' : ''}</span>` : ''}
+                    <span><i data-lucide="gauge"></i>${Math.round((ev.confidence || 0) * 100)}%</span>
+                </div>
+            </div>`;
+        }).join('');
+        evidenceCardHtml = `<div class="task-detail-evidence-card">
+            <div class="task-detail-evidence-head"><i data-lucide="history"></i> Chronicle evidence</div>
+            ${rows}
+        </div>`;
+    }
+
     return `<div class="task-detail-inner">
         <button class="task-detail-back" onclick="closeTaskDetail()">
             <i data-lucide="arrow-left" class="icon-sm"></i> Back to chat
@@ -6366,6 +6871,7 @@ function renderTaskDetailCard(data) {
         <div id="taskDetailAnswer" class="task-detail-answer" style="display:none"></div>
         ${hero}
         ${sourceCardHtml}
+        ${evidenceCardHtml}
         ${metricsHtml}
         ${noSessionHtml}
         ${summaryHtml}
