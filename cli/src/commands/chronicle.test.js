@@ -147,6 +147,14 @@ function beanJson(args, home) {
   return JSON.parse(output);
 }
 
+function beanOutput(args, home) {
+  return execFileSync(process.execPath, [BEAN, ...args], {
+    encoding: 'utf-8',
+    cwd: TEST_HOME,
+    env: { ...process.env, HOME: home, USERPROFILE: home },
+  });
+}
+
 function beanJsonError(args, home) {
   const result = spawnSync(process.execPath, [BEAN, ...args, '--json'], {
     encoding: 'utf-8',
@@ -452,5 +460,111 @@ describe('bean chronicle suggestions decisions', () => {
     const { home, suggestion } = seedSuggestion('decisions-missing-task');
     const missingTask = beanJsonError(['chronicle', 'link', suggestion.id, 'missing-task'], home);
     assert.equal(missingTask.error, 'task_not_found');
+  });
+});
+
+describe('bean report --include-chronicle', () => {
+  it('keeps canonical reports working when Chronicle data is unavailable', () => {
+    const home = fixtureHome('report-unavailable');
+    const task = beanJson(['add', 'Canonical task without Chronicle'], home);
+    const report = beanJson(['report', '--date', 'all', '--include-chronicle'], home);
+
+    assert.equal(report.tasks.length, 1);
+    assert.equal(report.tasks[0].id, task.id);
+    assert.equal(report.taskGroups.pending.length, 1);
+    assert.equal(report.chronicle.available, false);
+    assert.equal(report.chronicle.evidence.length, 0);
+    assert.equal(report.chronicle.pendingSuggestions.length, 0);
+
+    const md = beanOutput(['report', '--date', 'all', '--include-chronicle'], home);
+    assert.match(md, /Chronicle\/session evidence unavailable/);
+    assert.match(md, /## Needs review/);
+  });
+
+  it('includes linked evidence without counting suggestions as tasks', () => {
+    const { home, suggestion } = (() => {
+      const seedHome = fixtureHome('report-linked');
+      createSessionStore(seedHome, { withSession: true });
+      const reconcile = beanJson([
+        'chronicle', 'reconcile',
+        '--since', '2026-01-01',
+        '--until', '2026-01-02',
+      ], seedHome);
+      return { home: seedHome, suggestion: reconcile.suggestions[0] };
+    })();
+    const approved = beanJson([
+      'chronicle', 'approve', suggestion.id,
+      '--title', 'Completed Chronicle evidence report',
+      '--status', 'done',
+    ], home);
+
+    const report = beanJson(['report', '--date', 'all', '--include-chronicle'], home);
+    assert.equal(report.tasks.length, 1);
+    assert.equal(report.taskGroups.completed.length, 1);
+    assert.equal(report.taskGroups.completed[0].id, approved.task.id);
+    assert.equal(report.chronicle.available, true);
+    assert.equal(report.chronicle.evidence.length, 1);
+    assert.equal(report.chronicle.evidence[0].todo_id, approved.task.id);
+    assert.deepEqual(report.chronicle.evidence[0].issue_refs, ['#40']);
+    assert.deepEqual(report.chronicle.evidence[0].pr_refs, ['#41']);
+    assert.equal(report.chronicle.pendingSuggestions.length, 0);
+    assert.equal(JSON.stringify(report).includes('DO-NOT-EXPORT'), false);
+
+    const md = beanOutput(['report', '--date', 'all', '--include-chronicle'], home);
+    assert.match(md, /## Chronicle evidence/);
+    assert.match(md, /Completed Chronicle evidence report/);
+    assert.match(md, /PR #41/);
+  });
+
+  it('lists pending suggestions in a needs-review appendix without counting them as tasks', () => {
+    const home = fixtureHome('report-pending');
+    createSessionStore(home, { withSession: true });
+    beanJson([
+      'chronicle', 'reconcile',
+      '--since', '2026-01-01',
+      '--until', '2026-01-02',
+    ], home);
+
+    const report = beanJson(['report', '--date', 'all', '--include-chronicle'], home);
+    assert.equal(report.tasks.length, 0);
+    assert.equal(report.taskGroups.completed.length, 0);
+    assert.equal(report.chronicle.pendingSuggestions.length, 1);
+    assert.equal(report.chronicle.pendingSuggestions[0].state, 'pending');
+
+    const md = beanOutput(['report', '--date', 'all', '--include-chronicle'], home);
+    assert.match(md, /## Needs review/);
+    assert.match(md, /Implemented Chronicle reconciliation review inbox/);
+  });
+
+  it('scopes pending suggestions to requested or visible projects', () => {
+    const home = fixtureHome('report-scoped-pending');
+    createSessionStore(home, { withSession: true });
+    beanJson([
+      'chronicle', 'reconcile',
+      '--since', '2026-01-01',
+      '--until', '2026-01-02',
+    ], home);
+
+    const scopedAway = beanJson([
+      'report',
+      '--date', 'all',
+      '--project', 'other-project',
+      '--include-chronicle',
+    ], home);
+    assert.equal(scopedAway.tasks.length, 0);
+    assert.equal(scopedAway.chronicle.pendingSuggestions.length, 0);
+
+    const scopedIn = beanJson([
+      'report',
+      '--date', 'all',
+      '--project', 'taskbean',
+      '--include-chronicle',
+    ], home);
+    assert.equal(scopedIn.chronicle.pendingSuggestions.length, 1);
+
+    beanJson(['add', 'Temporary taskbean task', '--project', 'taskbean'], home);
+    beanJson(['projects', 'hide', 'taskbean'], home);
+    const hiddenDefault = beanJson(['report', '--date', 'all', '--include-chronicle'], home);
+    assert.equal(hiddenDefault.chronicle.pendingSuggestions.length, 0);
   });
 });

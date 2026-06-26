@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
@@ -14,14 +14,14 @@ The slice is complete when Markdown and JSON reports can be generated with or wi
 
 ## Acceptance criteria
 
-- [ ] Weekly report generation supports an explicit option to include Chronicle/session evidence.
-- [ ] Canonical Taskbean task counts and sections remain correct whether or not Chronicle evidence is available.
-- [ ] Linked evidence appears under the relevant task as concise provenance rather than raw session content.
-- [ ] Pending suggestions appear in a separate "needs review" or equivalent appendix and are not counted as completed tasks.
-- [ ] Markdown output is suitable for a weekly review document.
-- [ ] JSON output exposes period, canonical task groups, evidence, pending suggestions, confidence values, and Chronicle availability deterministically.
-- [ ] When Chronicle/session data is unavailable, the report states that evidence is unavailable and still completes successfully.
-- [ ] CLI tests cover canonical-only reports, evidence-enriched reports, unavailable evidence, pending suggestion appendix behavior, and JSON determinism.
+- [x] Weekly report generation supports an explicit option to include Chronicle/session evidence.
+- [x] Canonical Taskbean task counts and sections remain correct whether or not Chronicle evidence is available.
+- [x] Linked evidence appears under the relevant task as concise provenance rather than raw session content.
+- [x] Pending suggestions appear in a separate "needs review" or equivalent appendix and are not counted as completed tasks.
+- [x] Markdown output is suitable for a weekly review document.
+- [x] JSON output exposes period, canonical task groups, evidence, pending suggestions, confidence values, and Chronicle availability deterministically.
+- [x] When Chronicle/session data is unavailable, the report states that evidence is unavailable and still completes successfully.
+- [x] CLI tests cover canonical-only reports, evidence-enriched reports, unavailable evidence, pending suggestion appendix behavior, and JSON determinism.
 
 ## Blocked by
 
