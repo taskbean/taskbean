@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
@@ -14,14 +14,14 @@ The slice is complete when the feature is understandable, automatable, and safe 
 
 ## Acceptance criteria
 
-- [ ] Documentation explains the daily reconciliation workflow and the expected pending-suggestion review step.
-- [ ] Documentation explains the weekly review workflow, including canonical-only and evidence-enriched report modes.
-- [ ] Documentation explains how pending suggestions differ from Taskbean tasks and why approval is required.
-- [ ] Documentation explains privacy defaults, including no raw prompt/response storage by default.
-- [ ] Documentation explains local Chronicle/session data availability, cloud sync uncertainty, Business/Enterprise policy limitations, and opt-out considerations.
-- [ ] Automation examples use stable CLI JSON contracts rather than scraping Markdown output.
-- [ ] Documentation states what happens when Chronicle/session data is unavailable.
-- [ ] Existing package/skill documentation is updated so agents can discover the reconciliation workflow.
+- [x] Documentation explains the daily reconciliation workflow and the expected pending-suggestion review step.
+- [x] Documentation explains the weekly review workflow, including canonical-only and evidence-enriched report modes.
+- [x] Documentation explains how pending suggestions differ from Taskbean tasks and why approval is required.
+- [x] Documentation explains privacy defaults, including no raw prompt/response storage by default.
+- [x] Documentation explains local Chronicle/session data availability, cloud sync uncertainty, Business/Enterprise policy limitations, and opt-out considerations.
+- [x] Automation examples use stable CLI JSON contracts rather than scraping Markdown output.
+- [x] Documentation states what happens when Chronicle/session data is unavailable.
+- [x] Existing package/skill documentation is updated so agents can discover the reconciliation workflow.
 
 ## Blocked by
 

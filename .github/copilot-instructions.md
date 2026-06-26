@@ -229,6 +229,30 @@ These conventions are critical for reliable tool calling on small local models (
 
 taskbean ingests session and token-usage metadata from the coding agents installed on the machine (Copilot CLI, Claude Code, Codex, OpenCode) and attributes each `bean add` to the agent/session that triggered it.
 
+## Chronicle weekly reviews and reconciliation
+
+Chronicle reconciliation is review-first. Taskbean tasks stay canonical; local Chronicle/session metadata only creates suggestions and evidence until a user approves, links, or ignores it.
+
+CLI workflow:
+
+```bash
+bean chronicle doctor --json
+bean chronicle reconcile --since 2026-04-20 --until 2026-04-26 --json
+bean chronicle suggestions --status pending --json
+bean chronicle approve <suggestion-id> --json
+bean chronicle link <suggestion-id> <todo-id> --json
+bean chronicle ignore <suggestion-id> --json
+bean report --date week --include-chronicle --json
+```
+
+Do not treat pending suggestions as completed work. Use JSON output for automation and Markdown output for human report drafts only. Privacy posture stays metadata-only: no raw prompts, assistant responses, tool outputs, or command output are copied into Taskbean's database by default. If local Chronicle/session data is missing, blocked by policy, not synced from a cloud agent, or outside the requested period, reconciliation should report zero/unavailable suggestions and normal reports should continue from canonical tasks.
+
+App surfaces:
+
+- Projects tab weekly review panel lists pending suggestions and supports approve, edit-and-approve, link, and ignore.
+- Task detail includes a Chronicle evidence card when evidence is linked.
+- Report preview supports canonical-only and Chronicle evidence-enriched weekly reports.
+
 ### Schema (in `cli/src/data/store.js`)
 
 | Table | Role |
