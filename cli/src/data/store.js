@@ -215,6 +215,9 @@ export function getDb() {
       confidence REAL NOT NULL DEFAULT 0,
       state TEXT NOT NULL DEFAULT 'pending',
       linked_todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+      auto_linked INTEGER DEFAULT 0,
+      decision_reason TEXT,
+      decision_details TEXT,
       occurred_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -222,6 +225,9 @@ export function getDb() {
     )
   `);
   try { _db.exec('ALTER TABLE reconciliation_suggestions ADD COLUMN occurred_at TEXT'); } catch {}
+  try { _db.exec('ALTER TABLE reconciliation_suggestions ADD COLUMN auto_linked INTEGER DEFAULT 0'); } catch {}
+  try { _db.exec('ALTER TABLE reconciliation_suggestions ADD COLUMN decision_reason TEXT'); } catch {}
+  try { _db.exec('ALTER TABLE reconciliation_suggestions ADD COLUMN decision_details TEXT'); } catch {}
   try { _db.exec('UPDATE reconciliation_suggestions SET occurred_at = created_at WHERE occurred_at IS NULL'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_reconciliation_state_created ON reconciliation_suggestions(state, created_at)'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_reconciliation_state_occurred ON reconciliation_suggestions(state, occurred_at)'); } catch {}

@@ -1092,6 +1092,14 @@ def test_schema_bootstrap_creates_usage_tables(tmp_path, monkeypatch):
     # Seed legacy schema.
     legacy = sqlite3.connect(db_file)
     _legacy_todos_only_ddl(legacy)
+    legacy.executemany(
+        "INSERT INTO todos (id, title, completed, source, created_at) VALUES (?, ?, ?, ?, ?)",
+        [
+            ("done-legacy", "Done legacy task", 1, "agent", "2026-04-01T00:00:00Z"),
+            ("pending-legacy", "Pending legacy task", 0, "agent", "2026-04-01T00:00:00Z"),
+        ],
+    )
+    legacy.commit()
     legacy.close()
 
     conn = usage_db.connect()
@@ -1104,9 +1112,24 @@ def test_schema_bootstrap_creates_usage_tables(tmp_path, monkeypatch):
         assert {"agent_sessions", "agent_turns", "agent_sources",
                 "agent_settings", "projects"}.issubset(tables)
 
-        # todos columns exist (agent, agent_session_id, project_path).
+        # todos columns and indexes match CLI-required bootstrap schema.
         cols = {r[1] for r in conn.execute("PRAGMA table_info(todos)")}
-        assert {"agent", "agent_session_id", "project_path"}.issubset(cols)
+        assert {"agent", "agent_session_id", "project_path", "status"}.issubset(cols)
+        indexes = {r[1] for r in conn.execute("PRAGMA index_list(todos)")}
+        assert {
+            "idx_todos_upsert",
+            "idx_todos_agent_session",
+            "idx_todos_project_path",
+        }.issubset(indexes)
+        statuses = {
+            r["id"]: r["status"]
+            for r in conn.execute("SELECT id, status FROM todos ORDER BY id")
+        }
+        assert statuses["done-legacy"] == "done"
+        assert statuses["pending-legacy"] == "pending"
+
+        suggestion_cols = {r[1] for r in conn.execute("PRAGMA table_info(reconciliation_suggestions)")}
+        assert {"auto_linked", "decision_reason", "decision_details"}.issubset(suggestion_cols)
     finally:
         conn.close()
 

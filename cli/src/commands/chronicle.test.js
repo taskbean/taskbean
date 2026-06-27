@@ -341,6 +341,8 @@ describe('bean chronicle reconcile', () => {
     assert.equal(result.suggestions.length, 1);
     assert.equal(result.suggestions[0].state, 'linked');
     assert.equal(result.suggestions[0].linked_todo_id, task.id);
+    assert.equal(result.suggestions[0].auto_linked, true);
+    assert.equal(result.suggestions[0].decision_details.kind, 'exact-session');
 
     const pending = beanJson(['chronicle', 'suggestions'], home);
     assert.equal(pending.count, 0);
@@ -353,6 +355,181 @@ describe('bean chronicle reconcile', () => {
       assert.equal(db.prepare('SELECT COUNT(*) AS c FROM todos').get().c, 1);
     } finally {
       db.close();
+    }
+  });
+
+  it('auto-links very-high-confidence non-exact matches and can undo them back to review', () => {
+    const home = fixtureHome('reconcile-high-confidence-match');
+    createSessionStore(home, { withSession: true });
+    const task = beanJson([
+      'add',
+      'Chronicle reconciliation review inbox',
+      '--project',
+      'C:\\dev\\taskbean',
+    ], home);
+    const db = taskbeanDb(home);
+    try {
+      db.prepare(`
+        INSERT INTO task_evidence (
+          id, todo_id, suggestion_id, source, source_session_id, repo, project_path,
+          branch, pr_refs, issue_refs, files_changed, summary, confidence, occurred_at, created_at
+        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        'existing-ev',
+        task.id,
+        'copilot',
+        'older-session',
+        'taskbean/taskbean',
+        'C:\\dev\\taskbean',
+        'chronicle-weekly-reviews-prd',
+        JSON.stringify([]),
+        JSON.stringify([]),
+        JSON.stringify(['cli/src/commands/chronicle.js', 'cli/src/chronicle/reconcile.js']),
+        'Created the review-only reconciliation path',
+        0.9,
+        '2026-01-01T09:45:00Z',
+        '2026-01-01T09:45:00Z'
+      );
+    } finally {
+      db.close();
+    }
+
+    const result = beanJson([
+      'chronicle', 'reconcile',
+      '--since', '2026-01-01',
+      '--until', '2026-01-02',
+    ], home);
+
+    assert.equal(result.counts.linked, 1);
+    assert.equal(result.counts.pending, 0);
+    assert.equal(result.suggestions[0].state, 'linked');
+    assert.equal(result.suggestions[0].linked_todo_id, task.id);
+    assert.equal(result.suggestions[0].auto_linked, true);
+    assert.equal(result.suggestions[0].decision_details.kind, 'very-high-confidence');
+    assert.match(result.suggestions[0].decision_reason, /same project/);
+    assert.match(result.suggestions[0].decision_reason, /shared file/);
+
+    const undone = beanJson(['chronicle', 'undo', result.suggestions[0].id], home);
+    assert.equal(undone.action, 'undo-auto-link');
+    assert.equal(undone.suggestion.state, 'pending');
+    assert.equal(undone.suggestion.linked_todo_id, null);
+
+    const relinked = beanJson([
+      'chronicle', 'reconcile',
+      '--since', '2026-01-01',
+      '--until', '2026-01-02',
+    ], home);
+    assert.equal(relinked.suggestions[0].state, 'linked');
+    assert.equal(relinked.suggestions[0].linked_todo_id, task.id);
+  });
+
+  it('keeps ambiguous non-exact matches pending when runner-up is too close', () => {
+    const home = fixtureHome('reconcile-ambiguous-match');
+    createSessionStore(home, { withSession: true });
+    const first = beanJson(['add', 'Chronicle reconciliation review inbox', '--project', 'C:\\dev\\taskbean'], home);
+    const second = beanJson(['add', 'Chronicle reconciliation review inbox duplicate', '--project', 'C:\\dev\\taskbean'], home);
+    const db = taskbeanDb(home);
+    try {
+      for (const [idx, task] of [first, second].entries()) {
+        db.prepare(`
+          INSERT INTO task_evidence (
+            id, todo_id, suggestion_id, source, source_session_id, repo, project_path,
+            branch, pr_refs, issue_refs, files_changed, summary, confidence, occurred_at, created_at
+          ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          `ambiguous-ev-${idx}`,
+          task.id,
+          'copilot',
+          `older-session-${idx}`,
+          'taskbean/taskbean',
+          'C:\\dev\\taskbean',
+          'chronicle-weekly-reviews-prd',
+          JSON.stringify(['#41']),
+          JSON.stringify(['#40']),
+          JSON.stringify(['cli/src/commands/chronicle.js', 'cli/src/chronicle/reconcile.js']),
+          'Created the review-only reconciliation path',
+          0.9,
+          '2026-01-01T09:45:00Z',
+          '2026-01-01T09:45:00Z'
+        );
+      }
+    } finally {
+      db.close();
+    }
+
+    const result = beanJson([
+      'chronicle', 'reconcile',
+      '--since', '2026-01-01',
+      '--until', '2026-01-02',
+    ], home);
+
+    assert.equal(result.counts.linked, 0);
+    assert.equal(result.counts.pending, 1);
+    assert.equal(result.suggestions[0].state, 'pending');
+  });
+
+  it('does not relink evidence for already-decided suggestions on later reconcile', () => {
+    const home = fixtureHome('reconcile-decided-no-relink');
+    createSessionStore(home, { withSession: true });
+    const first = beanJson([
+      'chronicle', 'reconcile',
+      '--since', '2026-01-01',
+      '--until', '2026-01-02',
+    ], home);
+    const suggestion = first.suggestions[0];
+    beanJson(['chronicle', 'ignore', suggestion.id], home);
+    const task = beanJson([
+      'add',
+      'Chronicle reconciliation review inbox',
+      '--project',
+      'C:\\dev\\taskbean',
+    ], home);
+
+    const db = taskbeanDb(home);
+    try {
+      db.prepare(`
+        INSERT INTO task_evidence (
+          id, todo_id, suggestion_id, source, source_session_id, repo, project_path,
+          branch, pr_refs, issue_refs, files_changed, summary, confidence, occurred_at, created_at
+        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        'decided-match-existing-ev',
+        task.id,
+        'copilot',
+        'older-session',
+        'taskbean/taskbean',
+        'C:\\dev\\taskbean',
+        'chronicle-weekly-reviews-prd',
+        JSON.stringify([]),
+        JSON.stringify([]),
+        JSON.stringify(['cli/src/commands/chronicle.js', 'cli/src/chronicle/reconcile.js']),
+        'Created the review-only reconciliation path',
+        0.9,
+        '2026-01-01T09:45:00Z',
+        '2026-01-01T09:45:00Z'
+      );
+    } finally {
+      db.close();
+    }
+
+    const reconciled = beanJson([
+      'chronicle', 'reconcile',
+      '--since', '2026-01-01',
+      '--until', '2026-01-02',
+    ], home);
+    assert.equal(reconciled.counts.linked, 0);
+    assert.equal(reconciled.suggestions[0].state, 'ignored');
+    assert.equal(reconciled.suggestions[0].linked_todo_id, null);
+    assert.equal(reconciled.suggestions[0].auto_linked, false);
+
+    const after = taskbeanDb(home);
+    try {
+      const row = after.prepare(
+        'SELECT todo_id FROM task_evidence WHERE suggestion_id = ? AND source_session_id = ?'
+      ).get(suggestion.id, 's1');
+      assert.equal(row.todo_id, null);
+    } finally {
+      after.close();
     }
   });
 
@@ -636,7 +813,7 @@ describe('bean report --include-chronicle', () => {
     ], home);
     assert.equal(scopedIn.chronicle.pendingSuggestions.length, 1);
 
-    beanJson(['add', 'Temporary taskbean task', '--project', 'taskbean'], home);
+    const hiddenTask = beanJson(['add', 'Temporary taskbean task', '--project', 'taskbean'], home);
     beanJson(['projects', 'hide', 'taskbean'], home);
     const db = taskbeanDb(home);
     const hiddenProject = db.prepare(
@@ -668,8 +845,57 @@ describe('bean report --include-chronicle', () => {
       hiddenProject.path,
       '2026-01-01T10:30:00Z'
     );
+    db.prepare(`
+      INSERT INTO reconciliation_suggestions (
+        id, evidence_key, suggested_title, suggested_project, suggested_status,
+        source_session_ids, evidence_summary, confidence, state, linked_todo_id,
+        auto_linked, decision_reason, decision_details, occurred_at, created_at, updated_at, decided_at
+      ) VALUES (?, ?, ?, 'taskbean', 'pending', ?, ?, 0.95, 'linked', ?,
+        1, 'same project, title overlap, same branch', ?, ?, ?, ?, ?)
+    `).run(
+      'hidden-auto-linked-suggestion',
+      'hidden-auto-linked-evidence',
+      'Temporary taskbean task',
+      '["s-hidden-auto"]',
+      'Hidden auto-linked evidence summary',
+      hiddenTask.id,
+      JSON.stringify({
+        confidence: 0.95,
+        matchedSignals: ['same project', 'title overlap', 'same branch'],
+        missingSignals: [],
+      }),
+      '2026-01-01T10:35:00Z',
+      '2026-01-01T10:35:00Z',
+      '2026-01-01T10:35:00Z',
+      '2026-01-01T10:36:00Z'
+    );
+    db.prepare(`
+      INSERT INTO task_evidence (
+        id, todo_id, suggestion_id, source, source_session_id, repo, project_path,
+        branch, pr_refs, issue_refs, files_changed, summary, confidence, created_at
+      ) VALUES (?, ?, ?, 'copilot', 's-hidden-auto', 'taskbean/taskbean', ?,
+        'hidden-branch', '[]', '[]', '[]', 'Hidden auto-linked evidence summary', 0.95, ?)
+    `).run(
+      'hidden-auto-linked-evidence',
+      hiddenTask.id,
+      'hidden-auto-linked-suggestion',
+      hiddenProject.path,
+      '2026-01-01T10:36:00Z'
+    );
     db.close();
     const hiddenDefault = beanJson(['report', '--date', 'all', '--include-chronicle'], home);
     assert.equal(hiddenDefault.chronicle.pendingSuggestions.length, 0);
+    assert.equal(hiddenDefault.chronicle.autoLinked.length, 0);
+
+    const hiddenScoped = beanJson([
+      'report',
+      '--date', 'all',
+      '--project', 'taskbean',
+      '--include-chronicle',
+    ], home);
+    assert.deepEqual(
+      hiddenScoped.chronicle.autoLinked.map(s => s.id),
+      ['hidden-auto-linked-suggestion']
+    );
   });
 });
