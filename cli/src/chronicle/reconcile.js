@@ -7,6 +7,8 @@ import { discoverChronicleCapabilities } from './adapter.js';
 import { getDb } from '../data/store.js';
 
 const SOURCE = 'copilot-session-store';
+const VERY_HIGH_CONFIDENCE = 0.88;
+const RUNNER_UP_MARGIN = 0.12;
 
 function isoDate(date) {
   return date.toISOString().slice(0, 10);
@@ -171,12 +173,237 @@ function compactText(value, max = 180) {
   return `${text.slice(0, max - 3).trimEnd()}...`;
 }
 
+function parseJsonArray(value) {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function basenameAny(value) {
+  const normalized = String(value || '').replace(/[\\/]+$/, '');
+  const parts = normalized.split(/[\\/]/).filter(Boolean);
+  return parts.at(-1) || basename(normalized);
+}
+
+function normalizeToken(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9#]+/g, ' ').trim();
+}
+
+function wordSet(value) {
+  return new Set(normalizeToken(value).split(/\s+/).filter(w => w.length > 2 || w.startsWith('#')));
+}
+
+function textOverlap(a, b) {
+  const left = wordSet(a);
+  const right = wordSet(b);
+  if (!left.size || !right.size) return 0;
+  let common = 0;
+  for (const token of left) if (right.has(token)) common += 1;
+  return common / Math.max(left.size, right.size);
+}
+
+function normPath(value) {
+  return String(value || '').replaceAll('\\', '/').toLowerCase();
+}
+
+function arrayOverlap(a, b, normalizer = v => String(v || '').toLowerCase()) {
+  const left = new Set((a || []).map(normalizer).filter(Boolean));
+  const right = new Set((b || []).map(normalizer).filter(Boolean));
+  const values = [...left].filter(v => right.has(v));
+  return values;
+}
+
+function hoursApart(a, b) {
+  const left = Date.parse(a || '');
+  const right = Date.parse(b || '');
+  if (Number.isNaN(left) || Number.isNaN(right)) return null;
+  return Math.abs(left - right) / 36e5;
+}
+
+function evidenceRowsForTask(db, todoId) {
+  try {
+    return db.prepare('SELECT * FROM task_evidence WHERE todo_id = ?').all(todoId);
+  } catch {
+    return [];
+  }
+}
+
+function taskCandidatesForSuggestion(db, suggestion) {
+  const e = suggestion.evidence;
+  const clauses = [];
+  const params = [];
+  if (e.project_path) {
+    clauses.push('project_path = ?');
+    params.push(e.project_path);
+  }
+  if (suggestion.suggested_project) {
+    clauses.push('project = ?');
+    params.push(suggestion.suggested_project);
+  }
+  if (e.project_path) {
+    clauses.push('project = ?');
+    params.push(basenameAny(e.project_path));
+    clauses.push('project = ?');
+    params.push(e.project_path);
+  }
+  if (!clauses.length) return [];
+  return db.prepare(`
+    SELECT * FROM todos
+     WHERE ${clauses.join(' OR ')}
+     ORDER BY created_at, id
+  `).all(...params);
+}
+
+function scoreTaskCandidate(db, suggestion, task) {
+  const e = suggestion.evidence;
+  const linkedEvidence = evidenceRowsForTask(db, task.id);
+  const taskRefs = linkedEvidence.flatMap(row => [
+    ...parseJsonArray(row.pr_refs),
+    ...parseJsonArray(row.issue_refs),
+  ]);
+  const evidenceRefs = [...e.pr_refs, ...e.issue_refs];
+  const taskFiles = linkedEvidence.flatMap(row => parseJsonArray(row.files_changed));
+  const taskBranches = linkedEvidence.map(row => row.branch).filter(Boolean);
+  const matchedSignals = ['same project'];
+  const missingSignals = [];
+  let score = 0.35;
+
+  const titleScore = textOverlap(
+    `${suggestion.suggested_title} ${e.summary || ''}`,
+    `${task.title || ''} ${linkedEvidence.map(row => row.summary || '').join(' ')}`
+  );
+  if (titleScore >= 0.55) {
+    score += 0.2;
+    matchedSignals.push('title overlap');
+  } else if (titleScore >= 0.35) {
+    score += 0.15;
+    matchedSignals.push('partial title overlap');
+  } else {
+    missingSignals.push('title overlap');
+  }
+
+  const sharedRefs = arrayOverlap(evidenceRefs, taskRefs, v => String(v || '').toLowerCase());
+  if (sharedRefs.length) {
+    score += 0.25;
+    matchedSignals.push(`${sharedRefs.length} shared ref${sharedRefs.length === 1 ? '' : 's'}`);
+  } else {
+    missingSignals.push('shared refs');
+  }
+
+  const sharedFiles = arrayOverlap(e.files_changed, taskFiles, normPath);
+  if (sharedFiles.length) {
+    score += 0.25;
+    matchedSignals.push(`${sharedFiles.length} shared file${sharedFiles.length === 1 ? '' : 's'}`);
+  } else {
+    missingSignals.push('file overlap');
+  }
+
+  if (e.branch && taskBranches.map(normalizeToken).includes(normalizeToken(e.branch))) {
+    score += 0.18;
+    matchedSignals.push('same branch');
+  } else if (e.branch) {
+    missingSignals.push('same branch');
+  }
+
+  const hours = hoursApart(e.occurred_at || suggestion.occurred_at, task.created_at);
+  if (hours !== null && hours <= 24) {
+    score += 0.1;
+    matchedSignals.push('close work time');
+  } else if (hours !== null && hours <= 168) {
+    score += 0.05;
+    matchedSignals.push('nearby work time');
+  } else {
+    missingSignals.push('close work time');
+  }
+
+  const confidence = Math.min(0.99, Math.round(score * 100) / 100);
+  return {
+    todoId: task.id,
+    title: task.title,
+    confidence,
+    matchedSignals,
+    missingSignals,
+    titleScore: Math.round(titleScore * 100) / 100,
+  };
+}
+
+function compactAutoLinkReason(match) {
+  const signals = match.matchedSignals.join(', ');
+  const runner = match.runnerUp ? `; runner-up: ${match.runnerUp.title || match.runnerUp.todoId}` : '';
+  return `${signals}${runner}`;
+}
+
+function findExactTaskForSession(db, nativeSessionId) {
+  const native = String(nativeSessionId || '').trim();
+  if (!native) return null;
+  return db.prepare(`
+    SELECT * FROM todos
+     WHERE session_id = ?
+        OR agent_session_id IN (?, ?)
+     ORDER BY created_at
+     LIMIT 1
+  `).get(native, `copilot:${native}`, `${SOURCE}:${native}`) || null;
+}
+
+function findAutoLinkForSuggestion(db, suggestion) {
+  const exact = findExactTaskForSession(db, suggestion.evidence.source_session_id);
+  if (exact) {
+    return {
+      todoId: exact.id,
+      confidence: 1,
+      reason: 'exact session id match',
+      details: {
+        kind: 'exact-session',
+        confidence: 1,
+        threshold: 1,
+        matchedSignals: ['exact session id'],
+        missingSignals: [],
+        runnerUp: null,
+      },
+    };
+  }
+
+  const candidates = taskCandidatesForSuggestion(db, suggestion)
+    .map(task => scoreTaskCandidate(db, suggestion, task))
+    .sort((a, b) => b.confidence - a.confidence || a.todoId.localeCompare(b.todoId));
+  const top = candidates[0];
+  if (!top || top.confidence < VERY_HIGH_CONFIDENCE) return null;
+  const runnerUp = candidates[1] || null;
+  const margin = runnerUp ? Math.round((top.confidence - runnerUp.confidence) * 100) / 100 : null;
+  if (runnerUp && margin < RUNNER_UP_MARGIN) return null;
+  const match = { ...top, runnerUp };
+  return {
+    todoId: top.todoId,
+    confidence: top.confidence,
+    reason: compactAutoLinkReason(match),
+    details: {
+      kind: 'very-high-confidence',
+      confidence: top.confidence,
+      threshold: VERY_HIGH_CONFIDENCE,
+      runnerUpMargin: RUNNER_UP_MARGIN,
+      margin,
+      matchedSignals: top.matchedSignals,
+      missingSignals: top.missingSignals,
+      titleScore: top.titleScore,
+      runnerUp: runnerUp ? {
+        todoId: runnerUp.todoId,
+        title: runnerUp.title,
+        confidence: runnerUp.confidence,
+        matchedSignals: runnerUp.matchedSignals,
+      } : null,
+    },
+  };
+}
+
 function projectNameFor(session) {
   if (session.repository) {
     const repo = String(session.repository).split(/[\\/]/).filter(Boolean).pop();
     if (repo) return repo.replace(/\.git$/, '');
   }
-  if (session.cwd) return basename(session.cwd);
+  if (session.cwd) return basenameAny(session.cwd);
   return null;
 }
 
@@ -289,6 +516,9 @@ function serializeSuggestion(row) {
     confidence: Number(row.confidence),
     state: row.state,
     linked_todo_id: row.linked_todo_id,
+    auto_linked: Boolean(row.auto_linked),
+    decision_reason: row.decision_reason,
+    decision_details: row.decision_details ? JSON.parse(row.decision_details) : null,
     occurred_at: row.occurred_at,
   };
 }
@@ -324,8 +554,8 @@ function persistSuggestions(suggestions) {
   taskbean.exec('BEGIN IMMEDIATE');
   try {
     for (const suggestion of suggestions) {
-      const autoLinkedTask = findExactTaskForSession(taskbean, suggestion.evidence.source_session_id);
-      const autoLinkedTodoId = autoLinkedTask?.id || null;
+      const autoLink = findAutoLinkForSuggestion(taskbean, suggestion);
+      const autoLinkedTodoId = autoLink?.todoId || null;
       const existing = taskbean.prepare(
         'SELECT * FROM reconciliation_suggestions WHERE evidence_key = ?'
       ).get(suggestion.evidence_key);
@@ -333,6 +563,7 @@ function persistSuggestions(suggestions) {
       const suggestionChanged = !existing || !sameSuggestion(existing, suggestion);
       const suggestionId = existing?.id || suggestion.id;
       const shouldAutoLink = autoLinkedTodoId && (!existing || existing.state === 'pending');
+      const allowedAutoLinkedTodoId = shouldAutoLink ? autoLinkedTodoId : null;
 
       if (!existing) {
         counts.created += 1;
@@ -346,8 +577,8 @@ function persistSuggestions(suggestions) {
           INSERT INTO reconciliation_suggestions (
             id, evidence_key, suggested_title, suggested_project, suggested_status,
             source_session_ids, evidence_summary, confidence, state, linked_todo_id,
-            occurred_at, created_at, updated_at, decided_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            auto_linked, decision_reason, decision_details, occurred_at, created_at, updated_at, decided_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           suggestion.id,
           suggestion.evidence_key,
@@ -357,12 +588,15 @@ function persistSuggestions(suggestions) {
           JSON.stringify(suggestion.source_session_ids),
           suggestion.evidence_summary,
           suggestion.confidence,
-          autoLinkedTodoId ? 'linked' : 'pending',
-          autoLinkedTodoId,
+          allowedAutoLinkedTodoId ? 'linked' : 'pending',
+          allowedAutoLinkedTodoId,
+          allowedAutoLinkedTodoId ? 1 : 0,
+          allowedAutoLinkedTodoId ? autoLink.reason : null,
+          allowedAutoLinkedTodoId ? JSON.stringify(autoLink.details) : null,
           suggestion.occurred_at,
           now,
           now,
-          autoLinkedTodoId ? now : null
+          allowedAutoLinkedTodoId ? now : null
         );
       } else if (suggestionChanged) {
         taskbean.prepare(`
@@ -394,10 +628,13 @@ function persistSuggestions(suggestions) {
           UPDATE reconciliation_suggestions
              SET state = 'linked',
                  linked_todo_id = ?,
+                 auto_linked = 1,
+                 decision_reason = ?,
+                 decision_details = ?,
                  decided_at = COALESCE(decided_at, ?),
                  updated_at = ?
            WHERE id = ? AND state = 'pending'
-        `).run(autoLinkedTodoId, now, now, suggestionId);
+        `).run(autoLinkedTodoId, autoLink.reason, JSON.stringify(autoLink.details), now, now, suggestionId);
       }
 
       const e = suggestion.evidence;
@@ -413,7 +650,7 @@ function persistSuggestions(suggestions) {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           e.id,
-          autoLinkedTodoId,
+          allowedAutoLinkedTodoId,
           suggestionId,
           e.source,
           e.source_session_id,
@@ -455,25 +692,14 @@ function persistSuggestions(suggestions) {
           existingEvidence.id
         );
       }
-      if (autoLinkedTodoId && existingEvidence?.todo_id !== autoLinkedTodoId) {
+      if (allowedAutoLinkedTodoId && existingEvidence?.todo_id !== allowedAutoLinkedTodoId) {
         taskbean.prepare('UPDATE task_evidence SET todo_id = ? WHERE id = ?')
-          .run(autoLinkedTodoId, existingEvidence?.id || e.id);
+          .run(allowedAutoLinkedTodoId, existingEvidence?.id || e.id);
       }
 
       ids.push(suggestionId);
     }
 
-    function findExactTaskForSession(db, nativeSessionId) {
-      const native = String(nativeSessionId || '').trim();
-      if (!native) return null;
-      return db.prepare(`
-        SELECT * FROM todos
-         WHERE session_id = ?
-            OR agent_session_id IN (?, ?)
-         ORDER BY created_at
-         LIMIT 1
-      `).get(native, `copilot:${native}`, `${SOURCE}:${native}`) || null;
-    }
     taskbean.exec('COMMIT');
   } catch (err) {
     taskbean.exec('ROLLBACK');

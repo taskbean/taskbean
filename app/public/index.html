@@ -1079,6 +1079,13 @@ header {
 .review-empty i, .review-loading i, .review-error i { width: 22px; height: 22px; display: block; margin: 0 auto 6px; opacity: .6; }
 .review-error { color: var(--text); border-color: color-mix(in oklch, var(--red) 45%, var(--border)); }
 .review-error i { color: var(--red); }
+.review-notice {
+  margin-bottom: 8px; padding: 8px 10px; display: flex; align-items: center; gap: 7px;
+  border-radius: 9px; background: var(--orange-soft); color: var(--text);
+  border: 1px solid color-mix(in oklch, var(--orange) 22%, transparent);
+  font-size: 11px; line-height: 1.35;
+}
+.review-notice i { width: 14px; height: 14px; color: var(--orange); flex-shrink: 0; }
 .review-builder { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .review-builder-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .review-builder-option { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: var(--muted); cursor: pointer; user-select: none; }
@@ -2960,6 +2967,10 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         <div class="review-subhead"><i data-lucide="inbox" class="icon-sm" aria-hidden="true"></i> Reconciliation inbox <span class="count" id="chronicleInboxCount">0</span></div>
         <div class="review-inbox" id="chronicleInbox">
           <div class="review-loading"><i data-lucide="loader" aria-hidden="true"></i> Loading suggestions…</div>
+        </div>
+        <div class="review-subhead"><i data-lucide="badge-check" class="icon-sm" aria-hidden="true"></i> Auto-linked evidence <span class="count" id="chronicleAutoLinkedCount">0</span></div>
+        <div class="review-inbox" id="chronicleAutoLinked">
+          <div class="review-empty"><i data-lucide="check-circle-2" aria-hidden="true"></i> No auto-linked evidence in this period.</div>
         </div>
         <div class="review-builder">
           <div class="review-subhead"><i data-lucide="file-text" class="icon-sm" aria-hidden="true"></i> Report builder</div>
@@ -5487,6 +5498,7 @@ let _chronicleReportMarkdown = '';
 let _chronicleReportPeriod = 'week';
 let _chronicleReviewLoaded = false;
 let _chronicleReportRequestSeq = 0;
+let _chronicleInboxNotice = null;
 
 // Lightweight fetch to populate _projectsCache and badge on startup (no full render)
 async function fetchProjectCount() {
@@ -5899,15 +5911,18 @@ function renderChronicleInbox() {
     const el = document.getElementById('chronicleInbox');
     const countEl = document.getElementById('chronicleInboxCount');
     if (!el) return;
+    const notice = _chronicleInboxNotice
+        ? `<div class="review-notice" role="status"><i data-lucide="info" aria-hidden="true"></i>${esc(_chronicleInboxNotice)}</div>`
+        : '';
     if (_chronicleSuggestionsLoading) {
-        el.innerHTML = '<div class="review-loading"><i data-lucide="loader" aria-hidden="true"></i> Loading suggestions…</div>';
+        el.innerHTML = `${notice}<div class="review-loading"><i data-lucide="loader" aria-hidden="true"></i> Loading suggestions…</div>`;
         if (countEl) countEl.textContent = '…';
         lucide.createIcons();
         return;
     }
     if (countEl) countEl.textContent = String(_chronicleSuggestionsCache.length);
     if (!_chronicleSuggestionsCache.length) {
-        el.innerHTML = '<div class="review-empty"><i data-lucide="check-circle-2" aria-hidden="true"></i> No pending suggestions. Your Taskbean task list is reconciled.</div>';
+        el.innerHTML = `${notice}<div class="review-empty"><i data-lucide="check-circle-2" aria-hidden="true"></i> No pending suggestions. Your Taskbean task list is reconciled.</div>`;
         lucide.createIcons();
         return;
     }
@@ -5916,7 +5931,7 @@ function renderChronicleInbox() {
         .sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0) || String(a.title).localeCompare(String(b.title)))
         .map(t => `<option value="${esc(t.id)}">${t.completed ? '✓ ' : ''}${esc(t.title || 'Untitled task')}${t.project ? ` · ${esc(t.project)}` : ''}</option>`)
         .join('');
-    el.innerHTML = _chronicleSuggestionsCache.map(s => {
+    el.innerHTML = notice + _chronicleSuggestionsCache.map(s => {
         const domId = _safeDomId(s.id);
         const confidence = Math.round((s.confidence || 0) * 100);
         const status = s.suggested_status || 'pending';
@@ -5998,6 +6013,23 @@ async function _afterChronicleDecision(id) {
     if (_expandedProject) loadProjectTasks(_expandedProject);
 }
 
+async function _afterChronicleStaleDecision(id, message) {
+    _chronicleInboxNotice = message || 'Suggestion was already decided elsewhere.';
+    _removeChronicleSuggestion(id);
+    await Promise.all([refreshTodos(), loadChronicleSuggestions(), loadChronicleReportPreview()]);
+    if (_expandedProject) loadProjectTasks(_expandedProject);
+}
+
+async function _handleChronicleDecisionResponse(res, id, fallback) {
+    if (res.ok) return true;
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 409) {
+        await _afterChronicleStaleDecision(id, body.detail || 'Suggestion was already decided elsewhere.');
+        return false;
+    }
+    throw new Error(body.detail || `${fallback} (${res.status})`);
+}
+
 async function approveChronicleSuggestion(id) {
     const domId = _safeDomId(id);
     const title = document.getElementById(`chronicle-title-${domId}`)?.value?.trim();
@@ -6015,10 +6047,7 @@ async function approveChronicleSuggestion(id) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title, status, workDate, tags: ['weekly-review'] }),
         });
-        if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            throw new Error(body.detail || `Approve failed (${res.status})`);
-        }
+        if (!await _handleChronicleDecisionResponse(res, id, 'Approve failed')) return;
         await _afterChronicleDecision(id);
     } catch (err) {
         _setChronicleCardBusy(id, false);
@@ -6041,10 +6070,7 @@ async function linkChronicleSuggestion(id) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ todoId }),
         });
-        if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            throw new Error(body.detail || `Link failed (${res.status})`);
-        }
+        if (!await _handleChronicleDecisionResponse(res, id, 'Link failed')) return;
         await _afterChronicleDecision(id);
     } catch (err) {
         _setChronicleCardBusy(id, false);
@@ -6057,10 +6083,7 @@ async function ignoreChronicleSuggestion(id) {
     _setChronicleCardBusy(id, true);
     try {
         const res = await fetch('/api/chronicle/suggestions/' + encodeURIComponent(id) + '/ignore', { method: 'POST' });
-        if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            throw new Error(body.detail || `Ignore failed (${res.status})`);
-        }
+        if (!await _handleChronicleDecisionResponse(res, id, 'Ignore failed')) return;
         await _afterChronicleDecision(id);
     } catch (err) {
         _setChronicleCardBusy(id, false);
@@ -6098,11 +6121,70 @@ async function loadChronicleReportPreview() {
         if (requestSeq !== _chronicleReportRequestSeq) return;
         _chronicleReportCache = data;
         renderChronicleReportMarkdown();
+        renderChronicleAutoLinkedAudit();
     } catch (err) {
         if (requestSeq !== _chronicleReportRequestSeq) return;
         _chronicleReportCache = null;
         _chronicleReportMarkdown = `Could not build report preview: ${err.message || err}`;
         textarea.value = _chronicleReportMarkdown;
+        renderChronicleAutoLinkedAudit();
+    }
+
+    function renderChronicleAutoLinkedAudit() {
+        const el = document.getElementById('chronicleAutoLinked');
+        const countEl = document.getElementById('chronicleAutoLinkedCount');
+        if (!el) return;
+        const rows = _chronicleReportCache?.chronicle?.autoLinked || [];
+        if (countEl) countEl.textContent = String(rows.length);
+        if (!rows.length) {
+            el.innerHTML = '<div class="review-empty"><i data-lucide="check-circle-2" aria-hidden="true"></i> No auto-linked evidence in this period.</div>';
+            lucide.createIcons();
+            return;
+        }
+        const taskById = new Map((_chronicleReportCache?.tasks || []).map(t => [t.id, t]));
+        el.innerHTML = rows.map(s => {
+            const task = taskById.get(s.linked_todo_id);
+            const reason = s.decision_reason || 'Auto-linked by high-confidence metadata match.';
+            return `
+              <article class="review-card" data-auto-linked-card="${esc(s.id)}">
+                <div class="review-card-title">
+                  <i data-lucide="badge-check" aria-hidden="true"></i>
+                  <span>${esc(task?.title || s.linked_todo_id || 'Linked task')}</span>
+                  <span class="review-confidence">${Math.round((s.confidence || 0) * 100)}%</span>
+                </div>
+                <div class="review-summary">${esc(reason)}</div>
+                <div class="review-action-row">
+                  <span></span>
+                  <button type="button" class="review-action-btn" data-undo-auto-link="${escAttr(s.id)}">
+                    <i data-lucide="undo-2" aria-hidden="true"></i> Undo
+                  </button>
+                </div>
+              </article>`;
+        }).join('');
+        el.querySelectorAll('[data-undo-auto-link]').forEach(btn => {
+            btn.addEventListener('click', () => undoChronicleAutoLink(btn.dataset.undoAutoLink));
+        });
+        lucide.createIcons();
+    }
+
+    async function undoChronicleAutoLink(id) {
+        const card = document.querySelector(`[data-auto-linked-card="${CSS.escape(id)}"]`);
+        if (card) card.classList.add('busy');
+        try {
+            const res = await fetch('/api/chronicle/suggestions/' + encodeURIComponent(id) + '/undo-auto-link', { method: 'POST' });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body.detail || `Undo failed (${res.status})`);
+            _chronicleInboxNotice = 'Auto-linked evidence returned to pending review.';
+            await Promise.all([loadChronicleSuggestions(), loadChronicleReportPreview(), refreshTodos()]);
+            if (_expandedProject) loadProjectTasks(_expandedProject);
+        } catch (err) {
+            if (card) {
+                card.classList.remove('busy');
+                const existing = card.querySelector('[data-review-error]');
+                if (existing) existing.textContent = err.message || 'Undo failed';
+                else card.insertAdjacentHTML('beforeend', `<div class="review-card-error" data-review-error>${esc(err.message || 'Undo failed')}</div>`);
+            }
+        }
     }
 }
 
@@ -6159,6 +6241,16 @@ function buildChronicleReportMarkdown(data) {
             lines.push('', 'No linked Chronicle evidence in this window.');
         }
         lines.push('');
+        const autoLinked = chronicle?.autoLinked || [];
+        if (autoLinked.length) {
+            const taskById = new Map((data.tasks || []).map(t => [t.id, t]));
+            lines.push('## Auto-linked evidence');
+            for (const s of autoLinked) {
+                const task = taskById.get(s.linked_todo_id);
+                lines.push(`- ${task?.title ? _cleanMd(task.title) : _cleanMd(s.linked_todo_id || 'Linked task')}: ${_cleanMd(s.decision_reason || 'auto-linked evidence')}`);
+            }
+            lines.push('');
+        }
     }
     if (includePending) {
         lines.push('## Needs review');
@@ -7014,6 +7106,7 @@ function fmtRelativeDate(dateStr) {
     } catch { return dateStr; }
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 async function toggleTodo(id, c) {
     // Trigger bounce animation on the checkbox
     const checkEl = document.querySelector(`.todo-item[data-id="${id}"] .todo-check`);

@@ -27,6 +27,7 @@ const {
   chronicleLinkCommand,
   chronicleReconcileCommand,
   chronicleSuggestionsCommand,
+  chronicleUndoCommand,
 } = await import('../src/commands/chronicle.js');
 const { trackCommand, untrackCommand } = await import('../src/commands/track.js');
 const { installCommand } = await import('../src/commands/install.js');
@@ -197,6 +198,13 @@ chronicle
   .argument('<suggestion-id>', 'Suggestion id')
   .option('--json', 'Output as JSON')
   .action(chronicleIgnoreCommand);
+
+chronicle
+  .command('undo')
+  .description('Return an auto-linked Chronicle suggestion to pending review')
+  .argument('<suggestion-id>', 'Suggestion id')
+  .option('--json', 'Output as JSON')
+  .action(chronicleUndoCommand);
 
 program
   .command('track')

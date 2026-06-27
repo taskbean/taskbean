@@ -96,6 +96,15 @@ function parseJsonArray(value) {
   }
 }
 
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(value || 'null');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function serializeEvidence(row) {
   return {
     id: row.id,
@@ -128,6 +137,9 @@ function serializeSuggestion(row) {
     confidence: Number(row.confidence),
     state: row.state,
     linked_todo_id: row.linked_todo_id,
+    auto_linked: Boolean(row.auto_linked),
+    decision_reason: row.decision_reason,
+    decision_details: parseJsonObject(row.decision_details),
     occurred_at: row.occurred_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -189,8 +201,45 @@ function collectChronicleReport(since, until, tasks, scope = {}) {
     pendingParams
   );
 
+  const autoLinkedConditions = [
+    's.state = \'linked\'',
+    's.auto_linked = 1',
+    'date(COALESCE(s.decided_at, s.occurred_at, s.created_at)) BETWEEN ? AND ?',
+  ];
+  const autoLinkedParams = [since, until];
+  if (scope.project) {
+    autoLinkedConditions.push(`(
+      s.linked_todo_id IN (SELECT id FROM todos WHERE project = ? OR project_path = ?)
+      OR EXISTS (
+        SELECT 1 FROM task_evidence te
+         WHERE te.suggestion_id = s.id
+           AND te.project_path = ?
+      )
+    )`);
+    autoLinkedParams.push(scope.project.name, scope.project.path, scope.project.path);
+  } else {
+    autoLinkedConditions.push(`(
+      (s.suggested_project IS NULL
+       OR s.suggested_project NOT IN (SELECT name FROM projects WHERE hidden = 1))
+      AND NOT EXISTS (
+        SELECT 1 FROM task_evidence te
+        JOIN projects p ON p.path = te.project_path
+        WHERE te.suggestion_id = s.id
+          AND p.hidden = 1
+      )
+    )`);
+  }
+
+  const autoLinkedRows = allRows(
+    `SELECT s.* FROM reconciliation_suggestions s
+      WHERE ${autoLinkedConditions.join(' AND ')}
+      ORDER BY COALESCE(s.decided_at, s.occurred_at, s.created_at), s.id`,
+    autoLinkedParams
+  );
+
   const evidence = evidenceRows.map(serializeEvidence);
   const pendingSuggestions = pendingRows.map(serializeSuggestion);
+  const autoLinked = autoLinkedRows.map(serializeSuggestion);
 
   return {
     available,
@@ -198,8 +247,10 @@ function collectChronicleReport(since, until, tasks, scope = {}) {
     summary: {
       linkedEvidence: evidence.length,
       pendingSuggestions: pendingSuggestions.length,
+      autoLinked: autoLinked.length,
     },
     evidence,
+    autoLinked,
     pendingSuggestions,
     limitations: capabilities.limitations,
   };
@@ -233,6 +284,15 @@ function renderChronicleMd(chronicle, tasksById) {
     md += '\n';
   } else {
     md += 'No linked Chronicle/session evidence for canonical tasks in this period.\n\n';
+  }
+
+  if (chronicle.autoLinked?.length) {
+    md += '## Auto-linked evidence\n\n';
+    for (const suggestion of chronicle.autoLinked) {
+      const task = tasksById.get(suggestion.linked_todo_id);
+      md += `- ${task ? task.title : suggestion.linked_todo_id}: ${suggestion.decision_reason || 'auto-linked evidence'}\n`;
+    }
+    md += '\n';
   }
 
   md += '## Needs review\n\n';
