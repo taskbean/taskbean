@@ -182,6 +182,12 @@ function parseJsonArray(value) {
   }
 }
 
+function basenameAny(value) {
+  const normalized = String(value || '').replace(/[\\/]+$/, '');
+  const parts = normalized.split(/[\\/]/).filter(Boolean);
+  return parts.at(-1) || basename(normalized);
+}
+
 function normalizeToken(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9#]+/g, ' ').trim();
 }
@@ -239,7 +245,7 @@ function taskCandidatesForSuggestion(db, suggestion) {
   }
   if (e.project_path) {
     clauses.push('project = ?');
-    params.push(basename(e.project_path));
+    params.push(basenameAny(e.project_path));
     clauses.push('project = ?');
     params.push(e.project_path);
   }
@@ -397,7 +403,7 @@ function projectNameFor(session) {
     const repo = String(session.repository).split(/[\\/]/).filter(Boolean).pop();
     if (repo) return repo.replace(/\.git$/, '');
   }
-  if (session.cwd) return basename(session.cwd);
+  if (session.cwd) return basenameAny(session.cwd);
   return null;
 }
 
