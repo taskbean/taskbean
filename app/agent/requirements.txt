@@ -39,7 +39,10 @@ wasdk-Microsoft.Windows.ApplicationModel.DynamicDependency.Bootstrap==1.8.260416
 #    types and will fail-fast on shape changes.
 # 3. Manual E2E: send a chat through /api/command and watch /api/telemetry/snapshot
 #    for ai.response + flow + http.request spans.
-agent-framework==1.0.1
+# Use core directly; the agent-framework meta-package pulls in
+# agent-framework-core[all], which drags every optional provider and can make
+# pip backtrack for several minutes during first launch.
+agent-framework-core==1.0.1
 agent-framework-openai==1.0.1
 agent-framework-ag-ui==1.0.0b260409
 

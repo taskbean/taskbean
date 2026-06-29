@@ -428,6 +428,14 @@ class _NormalizingChatClient(OpenAIChatCompletionClient):
         # window and Foundry returns HTTP 500.
         messages = [m for m in messages if not _is_agui_state_context(m)]
 
+        if not stream:
+            # The parent non-streaming path still calls _prepare_options(),
+            # which injects Qwen3's runtime enable_thinking=false payload.
+            # Only the streaming-folding path needs the extra text marker.
+            return super()._inner_get_response(
+                messages=messages, options=options, stream=False, **kwargs
+            )
+
         # Qwen3 thinking-mode suppression: prepend a standalone /no_think
         # system message. The marker only triggers Qwen3's chat-template
         # branch when it's the *entire* content of a system message —
@@ -437,12 +445,10 @@ class _NormalizingChatClient(OpenAIChatCompletionClient):
         # message, which won't trigger the chat-template hook.
         if is_qwen3_model(self.model):
             from agent_framework import Message as _AfMessage
-            messages = [_AfMessage("system", [QWEN3_NO_THINK_PREFIX]), *list(messages)]
-
-        if not stream:
-            return super()._inner_get_response(
-                messages=messages, options=options, stream=False, **kwargs
-            )
+            messages = [
+                _AfMessage("system", [Content.from_text(text=QWEN3_NO_THINK_PREFIX)]),
+                *list(messages),
+            ]
 
         # Streaming requested — fold to non-streaming and synthesize one
         # chunk so the rest of agent-framework sees what it expects.

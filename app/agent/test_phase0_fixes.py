@@ -191,6 +191,78 @@ def test_wrapper_passes_through_non_streaming():
     assert result is sentinel
 
 
+def test_qwen3_extra_body_disables_thinking_runtime_flag():
+    """Qwen3 requests should carry the runtime thinking-mode off switch."""
+    from agent import qwen3_extra_body
+
+    assert qwen3_extra_body("qwen3-coder:latest") == {
+        "chat_template_kwargs": {"enable_thinking": False}
+    }
+    assert qwen3_extra_body("qwen2.5-coder:latest") == {}
+
+
+def test_qwen3_non_streaming_uses_parent_without_no_think_marker():
+    """Non-streaming Qwen3 calls rely on _prepare_options' extra_body hook,
+    not the text-level /no_think marker used by the streaming wrapper."""
+    from agent_framework import Message, Content
+    from agent import _NormalizingChatClient, QWEN3_NO_THINK_PREFIX
+
+    client = _NormalizingChatClient.__new__(_NormalizingChatClient)
+    client.model = "qwen3-coder:latest"
+    sentinel = object()
+    user_msg = Message(role="user", contents=[Content.from_text(text="hi")])
+
+    with patch(
+        "agent_framework_openai._chat_completion_client.RawOpenAIChatCompletionClient._inner_get_response",
+        return_value=sentinel,
+    ) as mock_super:
+        result = client._inner_get_response(messages=[user_msg], options={}, stream=False)
+        _, kwargs = mock_super.call_args
+        forwarded_messages = kwargs["messages"]
+
+    assert result is sentinel
+    assert forwarded_messages == [user_msg]
+    assert all(QWEN3_NO_THINK_PREFIX not in str(m) for m in forwarded_messages)
+
+
+def test_qwen3_streaming_prepends_no_think_content_message():
+    """Streaming Qwen3 requests prepend /no_think as a real Content object."""
+    from agent_framework import Message, Content
+    from agent import _NormalizingChatClient, QWEN3_NO_THINK_PREFIX
+
+    client = _NormalizingChatClient.__new__(_NormalizingChatClient)
+    client.model = "qwen3-coder:latest"
+    captured = {}
+
+    def _capture_options(messages, options):
+        captured["messages"] = messages
+        return {}
+
+    async def _create_completion(**kwargs):
+        return _make_completion(content="ok")
+
+    client._prepare_options = _capture_options
+    client.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=_create_completion))
+    )
+    client._parse_response_update_from_openai = lambda chunk: chunk
+    client._build_response_stream = lambda stream, response_format=None: stream
+
+    user_msg = Message(role="user", contents=[Content.from_text(text="hi")])
+    stream = client._inner_get_response(messages=[user_msg], options={}, stream=True)
+
+    async def _consume():
+        return [item async for item in stream]
+
+    chunks = asyncio.run(_consume())
+
+    no_think_msg = captured["messages"][0]
+    assert chunks
+    assert no_think_msg.role == "system"
+    assert no_think_msg.contents[0].text == QWEN3_NO_THINK_PREFIX
+    assert captured["messages"][1] == user_msg
+
+
 # ── 2. Smoke test unit tests ─────────────────────────────────────────────────
 
 
