@@ -109,7 +109,7 @@ header {
    ═══════════════════════════════════════════════════════════════════ */
 .nav-rail {
   width: 48px; background: var(--surface); border-right: 1px solid var(--border);
-  display: flex; flex-direction: column; flex-shrink: 0; transition: width .25s cubic-bezier(.4,0,.2,1); overflow: hidden; z-index: 100;
+  display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; z-index: 100;
 }
 .nav-rail.expanded { width: 280px; }
 
@@ -409,7 +409,7 @@ header {
 .model-progress-label-text svg { flex-shrink: 0; animation: spin 1s linear infinite; }
 .model-progress-pct { flex-shrink: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
 .model-progress-track { height: 3px; background: var(--surface2); border-radius: 99px; overflow: hidden; }
-.model-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #7dd3fc); border-radius: 99px; width: 0%; transition: width .4s ease; }
+.model-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #7dd3fc); border-radius: 99px; width: 0%; }
 .model-progress-fill.indeterminate { width: 40%; animation: indeterminate-slide 1.4s ease-in-out infinite; }
 @keyframes indeterminate-slide { 0% { transform: translateX(-200%); } 100% { transform: translateX(350%); } }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -471,8 +471,7 @@ header {
 .settings-sidebar {
   width: 172px; flex-shrink: 0; display: flex; flex-direction: column; gap: 1px;
   padding: 8px 6px; border-right: 1px solid var(--border); overflow-y: auto;
-  background: color-mix(in srgb, var(--surface) 85%, transparent);
-  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  background: var(--surface);
 }
 .settings-tab {
   display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px;
@@ -776,7 +775,6 @@ header {
   display: flex; flex-direction: column;
   background: var(--surface);
   flex-shrink: 0; min-height: 0;
-  transition: width .26s cubic-bezier(.4,0,.2,1);
 }
 .right-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 
@@ -867,17 +865,22 @@ header {
 .recurring-active-empty p { font-size: 12px; margin-top: 8px; }
 
 /* ── Projects tab ── */
-.project-list-container { padding: 6px 0; overflow-y: auto; }
-.project-card { padding: 12px 14px; margin: 4px 8px; border-radius: 8px; background: var(--surface2); border: 1px solid transparent; cursor: pointer; transition: background-color .15s, border-color .15s; }
-.project-card:hover { border-color: var(--border); background: var(--surface); }
-.project-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.project-card-name { font-size: 13px; font-weight: 600; flex: 1; }
-.project-card-badge { font-size: 9px; padding: 2px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.project-card-stats { display: flex; gap: 12px; font-size: 10px; color: var(--muted); }
+.project-list-container { padding: 4px 0 10px; overflow-y: auto; }
+.project-card {
+  padding: 10px 12px; margin: 0 8px; border-radius: 6px; background: transparent;
+  border: 1px solid transparent; box-shadow: inset 0 -1px 0 color-mix(in oklch, var(--border) 55%, transparent);
+  cursor: pointer; transition: background-color .15s, border-color .15s, box-shadow .15s;
+}
+.project-card:hover { border-color: color-mix(in oklch, var(--border) 70%, transparent); background: color-mix(in oklch, var(--surface2) 70%, transparent); }
+.project-card.expanded { background: var(--surface2); border-color: var(--border); box-shadow: none; margin-block: 4px; border-radius: 8px; }
+.project-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.project-card-name { font-size: 13px; font-weight: 650; flex: 1; line-height: 1.35; }
+.project-card-badge { font-size: 9px; padding: 2px 7px; border-radius: 99px; background: var(--surface); color: var(--muted); border: 1px solid color-mix(in oklch, var(--border) 65%, transparent); font-weight: 600; }
+.project-card-stats { display: flex; gap: 10px; font-size: 10px; color: color-mix(in oklch, var(--muted) 82%, transparent); font-family: 'DM Mono', monospace; }
 .project-card-stat { display: flex; align-items: center; gap: 3px; }
-.project-card-stat .done-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
-.project-card-stat .pending-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--orange); }
-.project-card-tasks { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.project-card-stat .done-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); opacity: .75; }
+.project-card-stat .pending-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--orange); opacity: .75; }
+.project-card-tasks { margin-top: 8px; padding-top: 8px; border-top: 1px solid color-mix(in oklch, var(--border) 55%, transparent); }
 .project-task-item { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 11px; }
 .project-task-item > span { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 .project-task-item .ptask-check { color: var(--green); }
@@ -949,6 +952,8 @@ header {
 .track-tip-copy:hover { background: var(--surface); color: var(--text); border-color: var(--border); }
 .track-tip-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .track-tip-copy.copied { color: var(--green); }
+.track-tip-source-strip { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 2px; }
+.track-tip-source-strip span { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 10px; }
 .track-tip-more { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
 .track-tip-more summary { cursor: pointer; font-size: 11px; font-weight: 600; color: var(--text); list-style: none; padding: 2px 0; }
 .track-tip-more summary::-webkit-details-marker { display: none; }
@@ -959,16 +964,17 @@ header {
 .track-tip-cmds { margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 10.5px; }
 .track-tip-cmds dt { font-family: 'DM Mono', monospace; color: var(--accent); white-space: nowrap; margin: 0; }
 .track-tip-cmds dd { color: var(--muted); min-width: 0; margin: 0; }
-.track-tip-note { margin-top: 10px; padding: 8px 10px; background: var(--bg); border-left: 2px solid var(--accent); border-radius: 4px; font-size: 10.5px; color: var(--muted); line-height: 1.5; }
+.track-tip-note { margin-top: 10px; padding: 8px 10px; background: color-mix(in oklch, var(--accent) 6%, var(--bg)); border: 1px solid color-mix(in oklch, var(--accent) 24%, var(--border)); border-radius: 6px; font-size: 10.5px; color: var(--muted); line-height: 1.5; }
 .track-tip-note strong { color: var(--text); }
 
 /* ── Usage stats (multi-agent) ── */
-.usage-section { margin: 4px 8px; padding: 14px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border); }
-.usage-section-title { font-size: 11px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 6px; margin-bottom: 10px; text-transform: lowercase; letter-spacing: .2px; }
-.usage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.usage-stat { text-align: center; padding: 8px 4px; border-radius: 6px; background: var(--bg); }
-.usage-stat-value { font-size: 18px; font-weight: 700; font-family: 'DM Mono', monospace; line-height: 1.2; color: var(--text); }
-.usage-stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-top: 2px; }
+.usage-section { margin: 4px 8px 8px; padding: 10px 12px; border-radius: 8px; background: color-mix(in oklch, var(--surface2) 58%, transparent); border: 1px solid color-mix(in oklch, var(--border) 65%, transparent); }
+.usage-section-title { font-size: 11px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-bottom: 8px; text-transform: lowercase; letter-spacing: .2px; }
+.usage-section-title i { color: var(--accent); }
+.usage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; padding-top: 8px; border-top: 1px solid color-mix(in oklch, var(--border) 55%, transparent); }
+.usage-stat { text-align: left; padding: 3px 0; border-radius: 0; background: transparent; }
+.usage-stat-value { font-size: 14px; font-weight: 700; font-family: 'DM Mono', monospace; line-height: 1.2; color: var(--text); font-variant-numeric: tabular-nums; }
+.usage-stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: .65px; color: var(--muted); margin-top: 1px; }
 .usage-stat.accent .usage-stat-value { color: var(--accent); }
 .usage-stat.green .usage-stat-value { color: var(--green); }
 .usage-stat.orange .usage-stat-value { color: var(--orange); }
@@ -1011,8 +1017,8 @@ header {
 .usage-empty-link { color: var(--accent); cursor: pointer; background: none; border: none; font: inherit; padding: 0; }
 .usage-empty-link:hover { text-decoration: underline; }
 .usage-seed-hint {
-  margin-top: 8px; padding: 8px 10px; background: var(--bg); border-left: 2px solid var(--accent);
-  border-radius: 4px; font-size: 10px; color: var(--muted); line-height: 1.5;
+  margin-top: 8px; padding: 8px 10px; background: color-mix(in oklch, var(--accent) 6%, var(--bg));
+  border: 1px solid color-mix(in oklch, var(--accent) 24%, var(--border)); border-radius: 6px; font-size: 10px; color: var(--muted); line-height: 1.5;
 }
 .usage-panel-note {
   margin-top: 6px; padding: 6px 10px; background: var(--surface); border: 1px dashed var(--border);
@@ -1020,7 +1026,7 @@ header {
 }
 .usage-panel-error {
   margin: 4px 0; padding: 10px 12px; background: var(--red-soft, var(--surface));
-  border-left: 2px solid var(--red); border-radius: 4px; font-size: 11px; color: var(--text); line-height: 1.5;
+  border: 1px solid color-mix(in oklch, var(--red) 38%, var(--border)); border-radius: 6px; font-size: 11px; color: var(--text); line-height: 1.5;
 }
 .usage-panel-error .err-hint { color: var(--muted); font-size: 10px; display: block; margin-top: 3px; font-family: 'DM Mono', monospace; }
 /* Agent badge on project task rows */
@@ -1223,21 +1229,23 @@ header {
 
 /* Metrics strip — horizontal flowing bar, not grid */
 .task-detail-metrics {
-  display: flex; gap: 1px; margin-bottom: 20px; border-radius: 10px; overflow: hidden;
-  border: 1px solid var(--border); background: var(--border);
+  display: flex; gap: 14px; margin-bottom: 20px; padding: 9px 0;
+  border-top: 1px solid color-mix(in oklch, var(--border) 65%, transparent);
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 65%, transparent);
 }
 .task-detail-metric {
-  flex: 1; text-align: center; padding: 14px 8px 12px; background: var(--surface2);
-  position: relative; transition: background .15s;
+  flex: 0 1 auto; min-width: 72px; text-align: left; padding: 0 14px 0 0; background: transparent;
+  position: relative; border-right: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
 }
-.task-detail-metric:hover { background: var(--surface); }
+.task-detail-metric:last-child { border-right: 0; padding-right: 0; }
+.task-detail-metric:hover { background: transparent; }
 .task-detail-metric-value {
-  font-size: 22px; font-weight: 800; font-family: 'DM Mono', monospace; line-height: 1; color: var(--text);
+  font-size: 16px; font-weight: 750; font-family: 'DM Mono', monospace; line-height: 1.1; color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 .task-detail-metric-label {
-  font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
-  margin-top: 5px; font-weight: 500;
+  font-size: 9px; text-transform: uppercase; letter-spacing: .65px; color: var(--muted);
+  margin-top: 2px; font-weight: 500;
 }
 .task-detail-metric.accent .task-detail-metric-value { color: var(--accent); }
 .task-detail-metric.green .task-detail-metric-value { color: var(--green); }
@@ -1362,7 +1370,7 @@ header {
   width: 24px; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden;
 }
 .task-detail-tool-chip .tool-bar-fill {
-  height: 100%; border-radius: 2px; background: var(--accent); transition: width .4s ease;
+  height: 100%; border-radius: 2px; background: var(--accent);
 }
 
 /* Refs */
@@ -1515,6 +1523,9 @@ header {
   & .reminder-badge { color: var(--orange); display: flex; align-items: center; gap: 2px; }
   & .source-badge { color: var(--purple); display: flex; align-items: center; gap: 2px; }
   & .overdue-badge { color: var(--red); font-weight: 600; }
+  & .status-badge { display: inline-flex; align-items: center; gap: 2px; font-weight: 600; }
+  & .status-badge.blocked { color: var(--orange); }
+  & .status-badge.done { color: var(--green); }
 }
 .todo-delete {
   opacity: 0; color: var(--muted); cursor: pointer; padding: 2px; display: flex; align-items: center;
@@ -1536,6 +1547,14 @@ header {
 .todo-item.expanded .todo-detail { display: block; }
 .todo-detail-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .todo-detail-row label { color: var(--muted); min-width: 60px; font-size: 10px; }
+.todo-detail-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; padding-top: 8px; border-top: 1px solid var(--border); }
+.todo-action-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font: inherit; font-size: 10px; cursor: pointer; transition: background-color .15s, border-color .15s, color .15s; }
+.todo-action-btn:hover { background: var(--surface2); border-color: var(--muted); color: var(--text); }
+.todo-action-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700; }
+.todo-action-btn.primary:hover { background: color-mix(in oklch, var(--accent) 88%, var(--text)); border-color: var(--accent); color: var(--bg); }
+.todo-action-btn.warn { color: var(--orange); border-color: color-mix(in oklch, var(--orange) 32%, var(--border)); background: color-mix(in oklch, var(--orange) 6%, var(--surface)); }
+.todo-action-btn.danger { color: var(--red); border-color: color-mix(in oklch, var(--red) 30%, var(--border)); background: transparent; margin-left: auto; }
+.todo-action-btn.danger:hover { background: var(--red-soft); border-color: var(--red); }
 .todo-detail-notes { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 11px; color: var(--text); min-height: 40px; max-height: 120px; overflow-y: auto; line-height: 1.5; white-space: pre-wrap; word-break: break-word; cursor: pointer; }
 .todo-detail-notes:empty::before { content: 'Click to add notes...'; color: var(--muted); font-style: italic; }
 .todo-detail-notes-edit { background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 6px 8px; font-size: 11px; color: var(--text); width: 100%; min-height: 60px; max-height: 150px; resize: vertical; font-family: 'Cascadia Code', 'Fira Code', monospace; line-height: 1.5; }
@@ -1558,6 +1577,22 @@ header {
 
 .empty-state { text-align: center; color: var(--muted); padding: 30px 16px; }
 .empty-state p { font-size: 12px; margin-top: 8px; }
+.empty-state.first-run-empty {
+  text-align: left; margin: 8px; padding: 14px; border-radius: 10px;
+  border: 1px dashed color-mix(in oklch, var(--accent) 28%, var(--border));
+  background: color-mix(in oklch, var(--accent) 5%, var(--surface2));
+}
+.first-run-head { display: flex; align-items: flex-start; gap: 9px; color: var(--text); }
+.first-run-head i { color: var(--accent); flex-shrink: 0; margin-top: 1px; }
+.first-run-title { font-size: 13px; font-weight: 700; line-height: 1.35; }
+.first-run-copy { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.first-run-sources { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+.first-run-source { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 10px; }
+.first-run-next { margin-top: 10px; padding-top: 9px; border-top: 1px solid color-mix(in oklch, var(--border) 65%, transparent); color: var(--text); font-size: 11px; line-height: 1.45; }
+.first-run-next code { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--accent); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 1px 5px; }
+.settled-empty strong { color: var(--text); }
+.settled-empty span { font-size: 10px; color: var(--muted); }
+.settled-empty code { font-family: 'DM Mono', monospace; color: var(--accent); }
 /* Hide empty states when list has real items (CSS :has()) */
 .todo-list-container:has(.todo-item) .empty-state { display: none; }
 .recurring-active-list:has(.template-card) .recurring-active-empty { display: none; }
@@ -1573,7 +1608,7 @@ header {
 .template-info { flex: 1; }
 .template-info .name { font-size: 11px; font-weight: 600; }
 .template-info .desc { font-size: 10px; color: var(--muted); }
-.template-toggle { width: 32px; height: 18px; border-radius: 9px; border: none; cursor: pointer; position: relative; transition: background .2s; flex-shrink: 0; }
+.template-toggle { width: 32px; height: 18px; border-radius: 999px; border: none; cursor: pointer; position: relative; transition: background .2s; flex-shrink: 0; }
 .template-toggle.off { background: var(--border); }
 .template-toggle.on { background: var(--green); }
 .template-toggle::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #fff; top: 2px; transition: left .2s; }
@@ -1590,8 +1625,8 @@ header {
   & .msg-content { flex: 1; min-width: 0; }
   &.user { align-self: flex-end; background: var(--user-bubble); border-bottom-right-radius: 3px; }
   &.ai { align-self: flex-start; background: var(--ai-bubble); border-bottom-left-radius: 3px; position: relative; }
-  &.tool { align-self: flex-start; background: var(--surface2); border-left: 3px solid var(--accent); font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 11px; }
-  &.error { align-self: flex-start; background: var(--red-soft); border-left: 3px solid var(--red); color: var(--red); }
+  &.tool { align-self: flex-start; background: color-mix(in oklch, var(--accent) 5%, var(--surface2)); border: 1px solid color-mix(in oklch, var(--accent) 24%, var(--border)); font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 11px; }
+  &.error { align-self: flex-start; background: var(--red-soft); border: 1px solid color-mix(in oklch, var(--red) 35%, var(--border)); color: var(--red); }
   &.info { align-self: flex-start; color: var(--muted); background: transparent; max-width: 100%; font-size: 11px; }
 }
 .chat-label { font-weight: 600; margin-bottom: 2px; font-size: 11px; }
@@ -1617,8 +1652,7 @@ header {
   row-gap: 4px;
   padding: 11px 12px 11px 13px;
   background: var(--orange-soft);
-  border: 1px solid color-mix(in oklch, var(--orange) 22%, transparent);
-  border-left: 3px solid var(--orange);
+  border: 1px solid color-mix(in oklch, var(--orange) 34%, var(--border));
   border-radius: 10px;
   color: var(--text);
   /* faint inner highlight gives the warm "lit from inside" coffee feel */
@@ -1680,8 +1714,8 @@ header {
   margin-top: 4px;
   padding: 8px 10px;
   background: color-mix(in oklch, var(--bg) 60%, transparent);
-  border-left: 2px solid color-mix(in oklch, var(--orange) 40%, transparent);
-  border-radius: 0 6px 6px 0;
+  border: 1px solid color-mix(in oklch, var(--orange) 22%, var(--border));
+  border-radius: 6px;
   font-family: 'Cascadia Code', 'Fira Code', monospace;
   font-size: 11px; line-height: 1.45;
   color: var(--muted);
@@ -1713,11 +1747,10 @@ header {
 .composer-icon-btn { width: 30px; height: 30px; border-radius: 8px; border: none; background: transparent; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; position: relative; }
 .composer-icon-btn svg { width: 16px; height: 16px; }
 .composer-icon-btn:hover { background: var(--surface2); color: var(--text); }
-.composer-icon-btn.recording { background: var(--red); color: #fff; animation: pulse 1s infinite; border-radius: 50%; }
+.composer-icon-btn.recording { background: var(--red); color: #fff; outline: 2px solid color-mix(in oklch, var(--red) 45%, transparent); outline-offset: 1px; border-radius: 50%; }
 @media (prefers-reduced-motion: reduce) {
   .composer-icon-btn.recording { animation: none; outline: 2px solid var(--red); outline-offset: 1px; }
 }
-@keyframes pulse { 50% { opacity: .7; } }
 .composer-model-pill { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 11px; font-family: inherit; transition: all .15s; white-space: nowrap; max-width: 240px; }
 .composer-model-pill:hover { background: var(--surface2); color: var(--text); border-color: var(--text); }
 .composer-model-pill #composerModelLabel { overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
@@ -1726,24 +1759,19 @@ header {
 .composer-model-device { font-size: 9px; letter-spacing: .02em; color: var(--muted); background: var(--surface2); padding: 1px 5px; border-radius: 4px; flex-shrink: 0; text-transform: uppercase; }
 .composer-model-pill[data-status] .composer-model-device { display: none; }
 /* Loading / error states surfaced right where the user picked the model.
-   Loading: warm pulsing dot + soft accent ring around the pill.
+   Loading: warm tinted pill + status dot without decorative effects.
    Error:   muted red tint with an alert glyph; click reopens picker. */
 .composer-model-status { display: none; flex-shrink: 0; width: 8px; height: 8px; align-items: center; justify-content: center; }
 .composer-model-status::before { content: ''; display: block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.composer-model-pill[data-status="loading"] { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 55%, transparent); background: color-mix(in oklch, var(--accent) 8%, var(--surface)); box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 40%, transparent); animation: composerPillPulse 1.6s ease-in-out infinite; }
+.composer-model-pill[data-status="loading"] { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 55%, transparent); background: color-mix(in oklch, var(--accent) 8%, var(--surface)); }
 .composer-model-pill[data-status="loading"]:hover { background: color-mix(in oklch, var(--accent) 14%, var(--surface)); border-color: var(--accent); }
 .composer-model-pill[data-status="loading"] .composer-model-status { display: inline-flex; animation: composerDotBlink 1s ease-in-out infinite; }
 .composer-model-pill[data-status="error"] { color: var(--red); border-color: color-mix(in oklch, var(--red) 50%, transparent); background: color-mix(in oklch, var(--red) 9%, var(--surface)); }
 .composer-model-pill[data-status="error"]:hover { background: color-mix(in oklch, var(--red) 14%, var(--surface)); }
 .composer-model-pill[data-status="error"] .composer-model-status { display: inline-flex; }
-.composer-model-pill[data-status="error"] .composer-model-status::before { content: ''; width: 0; height: 0; border-radius: 0; background: transparent; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 7px solid currentColor; }
-@keyframes composerPillPulse {
-  0%,100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 35%, transparent); }
-  50%     { box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent) 0%,  transparent); }
-}
+.composer-model-pill[data-status="error"] .composer-model-status::before { content: '!'; width: 12px; height: 12px; border-radius: 50%; background: var(--red); color: var(--bg); font-size: 9px; font-weight: 800; line-height: 12px; text-align: center; }
 @keyframes composerDotBlink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) {
-  .composer-model-pill[data-status="loading"] { animation: none; }
   .composer-model-pill[data-status="loading"] .composer-model-status { animation: none; }
 }
 .textarea-wrap { position: relative; }
@@ -1756,10 +1784,10 @@ header {
    recording state. Speaks the same coffee-house dialect as the composer pills. */
 .composer-ribbon { display: none; align-items: center; gap: 10px; padding: 6px 12px; background: var(--surface2); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); animation: composerRibbonIn 180ms cubic-bezier(.2,.8,.2,1); }
 .composer-ribbon.open { display: flex; }
-.composer-ribbon-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 0 color-mix(in oklch, var(--red) 60%, transparent); animation: composerRibbonPulse 1.4s ease-in-out infinite; flex-shrink: 0; }
+.composer-ribbon-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
 .composer-ribbon-time { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; color: var(--text); min-width: 28px; }
 .composer-ribbon-wave { display: flex; align-items: center; gap: 2px; height: 14px; flex: 1 1 auto; min-width: 60px; max-width: 320px; }
-.composer-ribbon-wave .bar { width: 2px; background: var(--accent); border-radius: 1px; height: 2px; transition: height 60ms linear; }
+.composer-ribbon-wave .bar { width: 2px; background: var(--accent); border-radius: 1px; height: 2px; }
 .composer-ribbon-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); white-space: nowrap; font-size: 10px; }
 .composer-ribbon-chip.live { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 50%, transparent); background: color-mix(in oklch, var(--accent) 8%, var(--surface)); }
 .composer-ribbon-chip .device { background: var(--surface2); color: var(--muted); padding: 1px 5px; border-radius: 4px; font-size: 9px; letter-spacing: .02em; text-transform: uppercase; }
@@ -1767,10 +1795,8 @@ header {
 .composer-ribbon-cancel:hover { background: color-mix(in oklch, var(--red) 14%, var(--surface)); color: var(--red); }
 .composer-ribbon-cancel svg { width: 13px; height: 13px; }
 @keyframes composerRibbonIn { from { transform: translateY(4px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-@keyframes composerRibbonPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--red) 60%, transparent); } 50% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--red) 0%, transparent); } }
 @media (prefers-reduced-motion: reduce) {
   .composer-ribbon { animation: none; }
-  .composer-ribbon-dot { animation: none; box-shadow: none; }
   .composer-ribbon-wave .bar { transition: none; height: 6px !important; }
 }
 
@@ -1779,7 +1805,7 @@ header {
    error (red). Action button for the warn case ("Restart server" hint).
    Dismissible via the close button; remembers dismissal in sessionStorage so
    a hard refresh doesn't replay it within the same tab session. */
-.warmup-card { position: relative; display: grid; grid-template-columns: 22px 1fr auto; column-gap: 10px; row-gap: 4px; align-items: start; padding: 10px 32px 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); font-size: 11px; max-width: 100%; align-self: stretch; }
+.warmup-card { --warmup-tone: var(--accent); position: relative; display: grid; grid-template-columns: 22px 1fr auto; column-gap: 10px; row-gap: 4px; align-items: start; padding: 10px 32px 10px 12px; border-radius: 10px; background: color-mix(in oklch, var(--warmup-tone) 5%, var(--surface)); border: 1px solid color-mix(in oklch, var(--warmup-tone) 34%, var(--border)); font-size: 11px; max-width: 100%; align-self: stretch; }
 .warmup-card .icon { color: var(--accent); display: flex; align-items: center; justify-content: center; height: 16px; }
 .warmup-card .icon svg { width: 14px; height: 14px; }
 .warmup-card .body { color: var(--text); line-height: 1.45; }
@@ -1787,7 +1813,7 @@ header {
 .warmup-card .body .hint { color: var(--muted); margin-top: 2px; }
 .warmup-card .pct { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 10px; align-self: center; }
 .warmup-card .progress { grid-column: 1 / -1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; margin-top: 4px; }
-.warmup-card .progress > i { display: block; height: 100%; width: 0%; background: var(--accent); border-radius: 2px; transition: width 200ms linear; }
+.warmup-card .progress > i { display: block; height: 100%; width: 0%; background: var(--accent); border-radius: 2px; }
 .warmup-card .actions { grid-column: 2 / -1; display: flex; gap: 6px; margin-top: 4px; }
 .warmup-card .action-btn { font-family: inherit; font-size: 10px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; transition: all .15s; }
 .warmup-card .action-btn:hover { background: var(--accent); border-color: var(--accent); color: var(--bg); }
@@ -1799,13 +1825,13 @@ header {
 
 /* Severity variants — coffee-warm gradient from accent (loading) to orange
    (warn: stale server, recoverable) to red (error: real failure). */
-.warmup-card[data-state="warn"]    { border-left-color: var(--orange); background: color-mix(in oklch, var(--orange) 5%, var(--surface)); }
+.warmup-card[data-state="warn"]    { --warmup-tone: var(--orange); }
 .warmup-card[data-state="warn"]    .icon { color: var(--orange); }
 .warmup-card[data-state="warn"]    .progress { display: none; }
-.warmup-card[data-state="error"]   { border-left-color: var(--red); background: color-mix(in oklch, var(--red) 5%, var(--surface)); }
+.warmup-card[data-state="error"]   { --warmup-tone: var(--red); }
 .warmup-card[data-state="error"]   .icon { color: var(--red); }
 .warmup-card[data-state="error"]   .progress { display: none; }
-.warmup-card[data-state="success"] { border-left-color: var(--green); background: color-mix(in oklch, var(--green) 5%, var(--surface)); }
+.warmup-card[data-state="success"] { --warmup-tone: var(--green); }
 .warmup-card[data-state="success"] .icon { color: var(--green); }
 .warmup-card[data-state="success"] .progress > i { background: var(--green); }
 .warmup-card[data-state="retrying"] .icon svg { animation: warmupSpin 1.2s linear infinite; }
@@ -1837,7 +1863,7 @@ header {
 .mic-popover:popover-open, .mic-popover.open { display: block; }
 .mic-popover-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px 8px; }
 .mic-volume-bar { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
-.mic-volume-fill { height: 100%; background: var(--green); border-radius: 2px; width: 0%; transition: width .08s; }
+.mic-volume-fill { height: 100%; background: var(--green); border-radius: 2px; width: 0%; }
 .mic-volume-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
 .mic-device-list { max-height: 180px; overflow-y: auto; }
 .mic-device-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; font-size: 12px; cursor: pointer; transition: background .1s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2096,14 +2122,12 @@ header {
   border-left: 1px solid var(--border);
   display: flex; flex-direction: column;
   background: var(--surface);
-  transition: width .22s ease;
 }
 .nerd-panel.open { width: 400px; min-width: 320px; max-width: 600px; resize: horizontal; overflow: auto; }
 
 .nerd-header {
   padding: 8px 12px; height: 44px;
-  background: color-mix(in srgb, var(--surface2) 85%, transparent);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  background: var(--surface2);
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
   flex-shrink: 0; gap: 6px;
@@ -2210,8 +2234,8 @@ header {
   column-gap: 8px; row-gap: 2px;
   padding: 7px 9px;
   background: var(--surface2);
-  border-left: 2px solid var(--orange);
-  border-radius: 0 6px 6px 0;
+  border: 1px solid color-mix(in oklch, var(--orange) 28%, var(--border));
+  border-radius: 6px;
   font-size: 11px;
   cursor: pointer;
   transition: background .12s;
@@ -2390,7 +2414,7 @@ header {
 }
 .trace-bar {
   position: absolute; top: 1px; height: 12px; border-radius: 2px;
-  min-width: 2px; transition: width 0.2s ease;
+  min-width: 2px;
 }
 .trace-span-duration {
   text-align: right; color: var(--muted);
@@ -2547,7 +2571,7 @@ header {
 .chat-msg.nudge {
   align-self: flex-start; background: var(--ai-bubble);
   border-bottom-left-radius: 3px;
-  border-left: 2px solid var(--accent);
+  border: 1px solid color-mix(in oklch, var(--accent) 24%, var(--border));
   animation: nudge-in .4s ease;
 }
 @keyframes nudge-in {
@@ -2689,13 +2713,13 @@ header {
 .ai-typing { align-self: flex-start; padding: 10px 16px; display: flex; gap: 4px; }
 .ai-typing .dot {
   width: 7px; height: 7px; border-radius: 50%; background: var(--muted);
-  animation: typing-bounce 1.4s ease-in-out infinite;
+  animation: typing-dot-fade 1.4s ease-in-out infinite;
 }
 .ai-typing .dot:nth-child(2) { animation-delay: 0.2s; }
 .ai-typing .dot:nth-child(3) { animation-delay: 0.4s; }
-@keyframes typing-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-  30% { transform: translateY(-6px); opacity: 1; }
+@keyframes typing-dot-fade {
+  0%, 60%, 100% { opacity: 0.4; }
+  30% { opacity: 1; }
 }
 
 /* AI CHAT UX — message action buttons (hover-revealed) */
@@ -2723,41 +2747,16 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
-/* Todo checkbox bounce */
-@keyframes check-bounce {
-  0% { transform: scale(1); }
-  40% { transform: scale(1.25); }
-  100% { transform: scale(1); }
+/* Todo checkbox confirmation */
+@keyframes check-confirm {
+  from { opacity: .7; }
+  to { opacity: 1; }
 }
-.todo-check.just-checked { animation: check-bounce 0.3s ease; }
+.todo-check.just-checked { animation: check-confirm 0.18s ease-out; }
 
-/* Send button glow when active */
-.send-btn:not(:disabled) {
-  box-shadow: 0 0 0 0 var(--accent);
-  animation: send-glow 2s ease-in-out infinite;
-}
-@keyframes send-glow {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 30%, transparent); }
-  50% { box-shadow: 0 0 8px 2px color-mix(in oklch, var(--accent) 20%, transparent); }
-}
-
-/* Glassmorphism extension */
+/* Fixed headers use opaque coffee surfaces instead of decorative blur. */
 .model-modal-header, .settings-modal-header, .settings-sidebar, .status-bar {
-  background: color-mix(in srgb, var(--surface) 85%, transparent);
-  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-}
-
-/* Scroll-driven chat animations */
-@supports (animation-timeline: view()) {
-  .chat-msg {
-    animation: chat-enter linear both;
-    animation-timeline: view();
-    animation-range: entry 0% entry 100%;
-  }
-  @keyframes chat-enter {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
+  background: var(--surface);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -2866,7 +2865,7 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
         <button aria-label="Copy command" onclick="copyOverlayCmd(this)"><i data-lucide="clipboard"></i></button>
       </div>
       <div class="cmd-hint" style="font-size:10px;opacity:.75">
-        check launch log: <code>%TEMP%\taskbean-launch.err</code>
+        check launch log: <code>%TEMP%\taskbean-launch.log</code>
       </div>
       <div class="auto-retry-status" id="autoRetryStatus"><span class="auto-retry-dot"></span> Auto-retrying every 3&nbsp;s</div>
     </div>
@@ -2898,8 +2897,8 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
       <div class="todo-list-container">
       <div id="todoList">
         <div class="empty-state">
-          <i data-lucide="coffee" class="icon-xl" style="color:var(--accent)"></i>
-          <p>Ahh, time for a cup of coffee. ☕</p>
+          <i data-lucide="loader" class="icon-xl spin" style="color:var(--accent)"></i>
+          <p>Loading local ledger...</p>
         </div>
       </div>
       </div>
@@ -2923,7 +2922,13 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
           <i data-lucide="chevron-down" class="icon-sm track-tip-chevron" aria-hidden="true"></i>
         </button>
         <div class="track-tip-body" id="trackTipBody" role="region">
-          <p>Run <code>bean&nbsp;track</code> inside any project folder. The agent skill installs there, and new tasks show up here automatically.</p>
+          <p>Taskbean is a local ledger: tasks stay on this machine, then become report-ready receipts with source and status.</p>
+          <div class="track-tip-source-strip" role="list" aria-label="What can create tasks">
+            <span role="listitem"><i data-lucide="bot" class="icon-sm"></i> agent skill</span>
+            <span role="listitem"><i data-lucide="terminal" class="icon-sm"></i> CLI</span>
+            <span role="listitem"><i data-lucide="plus-circle" class="icon-sm"></i> manual</span>
+          </div>
+          <p>Safest setup: run <code>bean&nbsp;track</code> inside a project folder. The agent skill installs there, and new tasks show up here automatically.</p>
 
           <span class="track-tip-step-label">Windows (PowerShell)</span>
           <div class="track-tip-cmd"><span class="track-tip-prompt">PS&gt; </span>cd C:\Users\you\my-project
@@ -3836,7 +3841,8 @@ const STORAGE_KEYS = {
     todos: 'taskbean-cached-todos',
     templates: 'taskbean-cached-templates',
     reminderDedupe: 'taskbean-reminder-dedupe',
-    recurringDedupe: 'taskbean-recurring-dedupe'
+    recurringDedupe: 'taskbean-recurring-dedupe',
+    todoHistory: 'taskbean-has-ever-had-todos'
 };
 
 // Migrate legacy "todo-buddy-*" localStorage keys to "taskbean-*"
@@ -4126,6 +4132,22 @@ function writeCachedJson(key, value) {
     try {
         localStorage.setItem(key, JSON.stringify(value));
     } catch {}
+}
+
+function rememberTodoHistory(todos = localTodos) {
+    if (Array.isArray(todos) && todos.length > 0) {
+        try { localStorage.setItem(STORAGE_KEYS.todoHistory, 'true'); } catch {}
+    }
+}
+
+function hasTodoHistory() {
+    try { return localStorage.getItem(STORAGE_KEYS.todoHistory) === 'true'; }
+    catch { return false; }
+}
+
+function writeCachedTodos(todos) {
+    writeCachedJson(STORAGE_KEYS.todos, todos);
+    rememberTodoHistory(todos);
 }
 
 function setReachability(ok) {
@@ -5401,17 +5423,45 @@ async function refreshTodos() {
             localTodos = readCachedJson(STORAGE_KEYS.todos, []);
         } else {
             localTodos = await res.json();
-            writeCachedJson(STORAGE_KEYS.todos, localTodos);
+            writeCachedTodos(localTodos);
         }
     } catch {
         localTodos = readCachedJson(STORAGE_KEYS.todos, []);
     }
+    rememberTodoHistory(localTodos);
     renderTodos();
     // Update project count badge — prefer the authoritative /api/projects cache,
     // fall back to counting unique project names in local todos
     const projCount = _projectsCache.length || new Set(localTodos.filter(t => t.project).map(t => t.project)).size;
     document.getElementById('projectCount').textContent = projCount || '0';
     await processReminderNotifications();
+}
+
+function renderEmptyTodoState() {
+    if (hasTodoHistory()) {
+        return `
+        <div class="empty-state settled-empty">
+          <i data-lucide="check-circle" class="icon-xl" style="color:var(--green)" aria-hidden="true"></i>
+          <p><strong>Ledger is clear.</strong><br>No tasks are stored right now.<br><span>Press + or run <code>bean track</code> when new work starts.</span></p>
+        </div>`;
+    }
+
+    return `
+        <div class="empty-state first-run-empty">
+          <div class="first-run-head">
+            <i data-lucide="inbox" class="icon-lg" aria-hidden="true"></i>
+            <div>
+              <div class="first-run-title">Your local work ledger is empty.</div>
+              <p class="first-run-copy">Tasks live on this machine and can come from agent sessions, the CLI, or the manual + button.</p>
+            </div>
+          </div>
+          <div class="first-run-sources" role="list" aria-label="Task sources">
+            <span class="first-run-source" role="listitem"><i data-lucide="bot" class="icon-sm"></i> agents</span>
+            <span class="first-run-source" role="listitem"><i data-lucide="terminal" class="icon-sm"></i> CLI</span>
+            <span class="first-run-source" role="listitem"><i data-lucide="plus-circle" class="icon-sm"></i> manual</span>
+          </div>
+          <div class="first-run-next">Safest first move: press <strong>+</strong> to add one task, or run <code>bean track</code> in a repo so future agent work appears here.</div>
+        </div>`;
 }
 
 function renderTodos() {
@@ -5421,7 +5471,7 @@ function renderTodos() {
     const completed = localTodos.filter(t => t.completed).length;
     document.getElementById('todoCount').textContent = pending > 0 ? `${pending}` : `${localTodos.length}`;
     if (localTodos.length === 0) {
-        el.innerHTML = '<div class="empty-state"><i data-lucide="coffee" class="icon-xl" style="color:var(--accent)"></i><p>Ahh, time for a cup of coffee. ☕</p></div>';
+        el.innerHTML = renderEmptyTodoState();
         lucide.createIcons(); if (container) container.classList.remove('has-more'); return;
     }
     const visible = _showCompletedTodos ? localTodos : localTodos.filter(t => !t.completed);
@@ -5433,10 +5483,22 @@ function renderTodos() {
     const now = new Date();
     el.innerHTML = sorted.map(t => {
         const isOverdue = !t.completed && t.dueDate && new Date(t.dueDate + (t.dueTime ? 'T' + t.dueTime : 'T23:59:59')) < now;
+        const status = t.completed ? 'done' : (t.status || 'pending');
+        const isBlocked = status === 'blocked';
+        const primaryAction = t.completed
+            ? { label: 'Reopen', icon: 'rotate-ccw', status: 'pending', completed: false, title: 'Move this task back to pending' }
+            : isBlocked
+                ? { label: 'Resume', icon: 'play', status: 'pending', completed: false, title: 'Move this task back to pending' }
+                : { label: 'Done', icon: 'check-circle', status: 'done', completed: true, title: 'Mark this task complete' };
+        const statusBadge = isBlocked
+            ? `<span class="status-badge blocked"><i data-lucide="pause-circle" class="icon-sm"></i> blocked</span>`
+            : t.completed
+                ? `<span class="status-badge done"><i data-lucide="check-circle" class="icon-sm"></i> done</span>`
+                : '';
         const tagsHtml = (t.tags || []).map(tag => `<span class="tag-pill">${esc(tag)}</span>`).join('');
         const priorityDot = t.priority && t.priority !== 'none' ? `<div class="priority-dot ${t.priority}"></div>` : '';
         return `
-      <div class="todo-item ${t.completed ? 'completed' : ''} ${_expandedTodoId === t.id ? 'expanded' : ''}" data-id="${t.id}" tabindex="0" onkeydown="if(event.key==='Enter'){toggleTodoExpand('${t.id}')}">
+      <div class="todo-item ${t.completed ? 'completed' : ''} ${isBlocked ? 'blocked' : ''} ${_expandedTodoId === t.id ? 'expanded' : ''}" data-id="${t.id}" tabindex="0" onkeydown="if(event.key==='Enter'&&event.target===this){toggleTodoExpand('${t.id}')}">
         <div style="display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0">
           ${priorityDot}
           <div class="todo-check ${t.completed ? 'checked' : ''}" role="checkbox" aria-checked="${t.completed}" aria-label="${t.completed ? 'Mark incomplete' : 'Mark complete'}" tabindex="0" onclick="event.stopPropagation();toggleTodo('${t.id}', ${!t.completed})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();toggleTodo('${t.id}', ${!t.completed})}">${t.completed ? '<i data-lucide="check" class="icon-sm"></i>' : ''}</div>
@@ -5445,6 +5507,7 @@ function renderTodos() {
             <div class="todo-meta">
               ${t.dueDate ? `<span class="${isOverdue ? 'overdue-badge' : ''}"><i data-lucide="calendar" class="icon-sm"></i> ${fmtRelativeDate(t.dueDate)}${t.dueTime ? ' ' + t.dueTime : ''}</span>` : ''}
               ${t.reminder ? `<span class="reminder-badge"><i data-lucide="bell" class="icon-sm"></i> ${fmtTime(t.remindAt)}</span>` : ''}
+              ${statusBadge}
               ${tagsHtml}
               <span class="source-badge"><i data-lucide="${SOURCE_ICONS[t.source]||'file-text'}" class="icon-sm"></i> ${SOURCE_LABELS[t.source]||t.source}</span>
             </div>
@@ -5452,6 +5515,17 @@ function renderTodos() {
         </div>
         <span class="todo-delete" onclick="event.stopPropagation();deleteTodo('${t.id}')" tabindex="0" role="button" aria-label="Delete task" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();deleteTodo('${t.id}')}"><i data-lucide="x" class="icon-sm"></i></span>
         <div class="todo-detail">
+          <div class="todo-detail-actions">
+            <button class="todo-action-btn primary" title="${primaryAction.title}" onclick="event.stopPropagation();setTodoWorkflowState('${t.id}','${primaryAction.status}',${primaryAction.completed})">
+              <i data-lucide="${primaryAction.icon}" class="icon-sm"></i> ${primaryAction.label}
+            </button>
+            ${(!t.completed && !isBlocked) ? `<button class="todo-action-btn warn" title="Mark this task as blocked without completing it" onclick="event.stopPropagation();setTodoWorkflowState('${t.id}','blocked',false)">
+              <i data-lucide="pause-circle" class="icon-sm"></i> Block
+            </button>` : ''}
+            <button class="todo-action-btn danger" title="Delete this task" onclick="event.stopPropagation();deleteTodo('${t.id}')">
+              <i data-lucide="trash-2" class="icon-sm"></i> Delete
+            </button>
+          </div>
           <div class="todo-detail-row">
             <label>Priority</label>
             <div class="priority-chips">
@@ -5628,7 +5702,7 @@ async function renderProjects() {
                 ? `<span class="project-card-skill installed" title="Skill installed"><i data-lucide="check-circle" class="icon-xs" aria-hidden="true"></i></span>`
                 : `<span class="project-card-skill not-installed" title="Skill not installed"><i data-lucide="alert-circle" class="icon-xs" aria-hidden="true"></i></span>`;
             return `
-            <div class="project-card ${p.hidden ? 'hidden-project' : ''}" data-project="${esc(p.name)}">
+            <div class="project-card ${p.hidden ? 'hidden-project' : ''} ${_expandedProject === p.name ? 'expanded' : ''}" data-project="${esc(p.name)}">
                 <div class="project-card-header">
                     <i data-lucide="folder-kanban" class="icon-sm" style="color:var(--accent)" aria-hidden="true"></i>
                     <span class="project-card-name">${esc(p.name)}</span>
@@ -7108,29 +7182,78 @@ function fmtRelativeDate(dateStr) {
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 async function toggleTodo(id, c) {
-    // Trigger bounce animation on the checkbox
+    // Trigger a brief confirmation state on the checkbox
     const checkEl = document.querySelector(`.todo-item[data-id="${id}"] .todo-check`);
     if (checkEl && c) { checkEl.classList.add('just-checked'); checkEl.addEventListener('animationend', () => checkEl.classList.remove('just-checked'), { once: true }); }
     if (!serverReachable) {
         // Optimistic update + queue
         const todo = localTodos.find(t => t.id === id);
-        if (todo) { todo.completed = c ? 1 : 0; writeCachedJson(STORAGE_KEYS.todos, localTodos); renderTodos(); }
+        if (todo) { todo.completed = c ? 1 : 0; writeCachedTodos(localTodos); renderTodos(); }
         OfflineQueue.push({ method: 'PATCH', url: `/api/todos/${id}`, body: { completed: c } });
         return;
     }
     await fetch(`/api/todos/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({completed:c})});
     await refreshTodos();
 }
+async function setTodoWorkflowState(id, status, completed) {
+    const patch = { status, completed };
+    const todo = localTodos.find(t => t.id === id);
+    if (!serverReachable) {
+        if (todo) {
+            todo.status = status;
+            todo.completed = completed ? 1 : 0;
+            writeCachedTodos(localTodos);
+            _expandedTodoId = id;
+            renderTodos();
+            focusTodoPrimaryAction(id);
+        }
+        OfflineQueue.push({ method: 'PATCH', url: `/api/todos/${id}`, body: patch });
+        return;
+    }
+
+    const res = await fetch(`/api/todos/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+    });
+    if (!res.ok) {
+        addChat('error', 'alert-circle', `Failed to update task state: HTTP ${res.status}`);
+        return;
+    }
+    if (todo) {
+        todo.status = status;
+        todo.completed = completed ? 1 : 0;
+    }
+    _expandedTodoId = id;
+    await refreshTodos();
+    focusTodoPrimaryAction(id);
+}
+function focusTodoPrimaryAction(id) {
+    const item = document.querySelector(`.todo-item[data-id="${id}"]`);
+    const primaryAction = item?.querySelector('.todo-action-btn.primary');
+    if (primaryAction) {
+        primaryAction.focus({ preventScroll: true });
+        return;
+    }
+    focusTodoFallback();
+}
+function focusTodoFallback() {
+    const fallback = document.querySelector('.todo-item') || document.getElementById('panelAddBtn');
+    if (fallback) fallback.focus({ preventScroll: true });
+}
 async function deleteTodo(id) {
+    if (_expandedTodoId === id) _expandedTodoId = null;
     if (!serverReachable) {
         localTodos = localTodos.filter(t => t.id !== id);
-        writeCachedJson(STORAGE_KEYS.todos, localTodos);
+        writeCachedTodos(localTodos);
         renderTodos();
+        focusTodoFallback();
         OfflineQueue.push({ method: 'DELETE', url: `/api/todos/${id}` });
         return;
     }
     await fetch(`/api/todos/${id}`,{method:'DELETE'});
     await refreshTodos();
+    focusTodoFallback();
 }
 function toggleTodoExpand(id) {
     if (_expandedTodoId === id) {
@@ -7169,7 +7292,7 @@ async function finishTitleEdit(id, newTitle) {
     if (!trimmed || !todo || trimmed === todo.title) { renderTodos(); return; }
     if (!serverReachable) {
         todo.title = trimmed;
-        writeCachedJson(STORAGE_KEYS.todos, localTodos);
+        writeCachedTodos(localTodos);
         renderTodos();
         OfflineQueue.push({ method: 'PATCH', url: `/api/todos/${id}`, body: { title: trimmed } });
         return;
@@ -7180,17 +7303,17 @@ async function finishTitleEdit(id, newTitle) {
 async function setTodoPriority(id, priority) {
     if (!serverReachable) {
         const todo = localTodos.find(t => t.id === id);
-        if (todo) { todo.priority = priority; writeCachedJson(STORAGE_KEYS.todos, localTodos); }
+        if (todo) { todo.priority = priority; writeCachedTodos(localTodos); }
+        _expandedTodoId = id;
         renderTodos();
-        setTimeout(() => toggleTodoExpand(id), 10);
         OfflineQueue.push({ method: 'PATCH', url: `/api/todos/${id}`, body: { priority } });
         return;
     }
     await fetch(`/api/todos/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ priority }) });
     const todo = localTodos.find(t => t.id === id);
     if (todo) todo.priority = priority;
+    _expandedTodoId = id;
     renderTodos();
-    setTimeout(() => toggleTodoExpand(id), 10);
 }
 function startNotesEdit(id) {
     const todo = localTodos.find(t => t.id === id);
@@ -7213,18 +7336,18 @@ async function finishNotesEdit(id, newNotes) {
     const todo = localTodos.find(t => t.id === id);
     if (!todo) { renderTodos(); return; }
     const val = newNotes.trim() || null;
-    if (val === (todo.notes || null)) { renderTodos(); setTimeout(() => toggleTodoExpand(id), 10); return; }
+    if (val === (todo.notes || null)) { _expandedTodoId = id; renderTodos(); return; }
     if (!serverReachable) {
         todo.notes = val;
-        writeCachedJson(STORAGE_KEYS.todos, localTodos);
+        writeCachedTodos(localTodos);
+        _expandedTodoId = id;
         renderTodos();
-        setTimeout(() => toggleTodoExpand(id), 10);
         OfflineQueue.push({ method: 'PATCH', url: `/api/todos/${id}`, body: { notes: val } });
         return;
     }
     await fetch(`/api/todos/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: val }) });
+    _expandedTodoId = id;
     await refreshTodos();
-    setTimeout(() => toggleTodoExpand(id), 10);
 }
 async function clearCompleted() {
     const done = localTodos.filter(t => t.completed);
@@ -7232,7 +7355,7 @@ async function clearCompleted() {
     if (!serverReachable) {
         for (const t of done) OfflineQueue.push({ method: 'DELETE', url: `/api/todos/${t.id}` });
         localTodos = localTodos.filter(t => !t.completed);
-        writeCachedJson(STORAGE_KEYS.todos, localTodos);
+        writeCachedTodos(localTodos);
         renderTodos();
         addChat('info', 'trash-2', `Cleared ${done.length} done (will sync when online)`);
         return;
@@ -7993,7 +8116,7 @@ async function sendCommand(cmd) {
             onStateSnapshot(ev) {
                 if (ev.snapshot?.todos !== undefined)             localTodos = ev.snapshot.todos;
                 if (ev.snapshot?.recurringTemplates !== undefined) activeTemplates = ev.snapshot.recurringTemplates;
-                writeCachedJson(STORAGE_KEYS.todos, localTodos);
+                writeCachedTodos(localTodos);
                 renderTodos();
             },
             onStateDelta(ev) {
@@ -8008,7 +8131,7 @@ async function sendCommand(cmd) {
                 }
                 localTodos = state.todos;
                 activeTemplates = state.recurringTemplates;
-                writeCachedJson(STORAGE_KEYS.todos, localTodos);
+                writeCachedTodos(localTodos);
                 renderTodos();
             },
             onToolCallStart(ev) {
