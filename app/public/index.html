@@ -548,6 +548,7 @@ header {
 .settings-row + .settings-row { border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
 .settings-row label { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 12px; flex: 1; min-width: 0; }
 .settings-row label i { color: var(--muted); flex-shrink: 0; }
+.settings-help { font-size: 11px; color: var(--muted); line-height: 1.35; }
 
 /* Save status dot per row */
 .settings-row .save-dot {
@@ -3606,9 +3607,16 @@ body, header, .left-panel, .right-panel, .status-bar, .nerd-panel, .input-bar {
           <div class="settings-group" data-search-terms="port server startup restart launch">
             <div class="settings-group-title">Server</div>
             <div class="settings-row">
+              <label>Local URL</label>
+              <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">
+                <a id="settingsLocalUrl" href="/" target="_blank" rel="noreferrer" style="font-weight:600;color:var(--accent);text-decoration:none">Detecting...</a>
+                <span id="settingsPortlessStatus" class="settings-help">Checking Portless status...</span>
+              </div>
+            </div>
+            <div class="settings-row">
               <label for="settingsPort">
-                Port
-                <button class="info-tip" tabindex="0" aria-label="Port info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Default: 8275 (T-A-S-K). Override with env var: taskbean_PORT=9999</span></button>
+                Backend port
+                <button class="info-tip" tabindex="0" aria-label="Port info"><i data-lucide="info" class="icon-sm"></i><span class="tip-text">Advanced fallback setting. Portless uses https://taskbean.localhost when available. Override with env var: TASKBEAN_PORT=9999</span></button>
               </label>
               <input type="number" class="settings-select" id="settingsPort" min="1024" max="65535" style="width:90px" value="8275" data-requires="server" onblur="savePortSetting()" onkeydown="if(event.key==='Enter'){savePortSetting();event.preventDefault()}">
               <span class="save-dot"></span>
@@ -5938,7 +5946,7 @@ async function loadUsageStats() {
         } else {
             container.innerHTML = `<div class="usage-panel-error">
                 <i data-lucide="wifi-off" class="icon-sm" style="vertical-align:middle;margin-right:4px"></i>
-                Couldn't reach the taskbean agent. Check that it's running on :8275.
+                Couldn't reach the taskbean agent. Start it with launch.cmd or the Start Server button.
                 <span class="err-hint">${esc(err.message || 'network error')}</span>
             </div>`;
         }
@@ -10485,7 +10493,7 @@ async function setPortPreference(port) {
         });
         const data = await res.json();
         if (res.ok) {
-            addChat('info', 'check-circle', `Port set to <strong>${port}</strong>. Will take effect on next restart.`);
+            addChat('info', 'check-circle', `Backend port set to <strong>${port}</strong>. Will take effect on next restart.`);
         } else {
             addChat('error-msg', 'alert-circle', `Failed: ${esc(data.error)}`);
         }
@@ -11666,10 +11674,27 @@ function populateSettingsFromConfig(cfg) {
 
     // Port setting
     const portInput = document.getElementById('settingsPort');
-    if (portInput) {
+    const localUrlEl = document.getElementById('settingsLocalUrl');
+    const portlessStatusEl = document.getElementById('settingsPortlessStatus');
+    if (portInput || localUrlEl || portlessStatusEl) {
         fetch('/api/port-info').then(r => r.json()).then(info => {
-            portInput.value = info.port;
-            portInput.dataset.savedValue = info.port;
+            if (portInput) {
+                portInput.value = info.port;
+                portInput.dataset.savedValue = info.port;
+            }
+            if (localUrlEl) {
+                localUrlEl.href = info.publicUrl || '/';
+                localUrlEl.textContent = info.publicUrl || 'Unavailable';
+            }
+            if (portlessStatusEl) {
+                const source = info.source ? `backend port from ${info.source}` : 'backend port detected';
+                const usingPortlessUrl = info.publicUrl && info.portlessUrl && info.publicUrl === info.portlessUrl;
+                portlessStatusEl.textContent = usingPortlessUrl
+                    ? `Portless active. ${source}; fallback ${info.fallbackUrl}.`
+                    : info.portlessDetected
+                    ? `Portless installed but not active for this launch. Using ${info.fallbackUrl}.`
+                    : `Portless not detected. Using fallback ${info.fallbackUrl}.`;
+            }
         }).catch(() => {});
     }
 
@@ -11763,7 +11788,7 @@ async function savePortSetting() {
             // Show restart banner
             const banner = document.getElementById('settingsRestartBanner');
             if (banner) banner.classList.add('show');
-            showSettingsStatus('Port saved — restart to apply');
+            showSettingsStatus('Backend port saved — restart to apply');
         } else {
             if (row) { row.classList.remove('saving'); row.classList.add('save-error'); }
             addChat('error-msg', 'alert-circle', esc(data.error));

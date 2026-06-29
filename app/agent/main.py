@@ -69,6 +69,7 @@ from opentelemetry import trace
 import telemetry as telem
 import state as state_mod
 import app_config
+import port_config
 import hardware as hw_mod
 import shutil
 import recommender
@@ -551,6 +552,16 @@ def _hardware_snapshot() -> dict[str, Any]:
 @app.get("/api/health")
 async def health() -> dict:
     return _health_data()
+
+
+@app.get("/api/ready")
+async def ready() -> JSONResponse:
+    data = _health_data()
+    if data.get("modelReady"):
+        return JSONResponse(data)
+    if data.get("startupError"):
+        return JSONResponse(data, status_code=500)
+    return JSONResponse(data, status_code=503)
 
 
 @app.get("/api/launch-errors")
@@ -1367,12 +1378,7 @@ _sync_startup_shortcut = _sync_startup_scheduled_task
 
 @app.get("/api/port-info")
 async def port_info() -> dict:
-    return {
-        "port": int(app_config.get("port") or 8275),
-        "default": 8275,
-        "conflict": None,
-        "configurable": True,
-    }
+    return port_config.build_port_info(config_get=app_config.get)
 
 
 class PortBody(BaseModel):
@@ -1384,29 +1390,11 @@ async def set_port(body: PortBody) -> dict:
     if body.port < 1024 or body.port > 65535:
         raise HTTPException(400, "Port must be between 1024 and 65535")
     app_config.set("port", body.port)
-    return {"ok": True, "port": body.port, "message": f"Port set to {body.port}. Restart taskbean for it to take effect."}
-
-
-@app.get("/api/port-info")
-async def port_info() -> dict:
     return {
-        "port": int(app_config.get("port") or 8275),
-        "default": 8275,
-        "conflict": None,
-        "configurable": True,
+        "ok": True,
+        "message": f"Backend port set to {body.port}. Restart taskbean for it to take effect.",
+        **port_config.build_port_info(config_get=app_config.get),
     }
-
-
-class PortBody(BaseModel):
-    port: int
-
-
-@app.post("/api/port")
-async def set_port(body: PortBody) -> dict:
-    if body.port < 1024 or body.port > 65535:
-        raise HTTPException(400, "Port must be between 1024 and 65535")
-    app_config.set("port", body.port)
-    return {"ok": True, "port": body.port, "message": f"Port set to {body.port}. Restart taskbean for it to take effect."}
 
 
 @app.post("/api/config")
@@ -5017,4 +5005,6 @@ def _sse(data: dict) -> str:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8275, reload=False)
+    runtime_port = port_config.resolve_runtime_port(config_get=app_config.get)
+    logger.info("Starting taskbean on 127.0.0.1:%s (%s)", runtime_port.port, runtime_port.source)
+    uvicorn.run("main:app", host="127.0.0.1", port=runtime_port.port, reload=False)

@@ -94,15 +94,15 @@ Pick **one** install channel and stick with it. If you install via both `npm` an
 ```bash
 cd app
 
-# Python backend (primary)
+# Portless-backed local HTTPS URL (Node 24+)
+npm install
+npm run dev
+# Open https://taskbean.localhost
+
+# Or manual Python backend fallback
 pip install -r agent/requirements.txt
 python agent/main.py
-
-# Or Node.js backend (legacy)
-npm install
-npm start
-
-# Open http://localhost:8275
+# Open http://127.0.0.1:8275
 ```
 
 ## Project structure
