@@ -222,6 +222,13 @@ Settings are persisted to `~/.taskbean/config.json`.
 
 The backend binds to `127.0.0.1` on port `8275` by default. The desktop launcher registers a Portless alias when available so the app opens at `https://taskbean.localhost`; if Portless is not installed or alias registration fails, Taskbean falls back to `http://127.0.0.1:8275`. Advanced users can override the backend port with `TASKBEAN_PORT` or the Settings → System backend port field.
 
+Readiness has two levels:
+
+- `GET /api/health` means the FastAPI process is alive and returns startup state, even while Foundry is still loading.
+- `GET /api/ready` means the Foundry model is usable. It returns `503` while initializing, `500` when startup has a recorded error, and `200` only after `modelReady=true`.
+
+Playwright starts the app automatically unless `TASKBEAN_SKIP_WEBSERVER=1` is set, then waits on `/api/ready`. Use `TASKBEAN_BASE_URL=http://127.0.0.1:8275` to test a manually launched loopback server.
+
 ---
 
 ## Troubleshooting
@@ -340,7 +347,7 @@ See [`.github/copilot-instructions.md`](.github/copilot-instructions.md) for det
 # Run Python integration tests (requires Foundry Local)
 cd agent && pytest test_integration.py -v
 
-# Run E2E tests (requires the app at TASKBEAN_BASE_URL or https://taskbean.localhost)
+# Run E2E tests (starts the app and waits on /api/ready by default)
 npx playwright test
 ```
 

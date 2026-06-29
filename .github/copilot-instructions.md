@@ -161,7 +161,7 @@ pytest test_integration.py -v -m slow                  # includes model-switch
 ```
 
 Tests start a real uvicorn server on port 3001 — no mocking. Shared fixtures in `conftest.py`:
-- `live_server` (session-scoped) — starts uvicorn in a background thread, waits up to 6 min for model load via `/api/health` polling
+- `live_server` (session-scoped) — starts uvicorn in a background thread, waits up to 6 min for model load via readiness polling
 - `client` (session-scoped) — `httpx.AsyncClient` with 120s timeout
 - `clean_state` — clears `state.todos` and `state.recurring_templates` before/after test
 - `collect_sse()` — helper to POST to SSE endpoints and collect events until a target event type arrives
@@ -176,13 +176,17 @@ npx playwright test -g "page loads"                    # single test by title
 npx playwright test --project=smoke                    # smoke project only
 ```
 
-Requires the server running at `TASKBEAN_BASE_URL` or `https://taskbean.localhost` by default. Set `TASKBEAN_BASE_URL=http://127.0.0.1:8275` when testing a manual backend launch without Portless. Config uses 3 projects with dependencies: `smoke` runs first, then `features` and `model-tests` run after smoke passes. Runs in Edge (`channel: 'msedge'`), records trace/video on failure.
+Playwright starts the server automatically by default and waits on `/api/ready`, which returns 200 only after the Foundry model is usable. Set `TASKBEAN_BASE_URL=http://127.0.0.1:8275` when testing a manual backend launch without Portless, or `TASKBEAN_SKIP_WEBSERVER=1` to require an already-running server. Config uses 3 projects with dependencies: `smoke` runs first, then `features` and `model-tests` run after smoke passes. Runs in Edge (`channel: 'msedge'`), records trace/video on failure.
 
 ## Key Conventions
 
 ### SSE is the transport for everything complex
 
 `/api/command`, `/api/extract`, `/api/models/switch`, and telemetry streams all use Server-Sent Events.
+
+### Health vs readiness
+
+`/api/health` means the FastAPI process is alive and includes `foundryReady`, `modelReady`, and `startupError`. It may return 200 while the Foundry model is still loading. `/api/ready` is the model-readiness gate: 503 while initializing, 500 on `startupError`, and 200 only when `modelReady=true`.
 
 ### Model switching is guarded
 

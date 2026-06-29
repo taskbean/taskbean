@@ -554,6 +554,16 @@ async def health() -> dict:
     return _health_data()
 
 
+@app.get("/api/ready")
+async def ready() -> JSONResponse:
+    data = _health_data()
+    if data.get("modelReady"):
+        return JSONResponse(data)
+    if data.get("startupError"):
+        return JSONResponse(data, status_code=500)
+    return JSONResponse(data, status_code=503)
+
+
 @app.get("/api/launch-errors")
 async def launch_errors(limit: int = 20) -> dict:
     """Returns a rolling history of launcher errors written by app/launch.ps1.
