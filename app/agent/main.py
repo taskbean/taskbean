@@ -2062,6 +2062,9 @@ def _ensure_chronicle_schema(conn) -> None:
           confidence REAL NOT NULL DEFAULT 0,
           state TEXT NOT NULL DEFAULT 'pending',
           linked_todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+          auto_linked INTEGER DEFAULT 0,
+          decision_reason TEXT,
+          decision_details TEXT,
           occurred_at TEXT,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL,
@@ -2071,6 +2074,9 @@ def _ensure_chronicle_schema(conn) -> None:
     )
     for col_ddl in (
         "ALTER TABLE reconciliation_suggestions ADD COLUMN occurred_at TEXT",
+        "ALTER TABLE reconciliation_suggestions ADD COLUMN auto_linked INTEGER DEFAULT 0",
+        "ALTER TABLE reconciliation_suggestions ADD COLUMN decision_reason TEXT",
+        "ALTER TABLE reconciliation_suggestions ADD COLUMN decision_details TEXT",
         "ALTER TABLE task_evidence ADD COLUMN occurred_at TEXT",
     ):
         try:
@@ -2771,6 +2777,18 @@ def _parse_json_array(value: Any) -> list:
     return parsed if isinstance(parsed, list) else []
 
 
+def _parse_json_object(value: Any) -> dict | None:
+    if isinstance(value, dict):
+        return value
+    if not value:
+        return None
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -2785,6 +2803,13 @@ def _table_exists(conn, name: str) -> bool:
         (name,),
     ).fetchone()
     return row is not None
+
+
+def _table_columns(conn, name: str) -> set[str]:
+    try:
+        return {row[1] for row in conn.execute(f"PRAGMA table_info('{name}')").fetchall()}
+    except sqlite3.Error:
+        return set()
 
 
 def _serialize_evidence(row) -> dict:
@@ -2819,6 +2844,9 @@ def _serialize_suggestion(row, evidence: list | None = None) -> dict:
         "confidence": float(row["confidence"] or 0),
         "state": row["state"],
         "linked_todo_id": row["linked_todo_id"],
+        "auto_linked": bool(_row_value(row, "auto_linked", 0)),
+        "decision_reason": _row_value(row, "decision_reason"),
+        "decision_details": _parse_json_object(_row_value(row, "decision_details")),
         "occurred_at": _row_value(row, "occurred_at"),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
@@ -2986,8 +3014,9 @@ def _collect_chronicle_report(conn, since: str, until: str, tasks: list[dict], p
     if not _table_exists(conn, "task_evidence") or not _table_exists(conn, "reconciliation_suggestions"):
         return {
             **availability,
-            "summary": {"linkedEvidence": 0, "pendingSuggestions": 0},
+            "summary": {"linkedEvidence": 0, "pendingSuggestions": 0, "autoLinked": 0},
             "evidence": [],
+            "autoLinked": [],
             "pendingSuggestions": [],
         }
 
@@ -3050,12 +3079,62 @@ def _collect_chronicle_report(conn, since: str, until: str, tasks: list[dict], p
         pending_params,
     ).fetchall()
 
+    auto_linked_rows = []
+    if "auto_linked" in _table_columns(conn, "reconciliation_suggestions"):
+        auto_linked_conditions = [
+            "s.state = 'linked'",
+            "s.auto_linked = 1",
+            "date(COALESCE(s.decided_at, s.occurred_at, s.created_at)) BETWEEN ? AND ?",
+        ]
+        auto_linked_params: list[Any] = [since, until]
+        if project_scope:
+            auto_linked_conditions.append(
+                """
+                (
+                  s.linked_todo_id IN (SELECT id FROM todos WHERE project = ? OR project_path = ?)
+                  OR EXISTS (
+                    SELECT 1 FROM task_evidence te
+                     WHERE te.suggestion_id = s.id
+                       AND te.project_path = ?
+                  )
+                )
+                """
+            )
+            auto_linked_params.extend([project_scope.get("name"), project_scope.get("path"), project_scope.get("path")])
+        elif has_hidden:
+            auto_linked_conditions.append(
+                """
+                (
+                  (s.suggested_project IS NULL OR s.suggested_project NOT IN (
+                    SELECT name FROM projects WHERE hidden = 1
+                  ))
+                  AND NOT EXISTS (
+                    SELECT 1 FROM task_evidence te
+                    JOIN projects p ON p.path = te.project_path
+                    WHERE te.suggestion_id = s.id
+                      AND p.hidden = 1
+                  )
+                )
+                """
+            )
+
+        auto_linked_rows = conn.execute(
+            f"""
+            SELECT s.* FROM reconciliation_suggestions s
+             WHERE {' AND '.join(auto_linked_conditions)}
+             ORDER BY COALESCE(s.decided_at, s.occurred_at, s.created_at), s.id
+            """,
+            auto_linked_params,
+        ).fetchall()
+
     evidence = [_serialize_evidence(r) for r in evidence_rows]
     pending = [_serialize_suggestion(r) for r in pending_rows]
+    auto_linked = [_serialize_suggestion(r) for r in auto_linked_rows]
     return {
         **availability,
-        "summary": {"linkedEvidence": len(evidence), "pendingSuggestions": len(pending)},
+        "summary": {"linkedEvidence": len(evidence), "pendingSuggestions": len(pending), "autoLinked": len(auto_linked)},
         "evidence": evidence,
+        "autoLinked": auto_linked,
         "pendingSuggestions": pending,
     }
 
@@ -3141,6 +3220,9 @@ async def approve_chronicle_suggestion(suggestion_id: str, body: ChronicleApprov
             UPDATE reconciliation_suggestions
                SET state = 'approved',
                    linked_todo_id = ?,
+                   auto_linked = 0,
+                   decision_reason = NULL,
+                   decision_details = NULL,
                    decided_at = ?,
                    updated_at = ?
              WHERE id = ? AND state = 'pending'
@@ -3190,6 +3272,9 @@ async def link_chronicle_suggestion(suggestion_id: str, body: ChronicleLinkBody)
             UPDATE reconciliation_suggestions
                SET state = 'linked',
                    linked_todo_id = ?,
+                   auto_linked = 0,
+                   decision_reason = NULL,
+                   decision_details = NULL,
                    decided_at = ?,
                    updated_at = ?
              WHERE id = ? AND state = 'pending'
@@ -3236,6 +3321,9 @@ async def ignore_chronicle_suggestion(suggestion_id: str) -> dict:
             """
             UPDATE reconciliation_suggestions
                SET state = 'ignored',
+                   auto_linked = 0,
+                   decision_reason = NULL,
+                   decision_details = NULL,
                    decided_at = ?,
                    updated_at = ?
              WHERE id = ? AND state = 'pending'
@@ -3250,6 +3338,53 @@ async def ignore_chronicle_suggestion(suggestion_id: str) -> dict:
             (suggestion["id"],),
         ).fetchone()
         return {"action": "ignore", "suggestion": _suggestion_with_evidence(conn, updated)}
+    finally:
+        if not committed:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+        conn.close()
+
+
+@app.post("/api/chronicle/suggestions/{suggestion_id}/undo-auto-link")
+async def undo_chronicle_auto_link(suggestion_id: str) -> dict:
+    conn = _get_taskbean_db_rw()
+    if not conn:
+        raise HTTPException(status_code=500, detail="database unavailable")
+    committed = False
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        suggestion = _resolve_suggestion_from_db(conn, suggestion_id)
+        if suggestion["state"] != "linked" or not bool(_row_value(suggestion, "auto_linked", 0)):
+            raise HTTPException(status_code=409, detail=f"Suggestion {suggestion['id']} is not an auto-linked suggestion")
+        now = _iso_now()
+        conn.execute(
+            """
+            UPDATE reconciliation_suggestions
+               SET state = 'pending',
+                   linked_todo_id = NULL,
+                   auto_linked = 0,
+                   decision_reason = NULL,
+                   decision_details = NULL,
+                   decided_at = NULL,
+                   updated_at = ?
+             WHERE id = ? AND state = 'linked' AND auto_linked = 1
+            """,
+            (now, suggestion["id"]),
+        )
+        conn.execute(
+            "UPDATE task_evidence SET todo_id = NULL WHERE suggestion_id = ?",
+            (suggestion["id"],),
+        )
+        conn.execute("COMMIT")
+        committed = True
+
+        updated = conn.execute(
+            "SELECT * FROM reconciliation_suggestions WHERE id = ?",
+            (suggestion["id"],),
+        ).fetchone()
+        return {"action": "undo-auto-link", "suggestion": _suggestion_with_evidence(conn, updated)}
     finally:
         if not committed:
             try:
@@ -3275,8 +3410,9 @@ async def get_report_preview(date: str = "week", project: str | None = None, inc
             availability = _chronicle_availability()
             empty["chronicle"] = {
                 **availability,
-                "summary": {"linkedEvidence": 0, "pendingSuggestions": 0},
+                "summary": {"linkedEvidence": 0, "pendingSuggestions": 0, "autoLinked": 0},
                 "evidence": [],
+                "autoLinked": [],
                 "pendingSuggestions": [],
             }
         return empty

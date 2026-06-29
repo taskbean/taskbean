@@ -5,6 +5,7 @@ import {
   ignoreSuggestion,
   linkSuggestion,
   listSuggestions,
+  undoAutoLinkSuggestion,
 } from '../chronicle/suggestions.js';
 
 function renderStatus(label, item) {
@@ -131,6 +132,7 @@ function renderSuggestionText(result) {
   if (result.action === 'approve') return `Approved suggestion ${result.suggestion.id} into task ${result.task.id}`;
   if (result.action === 'link') return `Linked suggestion ${result.suggestion.id} to task ${result.task.id}`;
   if (result.action === 'ignore') return `Ignored suggestion ${result.suggestion.id}`;
+  if (result.action === 'undo-auto-link') return `Returned auto-linked suggestion ${result.suggestion.id} to pending review`;
   return JSON.stringify(result, null, 2);
 }
 
@@ -148,4 +150,8 @@ export function chronicleLinkCommand(suggestionId, todoId, opts) {
 
 export function chronicleIgnoreCommand(suggestionId, opts) {
   handleSuggestionCommand(opts, () => ignoreSuggestion(suggestionId));
+}
+
+export function chronicleUndoCommand(suggestionId, opts) {
+  handleSuggestionCommand(opts, () => undoAutoLinkSuggestion(suggestionId));
 }

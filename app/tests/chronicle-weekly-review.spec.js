@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 test.use({ serviceWorkers: 'block' });
+
+const INDEX_HTML = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 
 const MOCK_PROJECTS = [
   { name: 'taskbean', path: 'C:\\dev\\taskbean', total: 1, done: 0, pending: 1, hidden: 0, category: 'work', skill_installed: 1 },
@@ -61,7 +64,7 @@ const REPORT_PREVIEW = {
   chronicle: {
     available: true,
     reason: null,
-    summary: { linkedEvidence: 1, pendingSuggestions: 1 },
+    summary: { linkedEvidence: 1, pendingSuggestions: 1, autoLinked: 1 },
     evidence: [{
       todo_id: 't1',
       source: 'copilot',
@@ -71,6 +74,17 @@ const REPORT_PREVIEW = {
       files_changed: ['app/agent/main.py'],
       summary: 'Safe evidence summary',
       confidence: 0.82,
+      occurred_at: '2026-01-01T10:00:00Z',
+    }],
+    autoLinked: [{
+      id: 'sug-auto-0001',
+      suggested_title: 'Canonical task',
+      linked_todo_id: 't1',
+      confidence: 0.95,
+      state: 'linked',
+      auto_linked: true,
+      decision_reason: 'same project, same branch, 1 shared file; runner-up: Nearby task',
+      decision_details: { confidence: 0.95, matchedSignals: ['same project', 'same branch', '1 shared file'] },
       occurred_at: '2026-01-01T10:00:00Z',
     }],
     pendingSuggestions: [{
@@ -83,9 +97,14 @@ const REPORT_PREVIEW = {
   },
 };
 
-async function mockWeeklyReviewAPIs(page, suggestions = makeSuggestions()) {
-  const state = { suggestions, approveBody: null, linkBody: null, ignored: false };
+async function mockWeeklyReviewAPIs(page, suggestions = makeSuggestions(), options = {}) {
+  const state = { suggestions, approveBody: null, linkBody: null, ignored: false, reportPreview: structuredClone(REPORT_PREVIEW) };
+  const staleSuggestionIds = new Set(options.staleSuggestionIds || []);
+  const isStaleDecision = url => [...staleSuggestionIds].some(id => url.includes(id));
   await Promise.all([
+    page.route(/https?:\/\/localhost:8275\/(?:index\.html)?$/, route =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: INDEX_HTML })
+    ),
     page.route('**/api/health', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', model: 'test-model', modelAlias: 'test-model' }) })
     ),
@@ -118,7 +137,7 @@ async function mockWeeklyReviewAPIs(page, suggestions = makeSuggestions()) {
       })
     ),
     page.route('**/api/reports/preview**', route =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REPORT_PREVIEW) })
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(state.reportPreview) })
     ),
     page.route('**/api/task-detail/t1', route =>
       route.fulfill({
@@ -146,17 +165,44 @@ async function mockWeeklyReviewAPIs(page, suggestions = makeSuggestions()) {
           body: JSON.stringify({ status: 'pending', count: state.suggestions.length, suggestions: state.suggestions }),
         });
       }
+      if (url.endsWith('/undo-auto-link')) {
+        state.suggestions = [...state.suggestions, {
+          id: 'sug-auto-0001',
+          suggested_title: 'Canonical task',
+          suggested_project: 'taskbean',
+          suggested_status: 'pending',
+          evidence_summary: 'Auto-linked evidence summary',
+          confidence: 0.95,
+          state: 'pending',
+          evidence: [],
+        }];
+        state.reportPreview.chronicle.autoLinked = [];
+        state.reportPreview.chronicle.summary.autoLinked = 0;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ action: 'undo-auto-link', suggestion: state.suggestions.at(-1) }) });
+      }
       if (url.endsWith('/approve')) {
+        if (isStaleDecision(url)) {
+          state.suggestions = state.suggestions.filter(s => !url.includes(s.id));
+          return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ detail: 'Suggestion was already approved elsewhere.' }) });
+        }
         state.approveBody = JSON.parse(req.postData() || '{}');
         state.suggestions = state.suggestions.filter(s => !url.includes(s.id));
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ action: 'approve', task: MOCK_TASKS[0], suggestion: {} }) });
       }
       if (url.endsWith('/link')) {
+        if (isStaleDecision(url)) {
+          state.suggestions = state.suggestions.filter(s => !url.includes(s.id));
+          return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ detail: 'Suggestion was already linked elsewhere.' }) });
+        }
         state.linkBody = JSON.parse(req.postData() || '{}');
         state.suggestions = state.suggestions.filter(s => !url.includes(s.id));
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ action: 'link', task: MOCK_TASKS[0], suggestion: {} }) });
       }
       if (url.endsWith('/ignore')) {
+        if (isStaleDecision(url)) {
+          state.suggestions = state.suggestions.filter(s => !url.includes(s.id));
+          return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ detail: 'Suggestion was already ignored elsewhere.' }) });
+        }
         state.ignored = true;
         state.suggestions = state.suggestions.filter(s => !url.includes(s.id));
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ action: 'ignore', suggestion: {} }) });
@@ -215,6 +261,18 @@ test.describe('Chronicle weekly review dashboard', () => {
     expect(state.ignored).toBe(true);
   });
 
+  test('removes stale cards after already-decided responses and refreshes the inbox', async ({ page }) => {
+    const state = await mockWeeklyReviewAPIs(page, makeSuggestions(), { staleSuggestionIds: ['sug-approve-0001'] });
+    await openProjects(page);
+
+    await page.locator('[data-review-card="sug-approve-0001"] button', { hasText: 'Approve' }).click();
+
+    await expect(page.locator('[data-review-card="sug-approve-0001"]')).toHaveCount(0);
+    await expect(page.locator('.review-notice')).toContainText('already approved elsewhere');
+    await expect(page.locator('[data-review-card="sug-link-0001"]')).toBeVisible();
+    expect(state.approveBody).toBeNull();
+  });
+
   test('task detail shows linked Chronicle evidence', async ({ page }) => {
     await mockWeeklyReviewAPIs(page);
     await openProjects(page);
@@ -225,6 +283,21 @@ test.describe('Chronicle weekly review dashboard', () => {
     await expect(page.locator('#taskDetailPanel')).toBeVisible();
     await expect(page.locator('.task-detail-evidence-card')).toContainText('Chronicle evidence');
     await expect(page.locator('.task-detail-evidence-card')).toContainText('Safe evidence summary');
+  });
+
+  test('shows auto-linked evidence audit rows and can undo them to pending review', async ({ page }) => {
+    await mockWeeklyReviewAPIs(page);
+    await openProjects(page);
+
+    const auditCard = page.locator('[data-auto-linked-card="sug-auto-0001"]');
+    await expect(auditCard).toContainText('Canonical task');
+    await expect(auditCard).toContainText('same project, same branch');
+
+    await auditCard.locator('button', { hasText: 'Undo' }).click();
+
+    await expect(page.locator('[data-auto-linked-card="sug-auto-0001"]')).toHaveCount(0);
+    await expect(page.locator('[data-review-card="sug-auto-0001"]')).toBeVisible();
+    await expect(page.locator('.review-notice')).toContainText('returned to pending review');
   });
 
   test('report builder toggles, copies, and exports Markdown', async ({ page }) => {

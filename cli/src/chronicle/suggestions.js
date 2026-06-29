@@ -22,6 +22,15 @@ function parseJsonArray(value) {
   }
 }
 
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(value || 'null');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function serializeSuggestion(row, evidence = []) {
   return {
     id: row.id,
@@ -34,6 +43,9 @@ function serializeSuggestion(row, evidence = []) {
     confidence: Number(row.confidence),
     state: row.state,
     linked_todo_id: row.linked_todo_id,
+    auto_linked: Boolean(row.auto_linked),
+    decision_reason: row.decision_reason,
+    decision_details: parseJsonObject(row.decision_details),
     occurred_at: row.occurred_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -231,6 +243,9 @@ export function approveSuggestion(suggestionId, opts = {}) {
       UPDATE reconciliation_suggestions
          SET state = 'approved',
              linked_todo_id = ?,
+             auto_linked = 0,
+             decision_reason = NULL,
+             decision_details = NULL,
              decided_at = ?,
              updated_at = ?
               WHERE id = ? AND state = 'pending'
@@ -271,6 +286,9 @@ export function linkSuggestion(suggestionId, todoId, opts = {}) {
       UPDATE reconciliation_suggestions
          SET state = 'linked',
              linked_todo_id = ?,
+             auto_linked = 0,
+             decision_reason = NULL,
+             decision_details = NULL,
              decided_at = ?,
              updated_at = ?
               WHERE id = ? AND state = 'pending'
@@ -303,6 +321,9 @@ export function ignoreSuggestion(suggestionId) {
     db.prepare(`
       UPDATE reconciliation_suggestions
          SET state = 'ignored',
+             auto_linked = 0,
+             decision_reason = NULL,
+             decision_details = NULL,
              decided_at = ?,
              updated_at = ?
        WHERE id = ? AND state = 'pending'
@@ -316,6 +337,43 @@ export function ignoreSuggestion(suggestionId) {
   const updated = getRow('SELECT * FROM reconciliation_suggestions WHERE id = ?', [suggestion.id]);
   return {
     action: 'ignore',
+    suggestion: suggestionWithEvidence(updated),
+  };
+}
+
+export function undoAutoLinkSuggestion(suggestionId) {
+  const db = getDb();
+  let suggestion;
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    suggestion = resolveSuggestionFromDb(db, suggestionId);
+    if (suggestion.state !== 'linked' || !suggestion.auto_linked) {
+      fail('suggestion_not_auto_linked', `Suggestion ${suggestion.id} is not an auto-linked suggestion`);
+    }
+
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE reconciliation_suggestions
+         SET state = 'pending',
+             linked_todo_id = NULL,
+             auto_linked = 0,
+             decision_reason = NULL,
+             decision_details = NULL,
+             decided_at = NULL,
+             updated_at = ?
+       WHERE id = ? AND state = 'linked' AND auto_linked = 1
+    `).run(now, suggestion.id);
+    db.prepare('UPDATE task_evidence SET todo_id = NULL WHERE suggestion_id = ?')
+      .run(suggestion.id);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+
+  const updated = getRow('SELECT * FROM reconciliation_suggestions WHERE id = ?', [suggestion.id]);
+  return {
+    action: 'undo-auto-link',
     suggestion: suggestionWithEvidence(updated),
   };
 }
