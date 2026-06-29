@@ -2,11 +2,21 @@
   "name": "taskbean-app",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
+    "dev": "portless",
+    "dev:agent": "python agent/main.py",
     "test": "npx playwright test",
     "test:smoke": "npx playwright test --project=smoke"
   },
+  "portless": {
+    "name": "taskbean",
+    "script": "dev:agent"
+  },
   "devDependencies": {
-    "@playwright/test": "^1.59.1"
+    "@playwright/test": "^1.59.1",
+    "portless": "^0.15.0"
   }
 }

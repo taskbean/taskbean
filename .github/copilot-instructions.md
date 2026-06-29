@@ -125,7 +125,7 @@ node bin/taskbean.js --help       # run locally without global install
 ```bash
 cd app/agent
 pip install -r requirements.txt
-python main.py                    # starts on :8275, auto-starts Jaeger
+python main.py                    # starts on :8275 by default, auto-starts Jaeger
 ```
 
 ### One-click launch
@@ -176,7 +176,7 @@ npx playwright test -g "page loads"                    # single test by title
 npx playwright test --project=smoke                    # smoke project only
 ```
 
-Requires the server running on `:8275`. Config uses 3 projects with dependencies: `smoke` runs first, then `features` and `model-tests` run after smoke passes. Runs in Edge (`channel: 'msedge'`), records trace/video on failure.
+Requires the server running at `TASKBEAN_BASE_URL` or `https://taskbean.localhost` by default. Set `TASKBEAN_BASE_URL=http://127.0.0.1:8275` when testing a manual backend launch without Portless. Config uses 3 projects with dependencies: `smoke` runs first, then `features` and `model-tests` run after smoke passes. Runs in Edge (`channel: 'msedge'`), records trace/video on failure.
 
 ## Key Conventions
 
@@ -320,7 +320,7 @@ Reports now include a `## Usage` section (Markdown) / `usage` key (JSON) with pe
 
 ## Playwright MCP (browser testing)
 
-The project has a Playwright MCP server configured in `.mcp.json` using `--extension` mode, which connects to an already-running Microsoft Edge instance via the [Playwright MCP Bridge extension](https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm). This lets you interact with the app at `http://localhost:8275` using your real browser state.
+The project has a Playwright MCP server configured in `.mcp.json` using `--extension` mode, which connects to an already-running Microsoft Edge instance via the [Playwright MCP Bridge extension](https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm). This lets you interact with the app at `https://taskbean.localhost` or `http://127.0.0.1:8275` without Portless using your real browser state.
 
 ### Workflow
 
@@ -345,7 +345,7 @@ The Playwright MCP uses `--extension` mode, which connects to Edge via a WebSock
 1. Use the `configure-copilot` **task agent** (`agent_type: "configure-copilot"`) to reload the MCP server. This restarts the server process without changing config. Ask it to "reload/restart the playwright MCP server" and specify not to change configuration.
 2. After restart, the bridge extension needs to reconnect. The error changes from `"Target page, context or browser has been closed"` to `"Not connected"` — this confirms the restart worked. You **cannot** navigate to `extension://mmlmfjhmonkocbjadbfplnigmagldckm/status.html` yourself because all browser tools are dead until the extension connects. Ask the user to click the Playwright MCP Bridge extension icon in Edge to re-establish the WebSocket.
 3. If that doesn't work, ask the user to run `/mcp` and restart the `playwright` server manually, or restart Copilot CLI entirely.
-4. After the extension connects, verify with `browser_snapshot` — you should see the extension's connect/status page, then navigate to `http://localhost:8275`.
+4. After the extension connects, verify with `browser_snapshot` — you should see the extension's connect/status page, then navigate to `https://taskbean.localhost` or `http://127.0.0.1:8275` if Portless is unavailable.
 
 **Do NOT** try to work around the stale connection by:
 - Launching a separate browser via `playwright-cli open` (creates a second browser instance disconnected from the MCP tools)
@@ -355,7 +355,7 @@ The Playwright MCP uses `--extension` mode, which connects to Edge via a WebSock
 
 ### App-specific notes
 
-- The app runs on **`http://localhost:8275`** — the Python backend must be running first (`cd app/agent && python main.py`).
+- The app runs on **`https://taskbean.localhost`** when launched with Portless, with **`http://127.0.0.1:8275`** as the manual fallback — the Python backend must be running first (`cd app/agent && python main.py`).
 - Chat is submitted via **Enter key** on the `#chatInput` textarea — there is no submit button. Use `browser_press_key` with `Enter` after typing.
 - The app has a **service worker** (`sw.js`). If it interferes with testing, add `--block-service-workers` to the MCP server args.
 - The frontend is a **single-file SPA** (`public/index.html`, ~7900 lines). Snapshots may be large — use the `depth` parameter to limit the tree when you only need top-level structure.

@@ -106,15 +106,19 @@ Or step-by-step:
 # Install Foundry Local
 winget install Microsoft.FoundryLocal
 
-# Install Python dependencies
-cd agent
-pip install -r requirements.txt
+cd app
 
-# Launch
-python main.py
+# Portless-backed local HTTPS URL (Node 24+)
+npm install
+npm run dev
+
+# Or manual Python fallback
+pip install -r agent/requirements.txt
+python agent/main.py
 ```
 
-Open [http://localhost:8275](http://localhost:8275) in your browser.
+Open [https://taskbean.localhost](https://taskbean.localhost) when launched with Portless. Manual backend launches still work at [http://127.0.0.1:8275](http://127.0.0.1:8275).
+
 
 ### Option 2: One-Click Launch
 
@@ -132,7 +136,7 @@ After cloning, double-click **`launch.cmd`** (or run `launch.ps1` in PowerShell)
 
 ### Option 5: Install as PWA
 
-1. Open [http://localhost:8275](http://localhost:8275) in Edge or Chrome
+1. Open [https://taskbean.localhost](https://taskbean.localhost) in Edge or Chrome, or use [http://127.0.0.1:8275](http://127.0.0.1:8275) without Portless
 2. Click the install icon (⊕) in the address bar
 3. The app installs as a standalone window with offline support
 
@@ -152,13 +156,14 @@ cd taskbean
 # 1. Make sure Foundry Local is installed
 winget install Microsoft.FoundryLocal
 
-# 2. Start the app
-cd taskbean/agent
-pip install -r requirements.txt
-python main.py
+# 2. Start the app with Portless
+cd taskbean/app
+npm install
+npm run dev
 
 # 3. Open in browser
-# → http://localhost:8275
+# → https://taskbean.localhost
+# Fallback: http://127.0.0.1:8275
 ```
 
 **First launch:** The app will download and load a default model (Phi-4 Mini). This takes a few minutes the first time. The status bar at the bottom shows progress.
@@ -186,6 +191,7 @@ python main.py
 
 | Dependency | Purpose | Install |
 |-----------|---------|---------|
+| **Node.js** | Portless stable HTTPS local URL for the app launcher | [nodejs.org](https://nodejs.org/) — Node 24+ |
 | **Docker** | Jaeger tracing (nerd mode) | [docker.com](https://www.docker.com/products/docker-desktop/) |
 
 ### Python Packages (installed via `pip install -r requirements.txt`)
@@ -213,6 +219,8 @@ Access settings via the ⚙ gear icon in the app:
 | **Notifications** | Enable/disable Windows toast notifications |
 
 Settings are persisted to `~/.taskbean/config.json`.
+
+The backend binds to `127.0.0.1` on port `8275` by default. The desktop launcher registers a Portless alias when available so the app opens at `https://taskbean.localhost`; if Portless is not installed or alias registration fails, Taskbean falls back to `http://127.0.0.1:8275`. Advanced users can override the backend port with `TASKBEAN_PORT` or the Settings → System backend port field.
 
 ---
 
@@ -244,7 +252,7 @@ NPU acceleration requires compatible hardware (e.g., Intel Core Ultra, Qualcomm 
 
 ### Port 8275 already in use
 
-Another process is using Port 8275. Find and stop it:
+Another process is using the backend port. You can change it in Settings → System, set `TASKBEAN_PORT`, or find and stop the process using the default port:
 
 ```powershell
 Get-NetTCPConnection -LocalPort 8275 | Select-Object OwningProcess
@@ -332,7 +340,7 @@ See [`.github/copilot-instructions.md`](.github/copilot-instructions.md) for det
 # Run Python integration tests (requires Foundry Local)
 cd agent && pytest test_integration.py -v
 
-# Run E2E tests (requires server on :8275)
+# Run E2E tests (requires the app at TASKBEAN_BASE_URL or https://taskbean.localhost)
 npx playwright test
 ```
 

@@ -510,10 +510,12 @@ test.describe('Settings Modal — UI Overhaul', () => {
   // ═══════════════════════════════════════════════════════════════
 
   test.describe('System Tab', () => {
-    test('port input and server controls are visible', async ({ page }) => {
+    test('local URL, backend port, and server controls are visible', async ({ page }) => {
       await page.goto('/');
       await openSettings(page);
       await switchTab(page, 'system');
+      await expect(page.locator('#settingsLocalUrl')).toBeVisible();
+      await expect(page.locator('#settingsPortlessStatus')).toBeVisible();
       await expect(page.locator('#settingsPort')).toBeVisible();
       await expect(page.locator('#settingsStartup')).toBeVisible();
       await expect(page.locator('#settingsServerBtn')).toBeVisible();

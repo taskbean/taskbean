@@ -8,7 +8,7 @@ export default defineConfig({
   reporter: [['html', { open: 'never' }], ['list']],
   
   use: {
-    baseURL: 'http://localhost:8275',
+    baseURL: process.env.TASKBEAN_BASE_URL || 'https://taskbean.localhost',
     headless: false,
     channel: 'msedge',
     screenshot: 'only-on-failure',
