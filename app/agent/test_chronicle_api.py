@@ -67,6 +67,9 @@ def chronicle_db(tmp_path, monkeypatch):
             confidence REAL NOT NULL DEFAULT 0,
             state TEXT NOT NULL DEFAULT 'pending',
             linked_todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+            auto_linked INTEGER DEFAULT 0,
+            decision_reason TEXT,
+            decision_details TEXT,
             occurred_at TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
@@ -97,6 +100,8 @@ def chronicle_db(tmp_path, monkeypatch):
           ('p2', 'hidden', 'C:\\dev\\hidden', 1, 1);
         INSERT INTO todos (id, title, completed, source, priority, tags, project, project_path, status, created_at)
           VALUES ('todo-1', 'Canonical task', 0, 'agent', 'none', '[]', 'taskbean', 'C:\\dev\\taskbean', 'pending', '2026-01-01T09:00:00Z');
+        INSERT INTO todos (id, title, completed, source, priority, tags, project, project_path, status, created_at)
+          VALUES ('todo-hidden', 'Hidden canonical task', 0, 'agent', 'none', '[]', 'hidden', 'C:\\dev\\hidden', 'pending', '2026-01-01T09:00:00Z');
         INSERT INTO reconciliation_suggestions (
           id, evidence_key, suggested_title, suggested_project, suggested_status,
           source_session_ids, evidence_summary, confidence, state, occurred_at, created_at, updated_at,
@@ -130,6 +135,48 @@ def chronicle_db(tmp_path, monkeypatch):
           ('tev-hidden-null', NULL, 'sug-hidden-null-project-0001', 'copilot', 'session-hidden-null', 'taskbean/taskbean',
            'C:\\dev\\hidden', 'hidden', '[]', '[]', '[]', 'Hidden null-project evidence summary', 0.5,
            '2026-01-01T10:00:00Z', '2026-01-01T10:05:00Z', NULL);
+        INSERT INTO reconciliation_suggestions (
+          id, evidence_key, suggested_title, suggested_project, suggested_status,
+          source_session_ids, evidence_summary, confidence, state, linked_todo_id,
+          auto_linked, decision_reason, decision_details, occurred_at, created_at, updated_at, decided_at
+        ) VALUES (
+          'sug-auto-0001', 'ev-auto', 'Canonical task', 'taskbean', 'pending',
+          '["session-auto"]', 'Auto-linked metadata summary', 0.95, 'linked', 'todo-1',
+          1, 'same project, title overlap, same branch',
+          '{"confidence":0.95,"matchedSignals":["same project","title overlap","same branch"],"missingSignals":[]}',
+          '2026-01-01T10:10:00Z', '2026-01-01T10:10:00Z', '2026-01-01T10:10:00Z', '2026-01-01T10:11:00Z'
+        );
+        INSERT INTO task_evidence (
+          id, todo_id, suggestion_id, source, source_session_id, repo, project_path,
+          branch, pr_refs, issue_refs, files_changed, summary, confidence, occurred_at, created_at,
+          raw_tool_output
+        ) VALUES (
+          'tev-auto', 'todo-1', 'sug-auto-0001', 'copilot', 'session-auto', 'taskbean/taskbean',
+          'C:\\dev\\taskbean', 'chronicle-api', '["#41"]', '["#40"]',
+          '["app/agent/main.py"]', 'Auto-linked evidence summary', 0.95,
+          '2026-01-01T10:10:00Z', '2026-01-01T10:11:00Z', NULL
+        );
+        INSERT INTO reconciliation_suggestions (
+          id, evidence_key, suggested_title, suggested_project, suggested_status,
+          source_session_ids, evidence_summary, confidence, state, linked_todo_id,
+          auto_linked, decision_reason, decision_details, occurred_at, created_at, updated_at, decided_at
+        ) VALUES (
+          'sug-auto-hidden-0001', 'ev-auto-hidden', 'Hidden canonical task', 'hidden', 'pending',
+          '["session-auto-hidden"]', 'Hidden auto-linked metadata summary', 0.95, 'linked', 'todo-hidden',
+          1, 'same project, title overlap, same branch',
+          '{"confidence":0.95,"matchedSignals":["same project","title overlap","same branch"],"missingSignals":[]}',
+          '2026-01-01T10:12:00Z', '2026-01-01T10:12:00Z', '2026-01-01T10:12:00Z', '2026-01-01T10:13:00Z'
+        );
+        INSERT INTO task_evidence (
+          id, todo_id, suggestion_id, source, source_session_id, repo, project_path,
+          branch, pr_refs, issue_refs, files_changed, summary, confidence, occurred_at, created_at,
+          raw_tool_output
+        ) VALUES (
+          'tev-auto-hidden', 'todo-hidden', 'sug-auto-hidden-0001', 'copilot', 'session-auto-hidden', 'taskbean/taskbean',
+          'C:\\dev\\hidden', 'hidden-branch', '[]', '[]',
+          '["app/agent/main.py"]', 'Hidden auto-linked evidence summary', 0.95,
+          '2026-01-01T10:12:00Z', '2026-01-01T10:13:00Z', NULL
+        );
         """
     )
     conn.commit()
@@ -208,6 +255,38 @@ def test_links_suggestion_to_existing_task_and_returns_task_detail_evidence(clie
     data = detail.json()
     assert data["evidence"][0]["suggestion_id"] == "sug-pending-0001"
     assert data["evidence"][0]["summary"] == "Safe evidence summary"
+
+
+def test_report_preview_includes_auto_linked_audit_rows(client):
+    response = client.get("/api/reports/preview", params={"date": "all"})
+    assert response.status_code == 200
+    auto_linked = response.json()["chronicle"]["autoLinked"]
+    assert len(auto_linked) == 1
+    assert auto_linked[0]["id"] == "sug-auto-0001"
+    assert auto_linked[0]["auto_linked"] is True
+    assert auto_linked[0]["decision_reason"] == "same project, title overlap, same branch"
+    assert auto_linked[0]["decision_details"]["confidence"] == 0.95
+
+
+def test_report_preview_filters_hidden_auto_linked_audit_rows(client):
+    default_response = client.get("/api/reports/preview", params={"date": "all"})
+    assert default_response.status_code == 200
+    assert [s["id"] for s in default_response.json()["chronicle"]["autoLinked"]] == ["sug-auto-0001"]
+
+    scoped_response = client.get("/api/reports/preview", params={"date": "all", "project": "hidden"})
+    assert scoped_response.status_code == 200
+    assert [s["id"] for s in scoped_response.json()["chronicle"]["autoLinked"]] == ["sug-auto-hidden-0001"]
+
+
+def test_undo_auto_link_returns_suggestion_to_pending_review(client):
+    response = client.post("/api/chronicle/suggestions/sug-auto-0001/undo-auto-link")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["action"] == "undo-auto-link"
+    assert body["suggestion"]["state"] == "pending"
+    assert body["suggestion"]["linked_todo_id"] is None
+    assert body["suggestion"]["auto_linked"] is False
+    assert body["suggestion"]["evidence"][0]["todo_id"] is None
 
 
 def test_invalid_link_returns_explicit_404(client):
