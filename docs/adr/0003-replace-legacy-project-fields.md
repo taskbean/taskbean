@@ -1,0 +1,3 @@
+# Replace legacy path-based project fields in one coordinated cutover
+
+Taskbean will make the new Project and Workspace model authoritative instead of treating legacy fields such as path-based project identity as long-lived compatibility projections. This is a coordinated breaking cutover: older Taskbean versions may not read project grouping correctly, but the trade-off is eliminating the confusing legacy semantics that allowed Copilot worktree paths, session folders, and GUID-like identifiers to appear as standalone Projects. Migration should inspect existing Workspace paths when possible and fall back to stored agent, session, or repo metadata when available; rows that still cannot be resolved become Unassigned Work for review rather than guessed Projects.
