@@ -7,7 +7,6 @@ import logging
 import re
 import sys
 import uuid
-from types import SimpleNamespace
 from typing import Any
 
 # Windows strftime uses %#d to remove leading zeros; POSIX uses %-d.
@@ -443,7 +442,8 @@ class _NormalizingChatClient(OpenAIChatCompletionClient):
         # ignored. We do this here (vs. in build_agent's instructions)
         # because the framework adds instructions as one combined system
         # message, which won't trigger the chat-template hook.
-        if is_qwen3_model(self.model):
+        model_id = getattr(self, "model", None)
+        if is_qwen3_model(model_id):
             from agent_framework import Message as _AfMessage
             messages = [
                 _AfMessage("system", [Content.from_text(text=QWEN3_NO_THINK_PREFIX)]),
@@ -645,8 +645,19 @@ class DynamicAgentProxy(AgentFrameworkAgent):
 
     def __init__(self):
         # Don't call super().__init__() — we don't have an agent yet.
-        # The proxy resolves the real AgentFrameworkAgent at run time.
-        self.config = SimpleNamespace(snapshot_store=None)
+        # AG-UI rc5 reads config at endpoint-registration time for optional
+        # snapshot persistence, so provide only the static config the proxy
+        # needs while run() resolves the real AgentFrameworkAgent at call time.
+        from agent_framework_ag_ui._agent import AgentConfig
+        self.name = "Foundry Todo Assistant"
+        self.description = ""
+        self.config = AgentConfig(
+            state_schema={
+                "todos": list,
+                "recurringTemplates": list,
+            },
+            require_confirmation=False,
+        )
 
     async def run(self, input_data: dict[str, Any]):
         inst = _agui_singleton

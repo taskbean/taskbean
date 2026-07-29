@@ -16,7 +16,7 @@
     "script": "dev:agent"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
+    "@playwright/test": "^1.61.1",
     "portless": "^0.15.0"
   }
 }
