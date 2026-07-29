@@ -5,7 +5,7 @@
 # for the entire status-bar telemetry path; was previously transitive.
 psutil>=6.0,<8.0
 # pywin32 powers in-process WMI (Win32_VideoController name) and PDH
-# (NPU utilization counters) on Windows 11 24H2+. Pinned >=311 because:
+# (NPU utilization counters) on Windows 11 24H2+. Pinned >=312 because:
 #   - 309 and 310 had a DLL-load regression on Win 11 24H2 reported in
 #     mhammond/pywin32#2597 (original reporter on 310, build 26100.3775).
 #   - 311+ resolves it: empirically verified import of win32api/win32com/
@@ -13,7 +13,7 @@ psutil>=6.0,<8.0
 #     failures filed against 311 or 312.
 #   - Stay open-ended (not pinned ==308) so security fixes flow in. If a
 #     future regression shows up, narrow the upper bound here.
-pywin32>=311
+pywin32>=312
 
 # Windows ML ExecutionProviderCatalog — vendor-agnostic NPU detection
 # on Win 11 24H2+. Requires both the catalog API and the dynamic-
@@ -22,11 +22,11 @@ pywin32>=311
 # Python sample: https://learn.microsoft.com/en-us/samples/microsoft/windowsappsdk-samples/windowsmlpython/
 # AMD's Ryzen AI Python sample uses the same pattern:
 # https://ryzenai.docs.amd.com/en/latest/winml/winml_ep.html
-# Pinned to matching 1.8.x WASDK versions — both packages must come from
+# Pinned to matching WASDK versions — both packages must come from
 # the same WASDK release for ABI compatibility between the catalog API
 # and the bootstrap runtime.
-wasdk-Microsoft.Windows.AI.MachineLearning==1.8.260317003
-wasdk-Microsoft.Windows.ApplicationModel.DynamicDependency.Bootstrap==1.8.260416003
+wasdk-Microsoft.Windows.AI.MachineLearning==2.1.3
+wasdk-Microsoft.Windows.ApplicationModel.DynamicDependency.Bootstrap==2.1.3
 
 # ── Agent Framework + AG-UI ───────────────────────────────────────────────────
 # Versions are pinned because _NormalizingChatClient (in agent.py) overrides
@@ -39,12 +39,12 @@ wasdk-Microsoft.Windows.ApplicationModel.DynamicDependency.Bootstrap==1.8.260416
 #    types and will fail-fast on shape changes.
 # 3. Manual E2E: send a chat through /api/command and watch /api/telemetry/snapshot
 #    for ai.response + flow + http.request spans.
-agent-framework==1.0.1
-agent-framework-openai==1.0.1
-agent-framework-ag-ui==1.0.0b260409
+agent-framework==1.9.0
+agent-framework-openai==1.8.2
+agent-framework-ag-ui==1.0.0rc5
 
 # ── Foundry Local (Windows NPU) ───────────────────────────────────────────────
-foundry-local-sdk-winml>=1.0.0
+foundry-local-sdk-winml==1.2.3
 
 # ── Web framework ─────────────────────────────────────────────────────────────
 fastapi
@@ -64,12 +64,12 @@ winotify
 mcp
 
 # ── OpenTelemetry ─────────────────────────────────────────────────────────────
-opentelemetry-sdk>=1.29.0
-opentelemetry-semantic-conventions>=0.50b0
-opentelemetry-exporter-otlp-proto-grpc
-opentelemetry-exporter-otlp-proto-http
-opentelemetry-instrumentation-fastapi
-opentelemetry-instrumentation-httpx
+opentelemetry-sdk>=1.43.0
+opentelemetry-semantic-conventions>=0.64b0
+opentelemetry-exporter-otlp-proto-grpc>=1.43.0
+opentelemetry-exporter-otlp-proto-http>=1.43.0
+opentelemetry-instrumentation-fastapi>=0.64b0
+opentelemetry-instrumentation-httpx>=0.64b0
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 httpx

@@ -41,7 +41,11 @@
   "engines": {
     "node": ">=22.13.0"
   },
-  "os": ["win32", "linux", "darwin"],
+  "os": [
+    "win32",
+    "linux",
+    "darwin"
+  ],
   "scripts": {
     "test": "node --test src/**/*.test.js",
     "postinstall": "node scripts/postinstall.cjs"
@@ -55,10 +59,19 @@
   "bugs": {
     "url": "https://github.com/taskbean/taskbean/issues"
   },
-  "keywords": ["cli", "task-management", "copilot", "agent-skill", "ai", "todo", "productivity", "local-first"],
+  "keywords": [
+    "cli",
+    "task-management",
+    "copilot",
+    "agent-skill",
+    "ai",
+    "todo",
+    "productivity",
+    "local-first"
+  ],
   "author": "Nick Brady",
   "license": "MIT",
   "dependencies": {
-    "commander": "^13.0.0"
+    "commander": "^15.0.0"
   }
 }
