@@ -40,6 +40,18 @@ function commit(repo, name, timestamp) {
       GIT_COMMITTER_DATE: timestamp,
     },
   });
+  return git(repo, ['rev-parse', 'HEAD']);
+}
+
+function commitMessage(repo, subject, body, timestamp) {
+  git(repo, ['commit', '--allow-empty', '-m', subject, '-m', body], {
+    env: {
+      ...process.env,
+      GIT_AUTHOR_DATE: timestamp,
+      GIT_COMMITTER_DATE: timestamp,
+    },
+  });
+  return git(repo, ['rev-parse', 'HEAD']);
 }
 
 function commandEnv(dbPath) {
@@ -169,6 +181,87 @@ describe('bean brew', () => {
     assert.equal(result.sessions[0].state, 'Went Cold');
     assert.equal(result.sessions[0].commit_sha, null);
     assert.equal(result.sessions[0].commit_timestamp, null);
+  });
+
+  it('reclassifies a Brewed session as Spilled for a standard git revert at any later time', () => {
+    const repo = createRepo('spilled', 'https://github.com/acme/spilled.git');
+    const originalSha = commit(repo, 'brewed-then-spilled', '2026-02-02T00:00:00Z');
+    git(repo, ['checkout', '-b', 'rollback']);
+    git(repo, ['revert', '--no-edit', originalSha], {
+      env: {
+        ...process.env,
+        GIT_AUTHOR_DATE: '2036-02-02T00:00:00Z',
+        GIT_COMMITTER_DATE: '2036-02-02T00:00:00Z',
+      },
+    });
+    const revertingSha = git(repo, ['rev-parse', 'HEAD']);
+    git(repo, ['checkout', 'main']);
+    const dbPath = join(TEST_ROOT, 'spilled.db');
+    initializeDb(repo, dbPath);
+    insertSession(dbPath, {
+      id: 'copilot:spilled',
+      branch: 'main',
+      repository: 'acme/spilled',
+      startedAt: '2026-02-01T00:00:00Z',
+      updatedAt: '2026-02-01T12:00:00Z',
+    });
+
+    const result = brewJson(repo, dbPath);
+    assert.deepEqual(result.counts, {
+      total: 1,
+      brewed: 0,
+      went_cold: 0,
+      spilled: 1,
+    });
+    assert.equal(result.sessions[0].state, 'Spilled');
+    assert.equal(result.sessions[0].commit_sha, originalSha);
+    assert.equal(result.sessions[0].reverting_commit_sha, revertingSha);
+
+    const text = runBrew(repo, dbPath, false);
+    assert.equal(text.status, 0, text.stderr);
+    assert.match(text.stdout, new RegExp(`\\| Spilled \\| copilot:spilled \\|`));
+    assert.match(text.stdout, new RegExp(originalSha));
+    assert.match(text.stdout, new RegExp(revertingSha));
+  });
+
+  it('ignores revert-like commits that do not use the exact standard convention', () => {
+    const repo = createRepo(
+      'nonstandard-reverts',
+      'https://github.com/acme/nonstandard-reverts.git'
+    );
+    const originalSha = commit(repo, 'still-brewed', '2026-02-12T00:00:00Z');
+    commitMessage(
+      repo,
+      'Roll back "still-brewed"',
+      `This reverts commit ${originalSha}.`,
+      '2036-02-12T00:00:00Z'
+    );
+    commitMessage(
+      repo,
+      'Revert "still-brewed"',
+      `This reverts commit ${originalSha.slice(0, 12)}.`,
+      '2036-02-13T00:00:00Z'
+    );
+    commitMessage(
+      repo,
+      'Revert "still-brewed"',
+      `This reverts commit ${originalSha}. Extra text`,
+      '2036-02-14T00:00:00Z'
+    );
+    const dbPath = join(TEST_ROOT, 'nonstandard-reverts.db');
+    initializeDb(repo, dbPath);
+    insertSession(dbPath, {
+      id: 'copilot:still-brewed',
+      branch: 'main',
+      repository: 'acme/nonstandard-reverts',
+      startedAt: '2026-02-11T00:00:00Z',
+      updatedAt: '2026-02-11T12:00:00Z',
+    });
+
+    const result = brewJson(repo, dbPath);
+    assert.equal(result.sessions[0].state, 'Brewed');
+    assert.equal(result.sessions[0].commit_sha, originalSha);
+    assert.equal(result.sessions[0].reverting_commit_sha, null);
   });
 
   it('scopes set branches and searches all branches only for null branches', () => {

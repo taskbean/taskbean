@@ -71,7 +71,7 @@ bean add "fix auth bug before standup"
 bean done 1
 bean list
 bean report
-bean brew --json              # classify Copilot sessions as Brewed or Went Cold
+bean brew --json              # classify Copilot sessions as Brewed, Spilled, or Went Cold
 bean chronicle doctor --json  # diagnose local Copilot session data availability
 bean chronicle reconcile --since 2026-04-20 --until 2026-04-26 --json
 ```
@@ -189,7 +189,7 @@ On that last one: only metadata and aggregate token counts are stored. Prompts, 
 
 ### Git outcome classification
 
-Run `bean brew` from the live GitHub clone you want to inspect. Taskbean matches that clone's `origin` repository to Copilot CLI sessions, searches the recorded branch (or all branches when branch metadata is absent), and reports **Brewed** when an author-dated commit lands by seven days after the session ends. Sessions without a matching commit are **Went Cold**. Use `bean brew --json` for automation.
+Run `bean brew` from the live GitHub clone you want to inspect. Taskbean matches that clone's `origin` repository to Copilot CLI sessions, searches the recorded branch (or all branches when branch metadata is absent), and reports **Brewed** when an author-dated commit lands by seven days after the session ends. A Brewed session becomes **Spilled** when any later commit in the repository uses the exact standard `git revert` message: a `Revert "..."` subject and a `This reverts commit <sha>.` trailer naming the original commit. Manual or non-standard reverts are intentionally not inferred. Sessions without a matching commit are **Went Cold**. Use `bean brew --json` for automation.
 
 ### Chronicle-backed weekly reviews
 

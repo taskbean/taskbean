@@ -67,7 +67,7 @@ bean projects                         # list all projects
 bean report                           # today's report (markdown)
 bean report --date week               # this week
 bean report --date week --include-chronicle --json
-bean brew                             # Brewed vs. Went Cold Copilot sessions
+bean brew                             # Brewed, Spilled, or Went Cold Copilot sessions
 bean brew --json                      # machine-readable git outcome data
 bean export --format json             # export as JSON
 bean export --format csv              # export as CSV
@@ -75,7 +75,7 @@ bean export --format csv              # export as CSV
 
 The plain report is canonical Taskbean data only. `--include-chronicle` adds linked evidence and pending review suggestions for weekly review workflows.
 
-`bean brew` must run inside the live GitHub clone being checked. It matches Copilot sessions for the clone's `origin` repository and marks them **Brewed** when the session branch has an author-dated commit between session start and session end plus seven days; otherwise they **Went Cold**. Sessions without branch metadata search all branches.
+`bean brew` must run inside the live GitHub clone being checked. It matches Copilot sessions for the clone's `origin` repository and marks them **Brewed** when the session branch has an author-dated commit between session start and session end plus seven days; otherwise they **Went Cold**. A Brewed session becomes **Spilled** when any later repository commit has the exact standard `git revert` message: a `Revert "..."` subject and a `This reverts commit <sha>.` trailer naming the original commit. There is no time cap on the revert search, and manual or non-standard reverts are intentionally ignored. Sessions without branch metadata search all branches.
 
 ### Chronicle Diagnostics
 ```bash

@@ -5,6 +5,8 @@ import { parseGitHubRepository, resolveGitRoot } from '../data/project.js';
 const GRACE_PERIOD_DAYS = 7;
 const GRACE_PERIOD_MS = GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000;
 const GIT_HISTORY_BUFFER_BYTES = 64 * 1024 * 1024;
+const STANDARD_REVERT_SUBJECT = /^Revert "[^\r\n]*"\r?(?:\n|$)/;
+const STANDARD_REVERT_TRAILER = /^This reverts commit ([0-9a-f]+)\.\r?$/gm;
 
 class BrewError extends Error {
   constructor(code, message) {
@@ -84,7 +86,7 @@ function resolveBranchCommit(gitRoot, branch) {
 }
 
 function readCommits(gitRoot, branch) {
-  const args = ['log', '--format=%h%x00%aI'];
+  const args = ['log', '--format=%H%x00%aI'];
   if (branch) {
     const branchCommit = resolveBranchCommit(gitRoot, branch);
     if (!branchCommit) return [];
@@ -101,6 +103,37 @@ function readCommits(gitRoot, branch) {
       return { sha, timestamp, timestampMs: Date.parse(timestamp) };
     })
     .filter(commit => commit.sha && Number.isFinite(commit.timestampMs));
+}
+
+function readStandardReverts(gitRoot, originalShas) {
+  const candidateShas = runGit(gitRoot, [
+    'log',
+    '--all',
+    '--format=%H',
+    '--grep=^Revert "',
+  ])
+    .split(/\r?\n/)
+    .filter(Boolean);
+  const revertsByOriginalSha = new Map();
+
+  for (const revertingSha of candidateShas) {
+    const message = runGit(gitRoot, [
+      'show',
+      '--no-patch',
+      '--format=%B',
+      revertingSha,
+    ]);
+    if (!STANDARD_REVERT_SUBJECT.test(message)) continue;
+
+    for (const match of message.matchAll(STANDARD_REVERT_TRAILER)) {
+      const originalSha = match[1];
+      if (originalShas.has(originalSha) && !revertsByOriginalSha.has(originalSha)) {
+        revertsByOriginalSha.set(originalSha, revertingSha);
+      }
+    }
+  }
+
+  return revertsByOriginalSha;
 }
 
 function sessionWindow(session) {
@@ -132,7 +165,7 @@ export function classifyBrewSessions(gitRoot, repository) {
   );
   const commitCache = new Map();
 
-  return sessions.map((session) => {
+  const classifiedSessions = sessions.map((session) => {
     const cacheKey = session.branch || '__all__';
     if (!commitCache.has(cacheKey)) {
       commitCache.set(cacheKey, readCommits(gitRoot, session.branch));
@@ -150,6 +183,24 @@ export function classifyBrewSessions(gitRoot, repository) {
       state: matchedCommit ? 'Brewed' : 'Went Cold',
       commit_sha: matchedCommit?.sha || null,
       commit_timestamp: matchedCommit?.timestamp || null,
+      reverting_commit_sha: null,
+    };
+  });
+
+  const originalShas = new Set(
+    classifiedSessions
+      .map(session => session.commit_sha)
+      .filter(Boolean)
+  );
+  if (originalShas.size === 0) return classifiedSessions;
+
+  const revertsByOriginalSha = readStandardReverts(gitRoot, originalShas);
+  return classifiedSessions.map((session) => {
+    const revertingCommitSha = revertsByOriginalSha.get(session.commit_sha) || null;
+    return {
+      ...session,
+      state: revertingCommitSha ? 'Spilled' : session.state,
+      reverting_commit_sha: revertingCommitSha,
     };
   });
 }
@@ -162,13 +213,14 @@ function renderText(result) {
   const lines = [
     `Brew results for ${result.repository}`,
     '',
-    '| State | Session | Branch | Repository | Commit | Timestamp |',
-    '| --- | --- | --- | --- | --- | --- |',
+    '| State | Session | Branch | Repository | Commit | Reverting Commit | Timestamp |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
   ];
   for (const session of result.sessions) {
     lines.push(
       `| ${session.state} | ${session.session_id} | ${session.branch || 'all branches'} | `
-      + `${session.repository} | ${session.commit_sha || '-'} | ${session.commit_timestamp || '-'} |`
+      + `${session.repository} | ${session.commit_sha || '-'} | `
+      + `${session.reverting_commit_sha || '-'} | ${session.commit_timestamp || '-'} |`
     );
   }
   return lines.join('\n');
@@ -178,6 +230,7 @@ export function brewCommand(opts) {
   try {
     const { gitRoot, repository } = resolveRepository();
     const sessions = classifyBrewSessions(gitRoot, repository);
+    const spilledCount = sessions.filter(session => session.state === 'Spilled').length;
     const result = {
       repository,
       grace_period_days: GRACE_PERIOD_DAYS,
@@ -185,6 +238,7 @@ export function brewCommand(opts) {
         total: sessions.length,
         brewed: sessions.filter(session => session.state === 'Brewed').length,
         went_cold: sessions.filter(session => session.state === 'Went Cold').length,
+        ...(spilledCount > 0 ? { spilled: spilledCount } : {}),
       },
       sessions,
     };
