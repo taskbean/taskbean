@@ -16,6 +16,7 @@ except Exception:
     pass
 
 import app_config
+import port_config
 import state as state_mod
 import telemetry as telem
 
@@ -97,8 +98,7 @@ def _is_in_reminder_hours() -> bool:
 # ── Notifications ─────────────────────────────────────────────────────────────
 
 def _base_url() -> str:
-    port = app_config.get("port") or 8275
-    return f"http://localhost:{port}"
+    return port_config.build_port_info(config_get=app_config.get)["publicUrl"]
 
 
 def send_notification(

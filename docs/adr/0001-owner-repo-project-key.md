@@ -1,0 +1,3 @@
+# Use owner/repo as the project key for Git-backed work
+
+Taskbean treats a Project as the logical repo or product that work rolls up to, not as a physical checkout. For Git-backed work, the stable Project Key is the owner and name of the nearest enclosing Git repository, preferring the `upstream` remote when present and falling back to `origin`, so isolated Copilot worktrees, forked workspaces, local GitHub forks, and session-specific folders all roll up to the same Project instead of appearing as separate path-based projects. Work without a usable GitHub remote falls back to a canonical local path because there is no stable repository identity to share across workspaces.

@@ -12,6 +12,8 @@ param(
 $Port = 8275
 $AgentDir = Join-Path $PSScriptRoot "agent"
 $SkipBrowser = $ProtocolUrl -like "taskbean://*"
+$PortlessName = "taskbean"
+$PortlessUrl = "https://$PortlessName.localhost"
 
 # Mode resolution: protocol-handler invocations are always background (no
 # console attached). Explicit -Mode overrides auto-detection.
@@ -19,6 +21,90 @@ if (-not $Mode) {
     $Mode = if ($SkipBrowser) { 'background' } else { 'foreground' }
 }
 $IsBackground = $Mode -eq 'background'
+
+function Resolve-ConfiguredPort {
+    foreach ($name in 'TASKBEAN_PORT', 'taskbean_PORT', 'PORT') {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        $parsed = 0
+        if ($value -and [int]::TryParse($value, [ref]$parsed) -and $parsed -ge 1024 -and $parsed -le 65535) {
+            return $parsed
+        }
+    }
+
+    $configPath = Join-Path $env:USERPROFILE ".taskbean\config.json"
+    try {
+        if (Test-Path $configPath) {
+            $cfg = Get-Content $configPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            $parsed = 0
+            if ($cfg.port -and [int]::TryParse([string]$cfg.port, [ref]$parsed) -and $parsed -ge 1024 -and $parsed -le 65535) {
+                return $parsed
+            }
+        }
+    } catch {
+        Write-Host "Could not read saved server port from $configPath; using default $Port." -ForegroundColor Yellow
+    }
+
+    return 8275
+}
+
+$Port = Resolve-ConfiguredPort
+
+function Resolve-PortlessCommand {
+    $localCmd = Join-Path $PSScriptRoot "node_modules\.bin\portless.cmd"
+    if (Test-Path $localCmd) { return $localCmd }
+
+    $cmd = Get-Command portless -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) { return $cmd.Source }
+
+    return $null
+}
+
+function Register-PortlessAlias {
+    param([Parameter(Mandatory)][int]$TargetPort)
+
+    $portless = Resolve-PortlessCommand
+    if (-not $portless) { return $false }
+
+    try {
+        & $portless alias $PortlessName $TargetPort *> $null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Portless alias registration failed (exit $LASTEXITCODE); using loopback URL." -ForegroundColor Yellow
+            return $false
+        }
+
+        & $portless proxy start *> $null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Portless proxy could not start (exit $LASTEXITCODE); using loopback URL." -ForegroundColor Yellow
+            return $false
+        }
+
+        Write-Host "Portless route ready: $PortlessUrl -> 127.0.0.1:$TargetPort" -ForegroundColor DarkGray
+        return $true
+    } catch {
+        Write-Host "Portless setup failed: $_" -ForegroundColor Yellow
+    }
+
+    return $false
+}
+
+function Resolve-LaunchUrl {
+    param([Parameter(Mandatory)][int]$TargetPort)
+
+    if (Register-PortlessAlias -TargetPort $TargetPort) {
+        return $PortlessUrl
+    }
+
+    return "http://127.0.0.1:$TargetPort"
+}
+
+function Test-PortlessHealth {
+    try {
+        $response = Invoke-WebRequest -UseBasicParsing -Uri "$PortlessUrl/api/health" -TimeoutSec 5 -ErrorAction Stop
+        return $response.StatusCode -ge 200 -and $response.StatusCode -lt 500
+    } catch {
+        return $false
+    }
+}
 
 # Structured error reporting. In background mode the launcher has no console,
 # so any "we couldn't start" condition is written to a JSON error file the
@@ -62,6 +148,21 @@ function Write-LaunchError {
     }
 }
 
+# ── Single-instance guard ─────────────────────────────────────────────────────
+# A global named mutex prevents two concurrent Reconnect clicks (or a click
+# racing with the Startup-folder launcher) from both creating app\.venv,
+# installing dependencies, or spawning python children.
+$mutex = New-Object System.Threading.Mutex($false, 'Global\TaskBeanLauncher')
+$ownMutex = $false
+try { $ownMutex = $mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $ownMutex = $true }
+if (-not $ownMutex) {
+    Write-Host "Another taskbean launcher is already starting the server — exiting." -ForegroundColor Yellow
+    if (-not $SkipBrowser) { Start-Process (Resolve-LaunchUrl -TargetPort $Port) }
+    exit 0
+}
+
+try {
+
 # ── Self-register taskbean:// protocol handler (best-effort, non-blocking) ────
 try {
     $launchPs1 = Join-Path $PSScriptRoot "launch.ps1"
@@ -81,14 +182,72 @@ try {
 # Resolve a REAL Python interpreter, skipping the Microsoft Store App Execution
 # Alias stubs in %LOCALAPPDATA%\Microsoft\WindowsApps\ (python.exe / python3.exe
 # reparse points that open the Store and exit without running anything).
+function Test-PythonCandidate {
+    param([string]$Candidate)
+
+    if (-not $Candidate -or -not (Test-Path $Candidate)) { return $false }
+    if ($Candidate -match '\\WindowsApps\\') { return $false }
+
+    try {
+        & $Candidate -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" 2>$null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
+}
+
+function Resolve-PythonFromLauncher {
+    $launchers = @()
+    $launchers += @(Get-Command py -All -ErrorAction SilentlyContinue | Where-Object { $_.Source })
+    $launcherPath = Join-Path $env:LOCALAPPDATA "Programs\Python\Launcher\py.exe"
+    if (Test-Path $launcherPath) {
+        $launchers += @([pscustomobject]@{ Source = $launcherPath })
+    }
+
+    foreach ($launcher in $launchers) {
+        try {
+            $candidate = (& $launcher.Source -3 -c "import sys; print(sys.executable)" 2>$null).Trim()
+            if (Test-PythonCandidate $candidate) { return $candidate }
+        } catch {}
+    }
+
+    return $null
+}
+
+function Resolve-PythonFromKnownLocations {
+    $roots = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\Python"),
+        $env:ProgramFiles,
+        ${env:ProgramFiles(x86)}
+    ) | Where-Object { $_ -and (Test-Path $_) }
+
+    $candidates = @()
+    foreach ($root in $roots) {
+        $candidates += @(Get-ChildItem $root -Directory -Filter "Python*" -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName "python.exe" } |
+            Where-Object { Test-Path $_ })
+    }
+
+    foreach ($candidate in ($candidates | Sort-Object -Descending)) {
+        if (Test-PythonCandidate $candidate) { return $candidate }
+    }
+
+    return $null
+}
+
 function Resolve-RealPython {
     foreach ($name in 'python','python3') {
-        $hit = Get-Command $name -All -ErrorAction SilentlyContinue |
-               Where-Object { $_.Source -and $_.Source -notmatch '\\WindowsApps\\' } |
-               Select-Object -First 1
-        if ($hit) { return $hit.Source }
+        $hits = @(Get-Command $name -All -ErrorAction SilentlyContinue |
+               Where-Object { $_.Source -and $_.Source -notmatch '\\WindowsApps\\' })
+        foreach ($hit in $hits) {
+            if (Test-PythonCandidate $hit.Source) { return $hit.Source }
+        }
     }
-    return $null
+
+    $fromLauncher = Resolve-PythonFromLauncher
+    if ($fromLauncher) { return $fromLauncher }
+
+    return Resolve-PythonFromKnownLocations
 }
 $python = Resolve-RealPython
 
@@ -97,7 +256,7 @@ if (-not $python) {
         # No console -> never prompt. Surface a structured error and bail.
         Write-LaunchError -Code 'PYTHON_MISSING' `
             -Message 'Python 3.10+ is required but was not found on PATH.' `
-            -Detail 'Install from https://python.org/downloads/ or run: winget install Python.Python.3.12'
+            -Detail 'Checked PATH, py launcher, and common install locations. Install from https://python.org/downloads/ or run: winget install Python.Python.3.12'
         exit 2
     }
     Write-Host ""
@@ -111,7 +270,7 @@ if (-not $python) {
     if (-not $python) {
         Write-LaunchError -Code 'PYTHON_MISSING' `
             -Message 'Python 3.10+ is required but was not found on PATH after install prompt.' `
-            -Detail 'Install from https://python.org/downloads/ or run: winget install Python.Python.3.12'
+            -Detail 'Checked PATH, py launcher, and common install locations. Install from https://python.org/downloads/ or run: winget install Python.Python.3.12'
         exit 2
     }
 }
@@ -132,6 +291,53 @@ if (-not (Get-Command foundry -ErrorAction SilentlyContinue)) {
         Write-Host "Install manually:  winget install Microsoft.FoundryLocal" -ForegroundColor Yellow
     }
 }
+
+# ── Optional Portless dependency bootstrap ───────────────────────────────────
+# Portless is an app-level convenience for https://taskbean.localhost. If Node
+# 24/npm are unavailable we keep the historical loopback URL fallback.
+function Get-NodeMajorVersion {
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $node) { return $null }
+
+    try {
+        $version = (& $node.Source --version 2>$null).Trim()
+        if ($version -match '^v?(\d+)') { return [int]$Matches[1] }
+    } catch {}
+
+    return $null
+}
+
+function Ensure-AppNodeDependencies {
+    if (Resolve-PortlessCommand) { return }
+
+    $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if (-not $npm) { $npm = Get-Command npm -ErrorAction SilentlyContinue }
+    if (-not $npm) {
+        Write-Host "npm not found; using loopback URL instead of Portless." -ForegroundColor DarkGray
+        return
+    }
+
+    $nodeMajor = Get-NodeMajorVersion
+    if (-not $nodeMajor -or $nodeMajor -lt 24) {
+        Write-Host "Node.js 24+ is required for Portless; using loopback URL." -ForegroundColor DarkGray
+        return
+    }
+
+    Write-Host "Installing app Node dependencies for Portless..." -ForegroundColor Cyan
+    Push-Location $PSScriptRoot
+    try {
+        & $npm.Source install --omit=optional --no-audit --fund=false
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Could not install app Node dependencies; using loopback URL." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "Could not install app Node dependencies: $_" -ForegroundColor Yellow
+    } finally {
+        Pop-Location
+    }
+}
+
+Ensure-AppNodeDependencies
 
 # ── Python virtual environment ────────────────────────────────────────────────
 # We install dependencies into a repo-local virtual environment (app/.venv)
@@ -196,7 +402,8 @@ if ($venvOk -and (Test-Path $reqFile)) {
     }
     if ($needInstall) {
         Write-Host "Installing Python dependencies into app\.venv..." -ForegroundColor Cyan
-        & $python -m pip install -r $reqFile --quiet 2>$null
+        $pipLog = Join-Path $env:TEMP "taskbean-pip-install.log"
+        & $python -m pip install -r $reqFile --quiet *> $pipLog
         if ($LASTEXITCODE -eq 0) {
             Set-Content -Path $stamp -Value $reqHash -Encoding ASCII
             # Migration: legacy marker in $AgentDir is no longer authoritative
@@ -206,7 +413,7 @@ if ($venvOk -and (Test-Path $reqFile)) {
         } else {
             Write-LaunchError -Code 'PIP_INSTALL_FAILED' `
                 -Message 'pip install -r requirements.txt failed.' `
-                -Detail "Interpreter: $python (exit $LASTEXITCODE)"
+                -Detail "Interpreter: $python (exit $LASTEXITCODE). Log: $pipLog"
             if ($IsBackground) { exit 5 }
         }
     }
@@ -233,20 +440,7 @@ if ($venvOk -and (Test-Path $reqFile)) {
     exit 4
 }
 
-# ── Single-instance guard ─────────────────────────────────────────────────────
-# A global named mutex prevents two concurrent Reconnect clicks (or a click
-# racing with the Startup-folder launcher) from both spawning python children.
-# The loser exits immediately; the winner owns the startup sequence.
-$mutex = New-Object System.Threading.Mutex($false, 'Global\TaskBeanLauncher')
-$ownMutex = $false
-try { $ownMutex = $mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $ownMutex = $true }
-if (-not $ownMutex) {
-    Write-Host "Another taskbean launcher is already starting the server — exiting." -ForegroundColor Yellow
-    if (-not $SkipBrowser) { Start-Process "http://127.0.0.1:$Port" }
-    exit 0
-}
-
-try {
+$LaunchUrl = Resolve-LaunchUrl -TargetPort $Port
 
 # Probe — use 127.0.0.1 explicitly to match uvicorn's bind (main.py passes
 # host="127.0.0.1" to uvicorn.run; resolving "localhost" can hit ::1 first
@@ -368,9 +562,13 @@ if (-not $alive) {
 # Already-running short-circuit also counts as success; nothing to clear.
 if ($alive) { }
 
+if ($LaunchUrl -eq $PortlessUrl -and -not (Test-PortlessHealth)) {
+    Write-Host "Portless route was not reachable; opening loopback URL instead." -ForegroundColor Yellow
+    $LaunchUrl = "http://127.0.0.1:$Port"
+}
+
 if (-not $SkipBrowser) {
-    # Use 127.0.0.1 to match uvicorn's bind (see note on Test-ServerHealth).
-    Start-Process "http://127.0.0.1:$Port"
+    Start-Process $LaunchUrl
 }
 
 } finally {

@@ -7,23 +7,38 @@ import { program } from 'commander';
 import { VERSION } from '../src/version.js';
 import { checkForUpdates, maybePrintUpgradeNotice } from '../src/lib/update-notifier.js';
 import { maybePrintSkillDriftNotice } from '../src/lib/skill-drift-notifier.js';
-import { addCommand } from '../src/commands/add.js';
-import { doneCommand } from '../src/commands/done.js';
-import { listCommand } from '../src/commands/list.js';
-import { editCommand } from '../src/commands/edit.js';
-import { removeCommand } from '../src/commands/remove.js';
-import { startCommand } from '../src/commands/start.js';
-import { blockCommand } from '../src/commands/block.js';
-import { remindCommand } from '../src/commands/remind.js';
-import { reportCommand } from '../src/commands/report.js';
-import { trackCommand, untrackCommand } from '../src/commands/track.js';
-import { installCommand } from '../src/commands/install.js';
-import { projectsCommand, hideCommand, showCommand, categorizeCommand, deleteCommand } from '../src/commands/projects.js';
-import { serveCommand } from '../src/commands/serve.js';
-import { packageCommand } from '../src/commands/package.js';
-import { upgradeCommand } from '../src/commands/upgrade.js';
-import { uninstallCommand } from '../src/commands/uninstall.js';
-import { updateSkillCommand } from '../src/commands/update-skill.js';
+
+// Load command modules after installing the warning handler above. Several
+// commands import node:sqlite through the shared store, and static ESM imports
+// would emit the ExperimentalWarning before this file's body runs.
+const { addCommand } = await import('../src/commands/add.js');
+const { doneCommand } = await import('../src/commands/done.js');
+const { listCommand } = await import('../src/commands/list.js');
+const { editCommand } = await import('../src/commands/edit.js');
+const { removeCommand } = await import('../src/commands/remove.js');
+const { startCommand } = await import('../src/commands/start.js');
+const { blockCommand } = await import('../src/commands/block.js');
+const { remindCommand } = await import('../src/commands/remind.js');
+const { reportCommand } = await import('../src/commands/report.js');
+const {
+  chronicleApproveCommand,
+  chronicleDoctorCommand,
+  chronicleIgnoreCommand,
+  chronicleLinkCommand,
+  chronicleReconcileCommand,
+  chronicleSuggestionsCommand,
+  chronicleUndoCommand,
+} = await import('../src/commands/chronicle.js');
+const { trackCommand, untrackCommand } = await import('../src/commands/track.js');
+const { installCommand } = await import('../src/commands/install.js');
+const {
+  projectsCommand, hideCommand, showCommand, categorizeCommand, deleteCommand,
+} = await import('../src/commands/projects.js');
+const { serveCommand } = await import('../src/commands/serve.js');
+const { packageCommand } = await import('../src/commands/package.js');
+const { upgradeCommand } = await import('../src/commands/upgrade.js');
+const { uninstallCommand } = await import('../src/commands/uninstall.js');
+const { updateSkillCommand } = await import('../src/commands/update-skill.js');
 
 // Fire-and-forget update check. Internally throttled to once per 24h, silent
 // in CI / non-TTY / when TASKBEAN_NO_UPGRADE_NOTICE=1.
@@ -124,9 +139,72 @@ program
   .description('Generate a report')
   .option('--date <range>', 'Date range: today, yesterday, week, all', 'today')
   .option('--format <fmt>', 'Output format: md, json, csv', 'md')
+  .option('--include-chronicle', 'Include Chronicle/session evidence and pending suggestions')
   .option('--json', 'Shorthand for --format json')
   .option('--project <path>', 'Filter to specific project')
   .action(reportCommand);
+
+const chronicle = program
+  .command('chronicle')
+  .description('Inspect and reconcile Chronicle/session evidence');
+
+chronicle
+  .command('doctor')
+  .description('Diagnose local Chronicle/session data availability')
+  .option('--json', 'Output as JSON')
+  .action(chronicleDoctorCommand);
+
+chronicle
+  .command('reconcile')
+  .description('Create review-only suggestions from local Chronicle/session evidence')
+  .option('--since <date>', 'Start date, YYYY-MM-DD (default: 7 days ago)')
+  .option('--until <date>', 'End date, YYYY-MM-DD (default: today)')
+  .option('--json', 'Output as JSON')
+  .action(chronicleReconcileCommand);
+
+chronicle
+  .command('suggestions')
+  .description('List Chronicle reconciliation suggestions')
+  .option('--status <status>', 'pending, approved, linked, ignored, or all', 'pending')
+  .option('--json', 'Output as JSON')
+  .action(chronicleSuggestionsCommand);
+
+chronicle
+  .command('approve')
+  .description('Approve a Chronicle suggestion into a Taskbean task')
+  .argument('<suggestion-id>', 'Suggestion id')
+  .option('--title <title>', 'Task title override')
+  .option('--project <path-or-name>', 'Task project override')
+  .option('--priority <priority>', 'Task priority')
+  .option('--notes <notes>', 'Task notes')
+  .option('--tags <tags>', 'Comma-separated task tags')
+  .option('--status <status>', 'pending, in_progress, blocked, or done')
+  .option('--work-date <date>', 'Work date override, YYYY-MM-DD')
+  .option('--json', 'Output as JSON')
+  .action(chronicleApproveCommand);
+
+chronicle
+  .command('link')
+  .description('Link a Chronicle suggestion to an existing Taskbean task')
+  .argument('<suggestion-id>', 'Suggestion id')
+  .argument('<todo-id>', 'Task id or index')
+  .option('--project <path-or-name>', 'Project for resolving task indexes')
+  .option('--json', 'Output as JSON')
+  .action(chronicleLinkCommand);
+
+chronicle
+  .command('ignore')
+  .description('Ignore a Chronicle reconciliation suggestion')
+  .argument('<suggestion-id>', 'Suggestion id')
+  .option('--json', 'Output as JSON')
+  .action(chronicleIgnoreCommand);
+
+chronicle
+  .command('undo')
+  .description('Return an auto-linked Chronicle suggestion to pending review')
+  .argument('<suggestion-id>', 'Suggestion id')
+  .option('--json', 'Output as JSON')
+  .action(chronicleUndoCommand);
 
 program
   .command('track')

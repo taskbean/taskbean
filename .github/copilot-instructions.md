@@ -125,7 +125,7 @@ node bin/taskbean.js --help       # run locally without global install
 ```bash
 cd app/agent
 pip install -r requirements.txt
-python main.py                    # starts on :8275, auto-starts Jaeger
+python main.py                    # starts on :8275 by default, auto-starts Jaeger
 ```
 
 ### One-click launch
@@ -161,7 +161,7 @@ pytest test_integration.py -v -m slow                  # includes model-switch
 ```
 
 Tests start a real uvicorn server on port 3001 — no mocking. Shared fixtures in `conftest.py`:
-- `live_server` (session-scoped) — starts uvicorn in a background thread, waits up to 6 min for model load via `/api/health` polling
+- `live_server` (session-scoped) — starts uvicorn in a background thread, waits up to 6 min for model load via readiness polling
 - `client` (session-scoped) — `httpx.AsyncClient` with 120s timeout
 - `clean_state` — clears `state.todos` and `state.recurring_templates` before/after test
 - `collect_sse()` — helper to POST to SSE endpoints and collect events until a target event type arrives
@@ -176,13 +176,17 @@ npx playwright test -g "page loads"                    # single test by title
 npx playwright test --project=smoke                    # smoke project only
 ```
 
-Requires the server running on `:8275`. Config uses 3 projects with dependencies: `smoke` runs first, then `features` and `model-tests` run after smoke passes. Runs in Edge (`channel: 'msedge'`), records trace/video on failure.
+Playwright starts the server automatically by default and waits on `/api/ready`, which returns 200 only after the Foundry model is usable. Set `TASKBEAN_BASE_URL=http://127.0.0.1:8275` when testing a manual backend launch without Portless, or `TASKBEAN_SKIP_WEBSERVER=1` to require an already-running server. Config uses 3 projects with dependencies: `smoke` runs first, then `features` and `model-tests` run after smoke passes. Runs in Edge (`channel: 'msedge'`), records trace/video on failure.
 
 ## Key Conventions
 
 ### SSE is the transport for everything complex
 
 `/api/command`, `/api/extract`, `/api/models/switch`, and telemetry streams all use Server-Sent Events.
+
+### Health vs readiness
+
+`/api/health` means the FastAPI process is alive and includes `foundryReady`, `modelReady`, and `startupError`. It may return 200 while the Foundry model is still loading. `/api/ready` is the model-readiness gate: 503 while initializing, 500 on `startupError`, and 200 only when `modelReady=true`.
 
 ### Model switching is guarded
 
@@ -228,6 +232,30 @@ These conventions are critical for reliable tool calling on small local models (
 ## Multi-agent usage tracking
 
 taskbean ingests session and token-usage metadata from the coding agents installed on the machine (Copilot CLI, Claude Code, Codex, OpenCode) and attributes each `bean add` to the agent/session that triggered it.
+
+## Chronicle weekly reviews and reconciliation
+
+Chronicle reconciliation is review-first. Taskbean tasks stay canonical; local Chronicle/session metadata only creates suggestions and evidence until a user approves, links, or ignores it.
+
+CLI workflow:
+
+```bash
+bean chronicle doctor --json
+bean chronicle reconcile --since 2026-04-20 --until 2026-04-26 --json
+bean chronicle suggestions --status pending --json
+bean chronicle approve <suggestion-id> --work-date 2026-04-20 --json
+bean chronicle link <suggestion-id> <todo-id> --json
+bean chronicle ignore <suggestion-id> --json
+bean report --date week --include-chronicle --json
+```
+
+Do not treat pending suggestions as completed work. Exact session matches to existing Taskbean tasks are auto-linked as evidence and suppressed from the pending inbox; heuristic/fuzzy matches remain pending for review. Suggestions and evidence carry `occurred_at` work time, reports filter pending suggestions by work time, and approval defaults the created task's date to work time unless CLI/API/UI approval provides a work-date override. Use JSON output for automation and Markdown output for human report drafts only. Privacy posture stays metadata-only: no raw prompts, assistant responses, tool outputs, or command output are copied into Taskbean's database by default. If local Chronicle/session data is missing, blocked by policy, not synced from a cloud agent, or outside the requested period, reconciliation should report zero/unavailable suggestions and normal reports should continue from canonical tasks. Privacy hardening follow-up: keep reconciliation's metadata/summary allowlist and doctor diagnostics' raw-content denylist in sync as Chronicle schemas evolve.
+
+App surfaces:
+
+- Projects tab weekly review panel lists pending suggestions and supports approve, edit-and-approve, link, and ignore.
+- Task detail includes a Chronicle evidence card when evidence is linked.
+- Report preview supports canonical-only and Chronicle evidence-enriched weekly reports.
 
 ### Schema (in `cli/src/data/store.js`)
 
@@ -296,7 +324,7 @@ Reports now include a `## Usage` section (Markdown) / `usage` key (JSON) with pe
 
 ## Playwright MCP (browser testing)
 
-The project has a Playwright MCP server configured in `.mcp.json` using `--extension` mode, which connects to an already-running Microsoft Edge instance via the [Playwright MCP Bridge extension](https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm). This lets you interact with the app at `http://localhost:8275` using your real browser state.
+The project has a Playwright MCP server configured in `.mcp.json` using `--extension` mode, which connects to an already-running Microsoft Edge instance via the [Playwright MCP Bridge extension](https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm). This lets you interact with the app at `https://taskbean.localhost` or `http://127.0.0.1:8275` without Portless using your real browser state.
 
 ### Workflow
 
@@ -321,7 +349,7 @@ The Playwright MCP uses `--extension` mode, which connects to Edge via a WebSock
 1. Use the `configure-copilot` **task agent** (`agent_type: "configure-copilot"`) to reload the MCP server. This restarts the server process without changing config. Ask it to "reload/restart the playwright MCP server" and specify not to change configuration.
 2. After restart, the bridge extension needs to reconnect. The error changes from `"Target page, context or browser has been closed"` to `"Not connected"` — this confirms the restart worked. You **cannot** navigate to `extension://mmlmfjhmonkocbjadbfplnigmagldckm/status.html` yourself because all browser tools are dead until the extension connects. Ask the user to click the Playwright MCP Bridge extension icon in Edge to re-establish the WebSocket.
 3. If that doesn't work, ask the user to run `/mcp` and restart the `playwright` server manually, or restart Copilot CLI entirely.
-4. After the extension connects, verify with `browser_snapshot` — you should see the extension's connect/status page, then navigate to `http://localhost:8275`.
+4. After the extension connects, verify with `browser_snapshot` — you should see the extension's connect/status page, then navigate to `https://taskbean.localhost` or `http://127.0.0.1:8275` if Portless is unavailable.
 
 **Do NOT** try to work around the stale connection by:
 - Launching a separate browser via `playwright-cli open` (creates a second browser instance disconnected from the MCP tools)
@@ -331,7 +359,7 @@ The Playwright MCP uses `--extension` mode, which connects to Edge via a WebSock
 
 ### App-specific notes
 
-- The app runs on **`http://localhost:8275`** — the Python backend must be running first (`cd app/agent && python main.py`).
+- The app runs on **`https://taskbean.localhost`** when launched with Portless, with **`http://127.0.0.1:8275`** as the manual fallback — the Python backend must be running first (`cd app/agent && python main.py`).
 - Chat is submitted via **Enter key** on the `#chatInput` textarea — there is no submit button. Use `browser_press_key` with `Enter` after typing.
 - The app has a **service worker** (`sw.js`). If it interferes with testing, add `--block-service-workers` to the MCP server args.
 - The frontend is a **single-file SPA** (`public/index.html`, ~7900 lines). Snapshots may be large — use the `depth` parameter to limit the tree when you only need top-level structure.

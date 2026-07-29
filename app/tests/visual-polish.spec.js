@@ -28,20 +28,11 @@ test.describe('taskbean — Visual Polish & PWA', () => {
     });
   });
 
-  test.describe('Todo Checkbox Bounce Animation', () => {
-    test('check-bounce keyframes exist in CSS', async ({ page }) => {
-      await page.goto('/');
-      const exists = await page.evaluate(() => {
-        for (const sheet of document.styleSheets) {
-          try {
-            for (const rule of sheet.cssRules) {
-              if (rule.name === 'check-bounce') return true;
-            }
-          } catch (_) { /* cross-origin sheet */ }
-        }
-        return false;
-      });
-      expect(exists).toBe(true);
+  test.describe('Todo Checkbox Confirmation Animation', () => {
+    test('check-confirm keyframes exist in CSS', async ({ request }) => {
+      const html = await (await request.get('/')).text();
+      expect(html).toContain('@keyframes check-confirm');
+      expect(html).not.toContain('@keyframes check-bounce');
     });
 
     test('toggling a todo briefly applies just-checked class', async ({ page }) => {
@@ -63,53 +54,41 @@ test.describe('taskbean — Visual Polish & PWA', () => {
     });
   });
 
-  test.describe('Send Button Glow', () => {
-    test('send button has glow animation when enabled', async ({ page }) => {
-      await page.goto('/');
-      // Type text so send button is enabled
-      await page.locator('#chatInput').fill('hello');
-      await page.waitForTimeout(300);
-      const animName = await page.evaluate(() => {
-        const btn = document.querySelector('.send-btn');
-        return btn ? getComputedStyle(btn).animationName : 'none';
-      });
-      expect(animName).not.toBe('none');
+  test.describe('Composer Motion Restraint', () => {
+    test('removed decorative composer glow animations', async ({ request }) => {
+      const html = await (await request.get('/')).text();
+      expect(html).not.toContain('send-glow');
+      expect(html).not.toContain('composerPillPulse');
+      expect(html).not.toContain('composerRibbonPulse');
+    });
+
+    test('loading model pill uses static tint, not a glow animation', async ({ request }) => {
+      const html = await (await request.get('/')).text();
+      const loadingRule = html.match(/\.composer-model-pill\[data-status="loading"\]\s*\{[^}]+\}/)?.[0] || '';
+      expect(loadingRule).toContain('background: color-mix');
+      expect(loadingRule).not.toContain('animation:');
+      expect(loadingRule).not.toContain('box-shadow:');
     });
   });
 
-  test.describe('Glassmorphism', () => {
-    test('status bar has backdrop-filter', async ({ page }) => {
-      await page.goto('/');
-      const filter = await page.evaluate(() =>
-        getComputedStyle(document.querySelector('.status-bar')).backdropFilter
-      );
-      expect(filter).not.toBe('none');
-      expect(filter).toBeTruthy();
+  test.describe('Opaque Coffee Surfaces', () => {
+    test('status bar does not use backdrop-filter', async ({ request }) => {
+      const html = await (await request.get('/')).text();
+      expect(html).not.toContain('backdrop-filter');
+      expect(html).not.toContain('-webkit-backdrop-filter');
+      expect(html).toMatch(/\.model-modal-header, \.settings-modal-header, \.settings-sidebar, \.status-bar\s*\{\s*background: var\(--surface\);/);
     });
 
-    test('model modal header has backdrop-filter', async ({ page }) => {
-      await page.goto('/');
-      // Open model picker modal
-      await page.locator('.status-bar').click();
-      await page.waitForTimeout(500);
-      const filter = await page.evaluate(() => {
-        const header = document.querySelector('#modelModal .modal-header, #modelModalOverlay .modal-header');
-        return header ? getComputedStyle(header).backdropFilter : null;
-      });
-      expect(filter).not.toBe('none');
-      expect(filter).toBeTruthy();
+    test('model modal header does not use backdrop-filter', async ({ request }) => {
+      const html = await (await request.get('/')).text();
+      expect(html).not.toMatch(/\.model-modal-header[^}]+backdrop-filter/);
+      expect(html).toContain('.model-modal-header, .settings-modal-header, .settings-sidebar, .status-bar');
     });
 
-    test('settings modal header has backdrop-filter', async ({ page }) => {
-      await page.goto('/');
-      await page.locator('button[onclick="openSettings()"]').click();
-      await page.waitForTimeout(500);
-      const filter = await page.evaluate(() => {
-        const header = document.querySelector('#settingsModalOverlay .modal-header, #settingsModal .modal-header');
-        return header ? getComputedStyle(header).backdropFilter : null;
-      });
-      expect(filter).not.toBe('none');
-      expect(filter).toBeTruthy();
+    test('settings modal header does not use backdrop-filter', async ({ request }) => {
+      const html = await (await request.get('/')).text();
+      expect(html).not.toMatch(/\.settings-modal-header[^}]+backdrop-filter/);
+      expect(html).toContain('.model-modal-header, .settings-modal-header, .settings-sidebar, .status-bar');
     });
   });
 

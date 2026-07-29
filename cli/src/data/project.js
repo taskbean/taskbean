@@ -1,6 +1,16 @@
 import { execSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
-import { resolve, basename, dirname, isAbsolute, sep } from 'path';
+import { resolve, basename, dirname, isAbsolute } from 'path';
+
+function isWindowsAbsolutePath(value) {
+  return /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]/.test(value);
+}
+
+function basenameAny(value) {
+  const normalized = String(value || '').replace(/[\\/]+$/, '');
+  const parts = normalized.split(/[\\/]/).filter(Boolean);
+  return parts.at(-1) || basename(normalized);
+}
 
 /**
  * Resolve the project identity for the current working directory.
@@ -15,12 +25,15 @@ import { resolve, basename, dirname, isAbsolute, sep } from 'path';
 export function resolveProject(projectOverride) {
   if (projectOverride) {
     const looksLikePath = isAbsolute(projectOverride)
+      || isWindowsAbsolutePath(projectOverride)
       || projectOverride.includes('/')
       || projectOverride.includes('\\')
       || projectOverride.startsWith('.');
     if (looksLikePath) {
-      const absPath = resolve(projectOverride);
-      return { path: absPath, name: basename(absPath) };
+      const absPath = isWindowsAbsolutePath(projectOverride)
+        ? projectOverride
+        : resolve(projectOverride);
+      return { path: absPath, name: basenameAny(absPath) };
     }
     // Bare name: keep the current directory as the canonical path, rename it.
     const detected = _detectProjectIdentity();

@@ -34,7 +34,7 @@ test.describe('taskbean — AG-UI Action Cards', () => {
       // Check ANY chat message contains the confirmation (not just last — overdue reminders may appear after)
       const hasConfirmation = await page.evaluate(() => {
         const msgs = [...document.querySelectorAll('.chat-msg')];
-        return msgs.some(m => m.textContent.includes('Port set to'));
+        return msgs.some(m => m.textContent.includes('Backend port set to'));
       });
       expect(hasConfirmation).toBe(true);
       // Reset port

@@ -27,6 +27,13 @@ test('--project with absolute path still uses that path verbatim', () => {
   assert.equal(result.name, 'foo');
 });
 
+test('--project with Windows absolute path is portable across runners', () => {
+  const winPath = 'C:\\dev\\taskbean';
+  const result = resolveProject(winPath);
+  assert.equal(result.path, winPath);
+  assert.equal(result.name, 'taskbean');
+});
+
 test('--project with relative path containing separator resolves against cwd', () => {
   const rel = process.platform === 'win32' ? '.\\sub\\proj' : './sub/proj';
   const result = resolveProject(rel);

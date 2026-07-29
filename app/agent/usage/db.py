@@ -72,9 +72,28 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         "ALTER TABLE todos ADD COLUMN agent TEXT",
         "ALTER TABLE todos ADD COLUMN agent_session_id TEXT",
         "ALTER TABLE todos ADD COLUMN project_path TEXT",
+        "ALTER TABLE todos ADD COLUMN status TEXT DEFAULT 'pending'",
     ):
         try:
             conn.execute(col_ddl)
+        except sqlite3.OperationalError:
+            pass
+
+    conn.execute(
+        "UPDATE todos SET status = 'done' "
+        "WHERE completed = 1 AND (status IS NULL OR status = 'pending')"
+    )
+    conn.execute(
+        "UPDATE todos SET status = 'pending' "
+        "WHERE completed = 0 AND status IS NULL"
+    )
+    for idx in (
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_todos_upsert ON todos(project, upsert_key)",
+        "CREATE INDEX IF NOT EXISTS idx_todos_agent_session ON todos(agent, agent_session_id)",
+        "CREATE INDEX IF NOT EXISTS idx_todos_project_path ON todos(project_path)",
+    ):
+        try:
+            conn.execute(idx)
         except sqlite3.OperationalError:
             pass
 
@@ -179,6 +198,89 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         )
         """
     )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS reconciliation_suggestions (
+          id TEXT PRIMARY KEY,
+          evidence_key TEXT NOT NULL UNIQUE,
+          suggested_title TEXT NOT NULL,
+          suggested_project TEXT,
+          suggested_status TEXT DEFAULT 'pending',
+          source_session_ids TEXT NOT NULL DEFAULT '[]',
+          evidence_summary TEXT NOT NULL,
+          confidence REAL NOT NULL DEFAULT 0,
+          state TEXT NOT NULL DEFAULT 'pending',
+          linked_todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+          auto_linked INTEGER DEFAULT 0,
+          decision_reason TEXT,
+          decision_details TEXT,
+          occurred_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          decided_at TEXT
+        )
+        """
+    )
+    for ddl in (
+        "ALTER TABLE reconciliation_suggestions ADD COLUMN occurred_at TEXT",
+        "ALTER TABLE reconciliation_suggestions ADD COLUMN auto_linked INTEGER DEFAULT 0",
+        "ALTER TABLE reconciliation_suggestions ADD COLUMN decision_reason TEXT",
+        "ALTER TABLE reconciliation_suggestions ADD COLUMN decision_details TEXT",
+        "UPDATE reconciliation_suggestions SET occurred_at = created_at WHERE occurred_at IS NULL",
+    ):
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass
+    for idx in (
+        "CREATE INDEX IF NOT EXISTS idx_reconciliation_state_created ON reconciliation_suggestions(state, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_reconciliation_state_occurred ON reconciliation_suggestions(state, occurred_at)",
+        "CREATE INDEX IF NOT EXISTS idx_reconciliation_updated ON reconciliation_suggestions(updated_at)",
+    ):
+        try:
+            conn.execute(idx)
+        except sqlite3.OperationalError:
+            pass
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS task_evidence (
+          id TEXT PRIMARY KEY,
+          todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+          suggestion_id TEXT REFERENCES reconciliation_suggestions(id) ON DELETE CASCADE,
+          source TEXT NOT NULL,
+          source_session_id TEXT NOT NULL,
+          repo TEXT,
+          project_path TEXT,
+          branch TEXT,
+          pr_refs TEXT NOT NULL DEFAULT '[]',
+          issue_refs TEXT NOT NULL DEFAULT '[]',
+          files_changed TEXT NOT NULL DEFAULT '[]',
+          summary TEXT,
+          confidence REAL NOT NULL DEFAULT 0,
+          occurred_at TEXT,
+          created_at TEXT NOT NULL,
+          UNIQUE (source, source_session_id, suggestion_id)
+        )
+        """
+    )
+    for ddl in (
+        "ALTER TABLE task_evidence ADD COLUMN occurred_at TEXT",
+        "UPDATE task_evidence SET occurred_at = created_at WHERE occurred_at IS NULL",
+    ):
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass
+    for idx in (
+        "CREATE INDEX IF NOT EXISTS idx_task_evidence_todo ON task_evidence(todo_id)",
+        "CREATE INDEX IF NOT EXISTS idx_task_evidence_suggestion ON task_evidence(suggestion_id)",
+    ):
+        try:
+            conn.execute(idx)
+        except sqlite3.OperationalError:
+            pass
 
 
 @contextmanager

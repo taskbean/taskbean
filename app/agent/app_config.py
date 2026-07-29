@@ -40,6 +40,8 @@ _DEFAULTS: dict = {
     "preferredModel": None,
     "runOnStartup": False,
     "autoSelectIcon": True,
+    "port": None,
+    "publicBaseUrl": None,
     "timezone": None,               # None = use OS default; or IANA timezone string like "America/New_York"
     "hideIncompatibleModels": False,
     "toolCallOnly": False,
