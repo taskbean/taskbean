@@ -104,6 +104,14 @@ function runBrew(cwd, dbPath, json = true) {
   });
 }
 
+function runReport(cwd, dbPath, args = []) {
+  return spawnSync(process.execPath, [BEAN, 'report', '--date', 'all', ...args], {
+    cwd,
+    env: commandEnv(dbPath),
+    encoding: 'utf-8',
+  });
+}
+
 function brewJson(cwd, dbPath) {
   const result = runBrew(cwd, dbPath);
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -336,5 +344,110 @@ describe('bean brew', () => {
     const unsupportedError = JSON.parse(unsupportedResult.stdout);
     assert.equal(unsupportedError.error, 'brew_origin_unsupported');
     assert.equal(unsupportedResult.stdout.includes('secret-token'), false);
+  });
+});
+
+describe('bean report --include-brew', () => {
+  it('reports mixed Brewed, Spilled, and Went-Cold counts from a fixture repository', () => {
+    const repo = createRepo('report-mixed', 'https://github.com/acme/report-mixed.git');
+    commit(repo, 'brewed', '2026-01-02T00:00:00Z');
+    const spilledSha = commit(repo, 'spilled', '2026-01-04T00:00:00Z');
+    git(repo, ['revert', '--no-edit', spilledSha], {
+      env: {
+        ...process.env,
+        GIT_AUTHOR_DATE: '2036-01-04T00:00:00Z',
+        GIT_COMMITTER_DATE: '2036-01-04T00:00:00Z',
+      },
+    });
+    const dbPath = join(TEST_ROOT, 'report-mixed.db');
+    initializeDb(repo, dbPath);
+    insertSession(dbPath, {
+      id: 'copilot:report-brewed',
+      branch: 'main',
+      repository: 'acme/report-mixed',
+      startedAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T12:00:00Z',
+    });
+    insertSession(dbPath, {
+      id: 'copilot:report-spilled',
+      branch: 'main',
+      repository: 'acme/report-mixed',
+      startedAt: '2026-01-03T00:00:00Z',
+      updatedAt: '2026-01-03T12:00:00Z',
+    });
+    insertSession(dbPath, {
+      id: 'copilot:report-cold',
+      branch: 'main',
+      repository: 'acme/report-mixed',
+      startedAt: '2026-01-10T00:00:00Z',
+      updatedAt: '2026-01-10T12:00:00Z',
+    });
+
+    const jsonResult = runReport(repo, dbPath, ['--include-brew', '--json']);
+    assert.equal(jsonResult.status, 0, jsonResult.stderr || jsonResult.stdout);
+    const report = JSON.parse(jsonResult.stdout);
+    assert.deepEqual(report.brew, {
+      available: true,
+      repository: 'acme/report-mixed',
+      grace_period_days: 7,
+      counts: {
+        total: 3,
+        brewed: 1,
+        spilled: 1,
+        went_cold: 1,
+      },
+    });
+
+    const markdown = runReport(repo, dbPath, ['--include-brew']);
+    assert.equal(markdown.status, 0, markdown.stderr);
+    assert.match(markdown.stdout, /## Brew/);
+    assert.match(markdown.stdout, /\| acme\/report-mixed \| 1 \| 1 \| 1 \|/);
+  });
+
+  it('omits Brew data when the flag is absent', () => {
+    const repo = createRepo('report-default', 'https://github.com/acme/report-default.git');
+    const dbPath = join(TEST_ROOT, 'report-default.db');
+    initializeDb(repo, dbPath);
+
+    const jsonResult = runReport(repo, dbPath, ['--json']);
+    assert.equal(jsonResult.status, 0, jsonResult.stderr || jsonResult.stdout);
+    assert.equal(Object.hasOwn(JSON.parse(jsonResult.stdout), 'brew'), false);
+
+    const markdown = runReport(repo, dbPath);
+    assert.equal(markdown.status, 0, markdown.stderr);
+    assert.doesNotMatch(markdown.stdout, /## Brew/);
+  });
+
+  it('skips Brew non-fatally outside a Git repository', () => {
+    const outside = join(TEST_ROOT, 'report-not-a-repo');
+    mkdirSync(outside, { recursive: true });
+    const dbPath = join(TEST_ROOT, 'report-not-a-repo.db');
+    initializeDb(outside, dbPath);
+
+    const jsonResult = runReport(outside, dbPath, ['--include-brew', '--json']);
+    assert.equal(jsonResult.status, 0, jsonResult.stderr || jsonResult.stdout);
+    const report = JSON.parse(jsonResult.stdout);
+    assert.deepEqual(report.tasks, []);
+    assert.equal(report.brew.available, false);
+    assert.equal(report.brew.code, 'brew_not_git_repository');
+    assert.match(report.brew.reason, /bean report --include-brew must be run from within a Git repository/);
+
+    const markdown = runReport(outside, dbPath, ['--include-brew']);
+    assert.equal(markdown.status, 0, markdown.stderr);
+    assert.match(markdown.stdout, /# .*taskbean report/);
+    assert.match(markdown.stdout, /Brew summary skipped: bean report --include-brew must be run from within a Git repository/);
+  });
+
+  it('skips Brew non-fatally when the origin cannot be resolved', () => {
+    const repo = createRepo('report-no-origin');
+    const dbPath = join(TEST_ROOT, 'report-no-origin.db');
+    initializeDb(repo, dbPath);
+
+    const result = runReport(repo, dbPath, ['--include-brew', '--json']);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.brew.available, false);
+    assert.equal(report.brew.code, 'brew_origin_missing');
+    assert.equal(report.brew.reason, 'The current Git repository has no origin remote.');
   });
 });

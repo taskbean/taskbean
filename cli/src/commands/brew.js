@@ -15,12 +15,12 @@ class BrewError extends Error {
   }
 }
 
-function resolveRepository() {
+function resolveRepository(commandName = 'bean brew') {
   const gitRoot = resolveGitRoot();
   if (!gitRoot) {
     throw new BrewError(
       'brew_not_git_repository',
-      'bean brew must be run from within a Git repository.'
+      `${commandName} must be run from within a Git repository.`
     );
   }
 
@@ -205,6 +205,34 @@ export function classifyBrewSessions(gitRoot, repository) {
   });
 }
 
+function countBrewStates(sessions) {
+  return {
+    total: sessions.length,
+    brewed: sessions.filter(session => session.state === 'Brewed').length,
+    spilled: sessions.filter(session => session.state === 'Spilled').length,
+    went_cold: sessions.filter(session => session.state === 'Went Cold').length,
+  };
+}
+
+export function collectBrewResult(options = {}) {
+  const { gitRoot, repository } = resolveRepository(options.commandName);
+  const sessions = classifyBrewSessions(gitRoot, repository);
+  return {
+    repository,
+    grace_period_days: GRACE_PERIOD_DAYS,
+    counts: countBrewStates(sessions),
+    sessions,
+  };
+}
+
+export function isBrewRepositoryError(error) {
+  return [
+    'brew_not_git_repository',
+    'brew_origin_missing',
+    'brew_origin_unsupported',
+  ].includes(error?.code);
+}
+
 function renderText(result) {
   if (result.sessions.length === 0) {
     return `No Copilot sessions found for ${result.repository}.`;
@@ -228,19 +256,14 @@ function renderText(result) {
 
 export function brewCommand(opts) {
   try {
-    const { gitRoot, repository } = resolveRepository();
-    const sessions = classifyBrewSessions(gitRoot, repository);
-    const spilledCount = sessions.filter(session => session.state === 'Spilled').length;
+    const collected = collectBrewResult();
+    const { spilled, ...counts } = collected.counts;
     const result = {
-      repository,
-      grace_period_days: GRACE_PERIOD_DAYS,
+      ...collected,
       counts: {
-        total: sessions.length,
-        brewed: sessions.filter(session => session.state === 'Brewed').length,
-        went_cold: sessions.filter(session => session.state === 'Went Cold').length,
-        ...(spilledCount > 0 ? { spilled: spilledCount } : {}),
+        ...counts,
+        ...(spilled > 0 ? { spilled } : {}),
       },
-      sessions,
     };
 
     if (opts.json) {

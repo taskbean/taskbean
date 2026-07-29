@@ -141,6 +141,7 @@ program
   .option('--date <range>', 'Date range: today, yesterday, week, all', 'today')
   .option('--format <fmt>', 'Output format: md, json, csv', 'md')
   .option('--include-chronicle', 'Include Chronicle/session evidence and pending suggestions')
+  .option('--include-brew', 'Include Brewed, Spilled, and Went-Cold repository aggregates')
   .option('--json', 'Shorthand for --format json')
   .option('--project <path>', 'Filter to specific project')
   .action(reportCommand);
