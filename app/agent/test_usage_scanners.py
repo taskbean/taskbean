@@ -1161,6 +1161,95 @@ def test_schema_bootstrap_get_agent_usage_on_fresh_db(tmp_path, monkeypatch):
         assert agent_stats["totalTokens"] == 0
 
 
+def test_agent_usage_includes_effort_and_linked_token_efficiency(
+    tmp_path, monkeypatch
+):
+    """Usage response matches report formulas and omits unlinked ratios."""
+    import asyncio
+    from usage import ingest as ui
+
+    db_file = tmp_path / "taskbean.db"
+    monkeypatch.setenv("TASKBEAN_DB", str(db_file))
+    monkeypatch.setenv("TASKBEAN_HOME", str(tmp_path))
+
+    conn = usage_db.connect()
+    conn.executemany(
+        "INSERT INTO agent_settings (agent, enabled) VALUES (?, ?)",
+        [
+            ("copilot", 1),
+            ("claude-code", 0),
+            ("codex", 1),
+            ("opencode", 0),
+        ],
+    )
+    conn.executemany(
+        """
+        INSERT INTO agent_sessions
+            (id, agent, native_id, source_path, started_at, updated_at, ingested_at)
+        VALUES (?, ?, ?, '/fake/source', ?, ?, ?)
+        """,
+        [
+            (
+                "copilot:linked",
+                "copilot",
+                "linked",
+                "2026-07-28T10:00:00Z",
+                "2026-07-28T11:00:00Z",
+                "2026-07-28T11:00:00Z",
+            ),
+            (
+                "codex:unlinked",
+                "codex",
+                "unlinked",
+                "2026-07-28T10:00:00Z",
+                "2026-07-28T11:00:00Z",
+                "2026-07-28T11:00:00Z",
+            ),
+        ],
+    )
+    conn.executemany(
+        """
+        INSERT INTO agent_turns
+            (id, session_id, agent, seq, occurred_at, total_tokens)
+        VALUES (?, ?, ?, ?, '2026-07-28T10:30:00Z', ?)
+        """,
+        [
+            ("copilot:linked:1", "copilot:linked", "copilot", 1, 300),
+            ("copilot:linked:2", "copilot:linked", "copilot", 2, 600),
+            ("copilot:linked:3", "copilot:linked", "copilot", 3, 900),
+            ("codex:unlinked:1", "codex:unlinked", "codex", 1, 400),
+            ("codex:unlinked:2", "codex:unlinked", "codex", 2, 600),
+        ],
+    )
+    conn.executemany(
+        """
+        INSERT INTO todos (id, title, created_at, agent_session_id)
+        VALUES (?, ?, ?, 'copilot:linked')
+        """,
+        [
+            ("task-1", "first linked task", "2026-07-28T10:45:00Z"),
+            ("task-2", "second linked task", "2026-07-28T10:50:00Z"),
+        ],
+    )
+    conn.close()
+
+    result = asyncio.run(
+        ui.get_agent_usage(
+            period="all",
+            agents=["copilot", "codex"],
+            skip_ingest=True,
+        )
+    )
+
+    assert result["byAgent"]["copilot"]["estimatedEffortMinutes"] == 9
+    assert result["byAgent"]["copilot"]["tokensPerTask"] == 900
+    assert result["byAgent"]["codex"]["estimatedEffortMinutes"] == 6
+    assert "tokensPerTask" not in result["byAgent"]["codex"]
+    assert result["totals"]["totalTokens"] == 2800
+    assert result["totals"]["estimatedEffortMinutes"] == 15
+    assert result["totals"]["tokensPerTask"] == 900
+
+
 def test_schema_bootstrap_idempotent(tmp_path, monkeypatch):
     """connect() called twice on the same DB doesn't error."""
     db_file = tmp_path / "taskbean.db"
