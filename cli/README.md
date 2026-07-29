@@ -33,6 +33,7 @@ bean done 1                           # complete first task
 bean list                             # show all tasks
 bean count                            # quick status counts
 bean report                           # daily markdown report
+bean brew --json                      # classify Copilot sessions from git history
 bean chronicle doctor --json          # diagnose local Copilot session data
 bean chronicle reconcile --json       # create review-only work suggestions
 ```
@@ -66,11 +67,15 @@ bean projects                         # list all projects
 bean report                           # today's report (markdown)
 bean report --date week               # this week
 bean report --date week --include-chronicle --json
+bean brew                             # Brewed vs. Went Cold Copilot sessions
+bean brew --json                      # machine-readable git outcome data
 bean export --format json             # export as JSON
 bean export --format csv              # export as CSV
 ```
 
 The plain report is canonical Taskbean data only. `--include-chronicle` adds linked evidence and pending review suggestions for weekly review workflows.
+
+`bean brew` must run inside the live GitHub clone being checked. It matches Copilot sessions for the clone's `origin` repository and marks them **Brewed** when the session branch has an author-dated commit between session start and session end plus seven days; otherwise they **Went Cold**. Sessions without branch metadata search all branches.
 
 ### Chronicle Diagnostics
 ```bash

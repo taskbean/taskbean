@@ -71,6 +71,7 @@ bean add "fix auth bug before standup"
 bean done 1
 bean list
 bean report
+bean brew --json              # classify Copilot sessions as Brewed or Went Cold
 bean chronicle doctor --json  # diagnose local Copilot session data availability
 bean chronicle reconcile --since 2026-04-20 --until 2026-04-26 --json
 ```
@@ -185,6 +186,10 @@ On that last one: only metadata and aggregate token counts are stored. Prompts, 
 ### Chronicle/session diagnostics
 
 `bean chronicle doctor --json` checks whether local GitHub Copilot Chronicle/session data is discoverable without importing raw prompts, responses, or tool outputs into taskbean. It reports local `~/.copilot/session-state/` and `~/.copilot/session-store.db` availability, expected metadata tables, privacy defaults, and known limitations such as unavailable programmatic `/chronicle` API or unknown remote-sync policy state.
+
+### Git outcome classification
+
+Run `bean brew` from the live GitHub clone you want to inspect. Taskbean matches that clone's `origin` repository to Copilot CLI sessions, searches the recorded branch (or all branches when branch metadata is absent), and reports **Brewed** when an author-dated commit lands by seven days after the session ends. Sessions without a matching commit are **Went Cold**. Use `bean brew --json` for automation.
 
 ### Chronicle-backed weekly reviews
 
