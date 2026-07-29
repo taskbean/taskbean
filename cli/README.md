@@ -185,7 +185,7 @@ Tasks auto-group by project. Detection order:
 
 When the desktop app is running, taskbean detects sessions from Copilot CLI, Claude Code, Codex, and OpenCode and stamps each `bean add` with the agent and session that created it.
 
-If the signal is ambiguous, attribution is left empty rather than guessing. `bean report` includes a usage section with per-agent sessions, turns, tokens, and tool calls.
+If the signal is ambiguous, attribution is left empty rather than guessing. `bean report` includes per-agent usage plus read-only effort estimates (three minutes per turn) and tokens-per-linked-task efficiency.
 
 ## Storage
 
