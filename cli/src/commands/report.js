@@ -1,6 +1,7 @@
 import { allRows } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { discoverChronicleCapabilities } from '../chronicle/adapter.js';
+import { collectBrewResult, isBrewRepositoryError } from './brew.js';
 
 const AGENT_DISPLAY = {
   copilot: 'Copilot',
@@ -443,6 +444,41 @@ function renderEfficiencyMd(efficiency) {
   return md;
 }
 
+function collectBrewReport() {
+  try {
+    const result = collectBrewResult({
+      commandName: 'bean report --include-brew',
+    });
+    return {
+      available: true,
+      repository: result.repository,
+      grace_period_days: result.grace_period_days,
+      counts: result.counts,
+    };
+  } catch (error) {
+    if (!isBrewRepositoryError(error)) throw error;
+    return {
+      available: false,
+      code: error.code,
+      reason: error.message,
+      repository: null,
+      counts: null,
+    };
+  }
+}
+
+function renderBrewMd(brew) {
+  let md = '## Brew\n';
+  if (!brew.available) {
+    md += `Brew summary skipped: ${brew.reason}\n\n`;
+    return md;
+  }
+  md += '| Repository | Brewed | Spilled | Went Cold |\n';
+  md += '|------------|-------:|--------:|----------:|\n';
+  md += `| ${brew.repository} | ${fmtNum(brew.counts.brewed)} | ${fmtNum(brew.counts.spilled)} | ${fmtNum(brew.counts.went_cold)} |\n\n`;
+  return md;
+}
+
 function getDateRange(range) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -498,6 +534,7 @@ export function reportCommand(opts) {
   const chronicle = opts.includeChronicle
     ? collectChronicleReport(since, until, tasks, { project: reportProject })
     : null;
+  const brew = opts.includeBrew ? collectBrewReport() : null;
 
   // --format json
   if (opts.format === 'json') {
@@ -505,6 +542,7 @@ export function reportCommand(opts) {
     if (usage) payload.usage = usage;
     if (efficiency) payload.efficiency = efficiency;
     if (chronicle) payload.chronicle = chronicle;
+    if (brew) payload.brew = brew;
     console.log(JSON.stringify(payload, null, 2));
     return;
   }
@@ -572,6 +610,10 @@ export function reportCommand(opts) {
 
   if (efficiency) {
     md += renderEfficiencyMd(efficiency);
+  }
+
+  if (brew) {
+    md += renderBrewMd(brew);
   }
 
   if (chronicle) {

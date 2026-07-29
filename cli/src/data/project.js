@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { resolve, basename, dirname, isAbsolute } from 'path';
 
@@ -42,6 +42,32 @@ export function resolveProject(projectOverride) {
   return _detectProjectIdentity();
 }
 
+export function resolveGitRoot(cwd = process.cwd()) {
+  try {
+    const gitRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+    return gitRoot ? resolve(gitRoot) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function parseGitHubRepository(remoteUrl) {
+  const value = String(remoteUrl || '').trim();
+  const httpsMatch = value.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+?)\/?$/i);
+  const sshMatch = value.match(/^git@github\.com:([^/]+)\/([^/]+?)$/i);
+  const match = httpsMatch || sshMatch;
+  if (!match) return null;
+
+  const owner = match[1];
+  const repository = match[2].replace(/\.git$/i, '');
+  if (!owner || !repository) return null;
+  return `${owner}/${repository}`;
+}
+
 function _detectProjectIdentity() {
   // Walk up looking for .taskbean.json
   let dir = process.cwd();
@@ -59,15 +85,8 @@ function _detectProjectIdentity() {
   }
 
   // Try git root
-  try {
-    const gitRoot = execSync('git rev-parse --show-toplevel', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-    if (gitRoot) {
-      return { path: resolve(gitRoot), name: basename(gitRoot) };
-    }
-  } catch { /* not a git repo */ }
+  const gitRoot = resolveGitRoot();
+  if (gitRoot) return { path: gitRoot, name: basename(gitRoot) };
 
   // Fallback to cwd
   const cwd = process.cwd();
