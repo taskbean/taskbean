@@ -9,6 +9,7 @@ const AGENT_DISPLAY = {
   opencode: 'OpenCode',
 };
 const AGENT_ORDER = ['copilot', 'claude-code', 'codex', 'opencode'];
+const MINUTES_PER_TURN = 3;
 
 function fmtNum(n) {
   return Number(n || 0).toLocaleString('en-US');
@@ -85,6 +86,107 @@ function collectUsage(since, until) {
 
 function zeroTotals() {
   return { sessions: 0, turns: 0, inputTokens: 0, outputTokens: 0, toolCalls: 0, totalTokens: 0 };
+}
+
+function collectEfficiency(since, until) {
+  try {
+    const enabled = allRows(
+      'SELECT agent FROM agent_settings WHERE enabled = 1'
+    ).map(r => r.agent);
+    if (enabled.length === 0) {
+      return { minutesPerTurn: MINUTES_PER_TURN, byAgent: [], totals: zeroEfficiencyTotals() };
+    }
+
+    const placeholders = enabled.map(() => '?').join(',');
+    const sessions = allRows(
+      `WITH period_turns AS (
+         SELECT session_id,
+                COUNT(*) AS turns,
+                COALESCE(SUM(total_tokens), 0) AS totalTokens
+           FROM agent_turns
+          WHERE date(occurred_at) BETWEEN ? AND ?
+          GROUP BY session_id
+       ),
+       linked_tasks AS (
+         SELECT agent_session_id AS session_id,
+                COUNT(DISTINCT id) AS linkedTasks
+           FROM todos
+          WHERE agent_session_id IS NOT NULL
+          GROUP BY agent_session_id
+       )
+       SELECT s.id AS sessionId,
+              s.agent,
+              COALESCE(pt.turns, 0) AS turns,
+              COALESCE(pt.totalTokens, 0) AS totalTokens,
+              COALESCE(lt.linkedTasks, 0) AS linkedTasks
+         FROM agent_sessions s
+         LEFT JOIN period_turns pt ON pt.session_id = s.id
+         LEFT JOIN linked_tasks lt ON lt.session_id = s.id
+        WHERE s.agent IN (${placeholders})
+          AND (pt.session_id IS NOT NULL OR date(s.started_at) BETWEEN ? AND ?)`,
+      [since, until, ...enabled, since, until]
+    ).map(row => ({
+      ...row,
+      turns: Number(row.turns),
+      totalTokens: Number(row.totalTokens),
+      linkedTasks: Number(row.linkedTasks),
+    }));
+
+    const byAgent = [];
+    for (const agent of AGENT_ORDER) {
+      if (!enabled.includes(agent)) continue;
+      const agentSessions = sessions.filter(row => row.agent === agent);
+      if (agentSessions.length === 0) continue;
+
+      const aggregate = agentSessions.reduce((acc, row) => {
+        acc.sessions += 1;
+        acc.turns += row.turns;
+        acc.totalTokens += row.totalTokens;
+        acc.linkedTasks += row.linkedTasks;
+        if (row.linkedTasks > 0) acc.linkedSessionTokens += row.totalTokens;
+        return acc;
+      }, { ...zeroEfficiencyTotals(), linkedSessionTokens: 0 });
+
+      const row = {
+        agent,
+        display: AGENT_DISPLAY[agent] || agent,
+        sessions: aggregate.sessions,
+        turns: aggregate.turns,
+        totalTokens: aggregate.totalTokens,
+        estimatedEffortMinutes: aggregate.turns * MINUTES_PER_TURN,
+        linkedTasks: aggregate.linkedTasks,
+      };
+      if (aggregate.linkedTasks > 0) {
+        row.tokensPerTask = aggregate.linkedSessionTokens / aggregate.linkedTasks;
+      }
+      byAgent.push(row);
+    }
+
+    const totals = byAgent.reduce((acc, row) => {
+      acc.sessions += row.sessions;
+      acc.turns += row.turns;
+      acc.totalTokens += row.totalTokens;
+      acc.estimatedEffortMinutes += row.estimatedEffortMinutes;
+      acc.linkedTasks += row.linkedTasks;
+      if (row.linkedTasks > 0) {
+        acc.linkedSessionTokens += row.tokensPerTask * row.linkedTasks;
+      }
+      return acc;
+    }, { ...zeroEfficiencyTotals(), linkedSessionTokens: 0 });
+
+    if (totals.linkedTasks > 0) {
+      totals.tokensPerTask = totals.linkedSessionTokens / totals.linkedTasks;
+    }
+    delete totals.linkedSessionTokens;
+
+    return { minutesPerTurn: MINUTES_PER_TURN, byAgent, totals };
+  } catch {
+    return null;
+  }
+}
+
+function zeroEfficiencyTotals() {
+  return { sessions: 0, turns: 0, totalTokens: 0, estimatedEffortMinutes: 0, linkedTasks: 0 };
 }
 
 function parseJsonArray(value) {
@@ -324,6 +426,23 @@ function renderUsageMd(usage) {
   return md;
 }
 
+function renderEfficiencyMd(efficiency) {
+  let md = `## Effort & token efficiency\n`;
+  if (!efficiency || efficiency.byAgent.length === 0) {
+    md += `No coding agent activity in this period.\n\n`;
+    return md;
+  }
+  md += `Estimated effort uses ${efficiency.minutesPerTurn} minutes per turn.\n\n`;
+  md += `| Agent       | Sessions | Turns | Total tokens | Effort minutes | Linked tasks | Tokens / task |\n`;
+  md += `|-------------|---------:|------:|-------------:|---------------:|-------------:|--------------:|\n`;
+  for (const r of efficiency.byAgent) {
+    const tokensPerTask = Object.hasOwn(r, 'tokensPerTask') ? fmtNum(r.tokensPerTask) : 'N/A';
+    md += `| ${r.display.padEnd(11)} | ${String(fmtNum(r.sessions)).padStart(8)} | ${String(fmtNum(r.turns)).padStart(5)} | ${String(fmtNum(r.totalTokens)).padStart(12)} | ${String(fmtNum(r.estimatedEffortMinutes)).padStart(14)} | ${String(fmtNum(r.linkedTasks)).padStart(12)} | ${String(tokensPerTask).padStart(13)} |\n`;
+  }
+  md += '\n';
+  return md;
+}
+
 function getDateRange(range) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -374,6 +493,7 @@ export function reportCommand(opts) {
   `, params);
 
   const usage = collectUsage(since, until);
+  const efficiency = collectEfficiency(since, until);
   const taskGroups = groupTasks(tasks);
   const chronicle = opts.includeChronicle
     ? collectChronicleReport(since, until, tasks, { project: reportProject })
@@ -383,6 +503,7 @@ export function reportCommand(opts) {
   if (opts.format === 'json') {
     const payload = { period: label, since, until, tasks, taskGroups };
     if (usage) payload.usage = usage;
+    if (efficiency) payload.efficiency = efficiency;
     if (chronicle) payload.chronicle = chronicle;
     console.log(JSON.stringify(payload, null, 2));
     return;
@@ -447,6 +568,10 @@ export function reportCommand(opts) {
 
   if (usage) {
     md += renderUsageMd(usage);
+  }
+
+  if (efficiency) {
+    md += renderEfficiencyMd(efficiency);
   }
 
   if (chronicle) {
