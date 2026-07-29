@@ -31,6 +31,7 @@ class SessionRow:
     source_path: str
     started_at: str  # ISO 8601 UTC
     updated_at: str  # ISO 8601 UTC
+    repository: str | None = None
 
 
 @dataclass

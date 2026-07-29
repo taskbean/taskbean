@@ -123,6 +123,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
           provider TEXT,
           cli_version TEXT,
           git_branch TEXT,
+          repository TEXT,
           source_path TEXT NOT NULL,
           started_at TEXT NOT NULL,
           updated_at TEXT NOT NULL,
@@ -131,6 +132,10 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    try:
+        conn.execute("ALTER TABLE agent_sessions ADD COLUMN repository TEXT")
+    except sqlite3.OperationalError:
+        pass
     for idx in (
         "CREATE INDEX IF NOT EXISTS idx_sessions_agent_started ON agent_sessions(agent, started_at)",
         "CREATE INDEX IF NOT EXISTS idx_sessions_project_started ON agent_sessions(project_id, started_at)",
@@ -356,9 +361,9 @@ def write_scan_result(
                 """
                 INSERT INTO agent_sessions (
                     id, agent, native_id, cwd, project_id, title, model, provider,
-                    cli_version, git_branch, source_path,
+                    cli_version, git_branch, repository, source_path,
                     started_at, updated_at, ingested_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(agent, native_id) DO UPDATE SET
                     cwd         = COALESCE(excluded.cwd,         agent_sessions.cwd),
                     project_id  = COALESCE(excluded.project_id,  agent_sessions.project_id),
@@ -367,12 +372,13 @@ def write_scan_result(
                     provider    = COALESCE(excluded.provider,    agent_sessions.provider),
                     cli_version = COALESCE(excluded.cli_version, agent_sessions.cli_version),
                     git_branch  = COALESCE(excluded.git_branch,  agent_sessions.git_branch),
+                    repository  = COALESCE(excluded.repository,  agent_sessions.repository),
                     updated_at  = MAX(excluded.updated_at, agent_sessions.updated_at),
                     ingested_at = excluded.ingested_at
                 """,
                 (
                     sid, s.agent, s.native_id, s.cwd, project_id, s.title, s.model,
-                    s.provider, s.cli_version, s.git_branch, s.source_path,
+                    s.provider, s.cli_version, s.git_branch, s.repository, s.source_path,
                     s.started_at, s.updated_at, now,
                 ),
             )

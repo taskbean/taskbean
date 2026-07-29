@@ -61,14 +61,18 @@ def build_copilot_fixture(root: Path) -> dict:
         CREATE TABLE sessions (
             id TEXT PRIMARY KEY,
             cwd TEXT,
+            repository TEXT,
+            host_type TEXT,
+            branch TEXT,
             summary TEXT,
             created_at TEXT,
             updated_at TEXT
         )
     """)
     conn.execute(
-        "INSERT INTO sessions VALUES (?, ?, ?, ?, ?)",
-        (COPILOT_SESSION_ID, str(root / "proj"), "Fix a bug",
+        "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (COPILOT_SESSION_ID, str(root / "proj"), "taskbean/taskbean", "local",
+         "feature/copilot-metadata", "Fix a bug",
          "2026-04-01T00:00:00Z", "2026-04-01T00:05:00Z"),
     )
     conn.commit()
@@ -393,10 +397,26 @@ def test_copilot_seed(copilot_paths):
     s = result.sessions[0]
     assert s.native_id == COPILOT_SESSION_ID
     assert s.model == "gpt-5"
+    assert s.git_branch == "feature/copilot-metadata"
+    assert s.repository == "taskbean/taskbean"
     ev_path = str(copilot_paths["events"])
     assert ev_path in result.updated_sources
     src = result.updated_sources[ev_path]
     assert src.last_offset == os.path.getsize(ev_path)
+
+
+def test_copilot_seed_allows_null_branch_and_repository(copilot_paths):
+    conn = sqlite3.connect(copilot_paths["db"])
+    conn.execute(
+        "UPDATE sessions SET branch = NULL, repository = NULL WHERE id = ?",
+        (COPILOT_SESSION_ID,),
+    )
+    conn.commit()
+    conn.close()
+
+    session = CopilotScanner().seed().sessions[0]
+    assert session.git_branch is None
+    assert session.repository is None
 
 
 def test_claude_seed(claude_paths):
@@ -443,6 +463,8 @@ def test_copilot_scan_empty_is_seed(copilot_paths):
     # No cursor known → new-session branch, no turns emitted.
     assert len(result.turns) == 0
     assert len(result.sessions) == 1
+    assert result.sessions[0].git_branch == "feature/copilot-metadata"
+    assert result.sessions[0].repository == "taskbean/taskbean"
 
 
 def test_claude_scan_empty_is_seed(claude_paths):
@@ -480,6 +502,8 @@ def test_copilot_scan_rewound_yields_turns(copilot_paths):
     assert t0.model == "gpt-5"
     assert t1.output_tokens == 17
     assert t1.tool_calls == 0
+    assert result.sessions[0].git_branch == "feature/copilot-metadata"
+    assert result.sessions[0].repository == "taskbean/taskbean"
     # Cursor advanced past EOF.
     assert result.updated_sources[ev_path].last_offset == os.path.getsize(ev_path)
 
@@ -842,6 +866,7 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
     provider TEXT,
     cli_version TEXT,
     git_branch TEXT,
+    repository TEXT,
     source_path TEXT NOT NULL,
     started_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -930,6 +955,11 @@ def test_writer_roundtrip_and_idempotent(copilot_paths, taskbean_conn):
         "SELECT COUNT(*) FROM agent_sessions WHERE agent='copilot'"
     ).fetchone()[0]
     assert n_sess == 1
+    session = taskbean_conn.execute(
+        "SELECT git_branch, repository FROM agent_sessions WHERE agent='copilot'"
+    ).fetchone()
+    assert session["git_branch"] == "feature/copilot-metadata"
+    assert session["repository"] == "taskbean/taskbean"
 
     # Two turn rows.
     n_turns = taskbean_conn.execute(

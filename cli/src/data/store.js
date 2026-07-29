@@ -140,6 +140,7 @@ export function getDb() {
       provider TEXT,
       cli_version TEXT,
       git_branch TEXT,
+      repository TEXT,
       source_path TEXT NOT NULL,
       started_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -147,6 +148,7 @@ export function getDb() {
       UNIQUE (agent, native_id)
     )
   `);
+  try { _db.exec('ALTER TABLE agent_sessions ADD COLUMN repository TEXT'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_agent_started ON agent_sessions(agent, started_at)'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project_started ON agent_sessions(project_id, started_at)'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON agent_sessions(cwd)'); } catch {}
