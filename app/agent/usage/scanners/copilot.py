@@ -5,7 +5,8 @@ Data layout:
   ~/.copilot/session-state/{session_id}/events.jsonl  Per-session events
 
 Each events.jsonl is one ingest source. Cursor = (offset, mtime). The sqlite
-DB is used only for session metadata (cwd, summary, created_at).
+DB is used only for session metadata (cwd, repository, branch, summary,
+created_at).
 
 Event shapes that matter:
   session.start              data.selectedModel
@@ -53,7 +54,7 @@ class CopilotScanner:
     # ── internal: list sessions ──────────────────────────────────────────────
 
     def _session_index(self) -> list[dict]:
-        """Return [{id, cwd, summary, created_at, updated_at?}] from sqlite."""
+        """Return normalized session metadata from sqlite."""
         if not os.path.exists(COPILOT_DB):
             return []
         try:
@@ -61,8 +62,9 @@ class CopilotScanner:
             conn.row_factory = sqlite3.Row
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(sessions)")}
             select = "id, cwd, summary, created_at"
-            if "updated_at" in cols:
-                select += ", updated_at"
+            for optional_col in ("repository", "branch", "updated_at"):
+                if optional_col in cols:
+                    select += f", {optional_col}"
             rows = conn.execute(f"SELECT {select} FROM sessions").fetchall()
             conn.close()
             return [dict(r) for r in rows]
@@ -96,10 +98,11 @@ class CopilotScanner:
                 model=model,
                 provider="github",
                 cli_version=None,
-                git_branch=None,
+                git_branch=s.get("branch"),
                 source_path=ev_path,
                 started_at=started,
                 updated_at=updated,
+                repository=s.get("repository"),
             ))
 
             # Pin cursor to current EOF.
@@ -148,10 +151,11 @@ class CopilotScanner:
                     model=model,
                     provider="github",
                     cli_version=None,
-                    git_branch=None,
+                    git_branch=meta.get("branch"),
                     source_path=ev_path,
                     started_at=started,
                     updated_at=updated,
+                    repository=meta.get("repository"),
                 ))
                 try:
                     st = os.stat(ev_path)
@@ -232,10 +236,11 @@ class CopilotScanner:
                 model=session_model,
                 provider="github",
                 cli_version=None,
-                git_branch=None,
+                git_branch=meta.get("branch"),
                 source_path=ev_path,
                 started_at=meta.get("created_at") or iso_utc(),
                 updated_at=_to_iso(None, fallback_ms=new_mtime) or iso_utc(),
+                repository=meta.get("repository"),
             ))
 
             result.updated_sources[ev_path] = AgentSource(

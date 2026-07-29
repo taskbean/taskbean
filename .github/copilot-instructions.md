@@ -261,7 +261,7 @@ App surfaces:
 
 | Table | Role |
 |-------|------|
-| `agent_sessions` | One row per detected session across all agents. PK is the composite id `"{agent}:{native_id}"`. Columns: `agent, native_id, cwd, project_id, title, model, provider, cli_version, git_branch, source_path, started_at, updated_at, ingested_at`. |
+| `agent_sessions` | One row per detected session across all agents. PK is the composite id `"{agent}:{native_id}"`. Columns: `agent, native_id, cwd, project_id, title, model, provider, cli_version, git_branch, repository, source_path, started_at, updated_at, ingested_at`. |
 | `agent_turns` | One row per assistant turn with usage. FK to `agent_sessions(id)`, unique on `(session_id, seq)`. Columns: `seq, occurred_at, model, provider, input_tokens, cached_input_tokens, output_tokens, reasoning_tokens, total_tokens, tool_calls, finish_reason`. |
 | `agent_sources` | Ingest bookkeeping, one row per source file/DB. Forward-only cursors: `last_offset, last_mtime, last_native_id`. |
 | `agent_settings` | Per-agent enable/disable toggle plus detection metadata. |
@@ -310,7 +310,7 @@ Ambiguous signals return `null` — never "most recent". Missing attribution is 
 
 ### Privacy posture
 
-Only **metadata** (session ids, timestamps, model/provider, cwd, git branch) and **aggregate token counts** are persisted. Message bodies, prompts, code blocks, and tool outputs are never copied into taskbean's DB.
+Only **metadata** (session ids, timestamps, model/provider, cwd, git branch, repository slug) and **aggregate token counts** are persisted. Message bodies, prompts, code blocks, and tool outputs are never copied into taskbean's DB.
 
 ### UI surface
 
