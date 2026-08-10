@@ -1,0 +1,37 @@
+artifact_shape: manifest
+research_manifest:
+  generated: 2026-08-10
+  route: codebase-architecture
+  disclosure: repository
+  compact_result: research/2026-08-10-taskbean-worktree-parent-compact.md
+  full_report: research/2026-08-10-taskbean-worktree-parent-full.md
+  sections:
+    - id: recommendation
+      description: The selected Project and Workspace model.
+      path: research/2026-08-10-taskbean-worktree-parent-full.md#recommendation
+      disclosure: repository
+    - id: observed-architecture
+      description: Copilot and Taskbean identity behavior observed from docs and code.
+      path: research/2026-08-10-taskbean-worktree-parent-full.md#observed-taskbean-architecture
+      disclosure: repository
+    - id: candidate-matrix
+      description: Supporting and adversarial evidence for four grouping patterns.
+      path: research/2026-08-10-taskbean-worktree-parent-full.md#candidate-evidence-matrix
+      disclosure: repository
+    - id: target-model
+      description: Recommended entities, identity precedence, and ambiguity rules.
+      path: research/2026-08-10-taskbean-worktree-parent-full.md#recommended-domain-and-data-model
+      disclosure: repository
+    - id: migration
+      description: Safe cutover outline and UI/API effects.
+      path: research/2026-08-10-taskbean-worktree-parent-full.md#migration-outline
+      disclosure: repository
+    - id: validation
+      description: Smallest read-only spike that tests grouping safety.
+      path: research/2026-08-10-taskbean-worktree-parent-full.md#smallest-validation-spike
+      disclosure: repository
+    - id: critic
+      description: Final evidence sufficiency verdict and caveats.
+      path: research/2026-08-10-taskbean-worktree-parent-full.md#critic-verdict
+      disclosure: repository
+  supporting_artifacts: []
