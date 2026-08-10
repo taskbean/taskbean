@@ -72,6 +72,19 @@ def _model_ep(model: Any) -> str:
     return getattr(runtime, "execution_provider", "") if runtime else ""
 
 
+def _ep_registration_names(discovered_eps: list[Any]) -> list[str]:
+    """Return safe, unregistered execution providers for automatic setup."""
+    # Foundry Local 1.2.x bundles MIGraphX against ORT API 27 while its
+    # onnxruntime-core dependency exposes API 26. Registering it terminates the
+    # process with 0xC0000005, so use WebGPU for GPU models until the SDK ships
+    # an ABI-compatible pair.
+    unsafe = {"MIGraphXExecutionProvider"}
+    return [
+        ep.name for ep in discovered_eps
+        if not ep.is_registered and ep.name not in unsafe
+    ]
+
+
 # ── Initialization ────────────────────────────────────────────────────────────
 
 async def _ensure_web_service() -> None:
@@ -119,11 +132,17 @@ async def initialize_foundry(
 
         manager = FLSdk.instance
 
-        # Download and register hardware execution providers (VITIS/QNN for NPU,
-        # CUDA/TensorRT for GPU, etc.). This is a no-op when already registered.
-        # Capture the result so we can filter cached models below.
+        # Download and register safe hardware execution providers. Passing no
+        # names asks the SDK to register every provider, including providers
+        # whose native ABI can be incompatible with the bundled ORT runtime.
         logger.info("Registering execution providers…")
-        await asyncio.to_thread(manager.download_and_register_eps)
+        discovered_eps = await asyncio.to_thread(manager.discover_eps)
+        registration_names = _ep_registration_names(discovered_eps)
+        if registration_names:
+            await asyncio.to_thread(
+                manager.download_and_register_eps,
+                registration_names,
+            )
         # Build the set of EPs that are actually usable. CPU and WebGPU are
         # always built in. discover_eps returns explicit EPs (VitisAI, QNN,
         # MIGraphX, TensorRT, etc.) with their current registration state.
