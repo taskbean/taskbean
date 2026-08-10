@@ -483,6 +483,23 @@ def test_model_ep_returns_empty_when_missing():
     assert _model_ep(SimpleNamespace(info=None)) == ""
 
 
+def test_ep_registration_excludes_abi_incompatible_migraphx():
+    """Automatic EP setup must not invoke the crashing MIGraphX bootstrapper."""
+    from agent import _ep_registration_names
+
+    discovered = [
+        SimpleNamespace(name="WebGpuExecutionProvider", is_registered=False),
+        SimpleNamespace(name="MIGraphXExecutionProvider", is_registered=False),
+        SimpleNamespace(name="VitisAIExecutionProvider", is_registered=False),
+        SimpleNamespace(name="QNNExecutionProvider", is_registered=True),
+    ]
+
+    assert _ep_registration_names(discovered) == [
+        "WebGpuExecutionProvider",
+        "VitisAIExecutionProvider",
+    ]
+
+
 def test_ep_filter_logic():
     """Direct exercise of the filter expression used in initialize_foundry.
 
