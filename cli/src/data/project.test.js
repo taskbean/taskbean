@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveProject } from './project.js';
+import { parseGitHubRepository, resolveProject } from './project.js';
 import { resolve, basename } from 'path';
 
 test('--project with bare name does NOT join with cwd (regression: duplicate project rows)', () => {
@@ -45,4 +45,21 @@ test('no override falls back to auto-detection (returns a real directory)', () =
   const result = resolveProject();
   assert.ok(result.path && result.name, 'should return both path and name');
   assert.equal(result.path, resolve(result.path), 'path should be absolute');
+});
+
+test('parseGitHubRepository accepts HTTPS and SSH GitHub origins', () => {
+  assert.equal(
+    parseGitHubRepository('https://github.com/taskbean/taskbean.git'),
+    'taskbean/taskbean'
+  );
+  assert.equal(
+    parseGitHubRepository('git@github.com:taskbean/taskbean.git'),
+    'taskbean/taskbean'
+  );
+});
+
+test('parseGitHubRepository rejects non-GitHub and malformed origins', () => {
+  assert.equal(parseGitHubRepository('https://gitlab.com/taskbean/taskbean.git'), null);
+  assert.equal(parseGitHubRepository('https://github.com/taskbean'), null);
+  assert.equal(parseGitHubRepository(''), null);
 });

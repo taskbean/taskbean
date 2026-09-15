@@ -11,6 +11,7 @@
     "bin/",
     "src/commands/add.js",
     "src/commands/block.js",
+    "src/commands/brew.js",
     "src/commands/chronicle.js",
     "src/commands/done.js",
     "src/commands/edit.js",

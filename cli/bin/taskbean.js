@@ -20,6 +20,7 @@ const { startCommand } = await import('../src/commands/start.js');
 const { blockCommand } = await import('../src/commands/block.js');
 const { remindCommand } = await import('../src/commands/remind.js');
 const { reportCommand } = await import('../src/commands/report.js');
+const { brewCommand } = await import('../src/commands/brew.js');
 const {
   chronicleApproveCommand,
   chronicleDoctorCommand,
@@ -140,9 +141,16 @@ program
   .option('--date <range>', 'Date range: today, yesterday, week, all', 'today')
   .option('--format <fmt>', 'Output format: md, json, csv', 'md')
   .option('--include-chronicle', 'Include Chronicle/session evidence and pending suggestions')
+  .option('--include-brew', 'Include Brewed, Spilled, and Went-Cold repository aggregates')
   .option('--json', 'Shorthand for --format json')
   .option('--project <path>', 'Filter to specific project')
   .action(reportCommand);
+
+program
+  .command('brew')
+  .description('Classify Copilot sessions by matching repository git history')
+  .option('--json', 'Output as JSON')
+  .action(brewCommand);
 
 const chronicle = program
   .command('chronicle')

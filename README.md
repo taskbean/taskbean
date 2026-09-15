@@ -71,6 +71,7 @@ bean add "fix auth bug before standup"
 bean done 1
 bean list
 bean report
+bean brew --json              # classify Copilot sessions as Brewed, Spilled, or Went Cold
 bean chronicle doctor --json  # diagnose local Copilot session data availability
 bean chronicle reconcile --since 2026-04-20 --until 2026-04-26 --json
 ```
@@ -186,6 +187,10 @@ On that last one: only metadata and aggregate token counts are stored. Prompts, 
 
 `bean chronicle doctor --json` checks whether local GitHub Copilot Chronicle/session data is discoverable without importing raw prompts, responses, or tool outputs into taskbean. It reports local `~/.copilot/session-state/` and `~/.copilot/session-store.db` availability, expected metadata tables, privacy defaults, and known limitations such as unavailable programmatic `/chronicle` API or unknown remote-sync policy state.
 
+### Git outcome classification
+
+Run `bean brew` from the live GitHub clone you want to inspect. Taskbean matches that clone's `origin` repository to Copilot CLI sessions, searches the recorded branch (or all branches when branch metadata is absent), and reports **Brewed** when an author-dated commit lands by seven days after the session ends. A Brewed session becomes **Spilled** when any later commit in the repository uses the exact standard `git revert` message: a `Revert "..."` subject and a `This reverts commit <sha>.` trailer naming the original commit. Manual or non-standard reverts are intentionally not inferred. Sessions without a matching commit are **Went Cold**. Use `bean brew --json` for automation.
+
 ### Chronicle-backed weekly reviews
 
 Taskbean treats its own task ledger as canonical. Chronicle/session data is evidence that can help find work the agent forgot to log, not a second source of truth. Run reconciliation to create review-only suggestions, approve or link only the ones that are real, then build the weekly report.
@@ -212,9 +217,10 @@ Weekly report modes:
 bean report --date week --json                      # canonical Taskbean tasks only
 bean report --date week --include-chronicle --json  # tasks plus linked evidence and needs-review suggestions
 bean report --date week --include-chronicle         # Markdown draft for copying
+bean report --date week --include-brew              # add repository Brewed/Spilled/Went-Cold counts
 ```
 
-Automation should consume JSON and inspect fields like `counts.pending`, `counts.linked`, `suggestions`, `taskGroups`, `chronicle.summary`, and `chronicle.pendingSuggestions`; do not scrape Markdown output. Pending suggestions and linked evidence are filtered by work time (`occurred_at`), not by the date reconciliation or approval happened. Approving a suggestion defaults the created task's date to the evidence work time; use `--work-date` or the dashboard work-date field when you need to correct it. A simple local cadence is: run `chronicle reconcile --json` daily, review the pending inbox in the dashboard or with `chronicle suggestions --json`, and run the evidence-enriched weekly report before a 1-on-1 or status update. For monthly improvement reviews, keep the weekly JSON reports as artifacts or use `--date all` and filter the JSON downstream.
+Automation should consume JSON and inspect fields like `counts.pending`, `counts.linked`, `suggestions`, `taskGroups`, `chronicle.summary`, `chronicle.pendingSuggestions`, and `brew.counts`; do not scrape Markdown output. `--include-brew` adds aggregate Brewed, Spilled, and Went-Cold counts for Copilot sessions matched to the current repository. Outside a Git repository, or when `origin` does not resolve to GitHub `owner/repo`, the Brew result is marked unavailable with a non-fatal reason and the rest of the report still generates. Pending suggestions and linked evidence are filtered by work time (`occurred_at`), not by the date reconciliation or approval happened. Approving a suggestion defaults the created task's date to the evidence work time; use `--work-date` or the dashboard work-date field when you need to correct it. A simple local cadence is: run `chronicle reconcile --json` daily, review the pending inbox in the dashboard or with `chronicle suggestions --json`, and run the evidence-enriched weekly report before a 1-on-1 or status update. For monthly improvement reviews, keep the weekly JSON reports as artifacts or use `--date all` and filter the JSON downstream.
 
 Privacy and availability:
 
