@@ -8,9 +8,17 @@ Taskbean captures developer work and groups it so tasks, agent sessions, and rev
 A logical repo or product that work rolls up to for task lists, usage, reconciliation, and reports. A Project is not an individual checkout, worktree, fork, or agent session; Git-backed Projects display as `owner/repo` by default.
 _Avoid_: Checkout, worktree, session, folder
 
+**Project ID**:
+The durable internal identity of a Project. It does not change when a repository is renamed or transferred.
+_Avoid_: Project Key, repository name
+
 **Project Key**:
-The stable identity used to recognize the same Project across multiple Workspaces. For Git-backed work, the canonical Project Key is the nearest Git repository's owner and name, preferring `upstream` over `origin`; for work without a usable GitHub remote, it falls back to the canonical local path.
+The current canonical identity used to recognize a Project across multiple Workspaces. For Git-backed work, the Project Key is the nearest Git repository's owner and name, preferring `upstream` over `origin`; for work without a usable GitHub remote, it falls back to the canonical local path. When a repository is renamed or transferred, the Project keeps its Project ID, adopts the new Project Key, and retains the old key as a Project Alias.
 _Avoid_: Path, checkout name, worktree name
+
+**Project Alias**:
+A former Project Key or provider identity that still resolves to the same Project. An alias helps Taskbean recognize repository renames, transfers, and provider records without making provider-specific values canonical.
+_Avoid_: Project Key, display name
 
 **Project Selector**:
 A user-provided value that identifies a Project by key or display name, or identifies a Workspace when it clearly looks like a path. A Workspace selector resolves to its owning Project.
@@ -31,6 +39,10 @@ _Avoid_: Tracked project
 **Discovered Workspace**:
 A Workspace observed from agent session metadata or task provenance but not explicitly tracked by the user. Discovered Workspaces can support attribution and rollups but are not mutated with skill files or cleanup actions.
 _Avoid_: Tracked workspace
+
+**Remote Workspace**:
+A pathless Workspace where an Agent Session runs outside the local machine. Taskbean creates it only when repository metadata or a known Project Alias resolves one Project without ambiguity; otherwise the session remains Unassigned Work. A Remote Workspace and a local Workspace merge only when stable lineage evidence proves they are the same execution lineage.
+_Avoid_: Project, local checkout, cloud project
 
 **Primary Workspace**:
 The Workspace a Project uses by default for path-dependent actions such as opening folders, installing skills, or diagnostics. The Primary Workspace is user-changeable and should not be inferred solely from the most recent Agent Session.
