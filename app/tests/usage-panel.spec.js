@@ -99,3 +99,57 @@ test.describe('Usage panel — offline banner (C4)', () => {
     await expect(errBox).not.toContainText(/:8275/);
   });
 });
+
+test.describe('Usage panel — effort and token efficiency', () => {
+  test('renders effort and only shows tokens per task for linked work', async ({ page }) => {
+    await page.route('**/api/agent-usage**', (route) => {
+      if (route.request().url().includes('/detection')) return route.continue();
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          settings: {
+            copilot: { enabled: 1 },
+            codex: { enabled: 1 },
+          },
+          totals: {
+            turns: 5,
+            sessions: 2,
+            inputTokens: 0,
+            outputTokens: 2800,
+            totalTokens: 2800,
+            toolCalls: 0,
+            estimatedEffortMinutes: 15,
+            tokensPerTask: 900,
+          },
+          byAgent: {
+            copilot: {
+              turns: 3,
+              sessions: 1,
+              outputTokens: 1800,
+              estimatedEffortMinutes: 9,
+              tokensPerTask: 900,
+            },
+            codex: {
+              turns: 2,
+              sessions: 1,
+              outputTokens: 1000,
+              estimatedEffortMinutes: 6,
+            },
+          },
+          byModel: [],
+        }),
+      });
+    });
+
+    await openProjects(page);
+
+    const content = page.locator('#usageContent');
+    await expect(content.locator('.usage-stat', { hasText: 'Effort Minutes' })).toContainText('15');
+    await expect(content.locator('.usage-stat', { hasText: 'Tokens / Task' })).toContainText('900');
+
+    await page.locator('.usage-agent-chip', { hasText: 'Codex' }).click();
+    await expect(content.locator('.usage-stat', { hasText: 'Effort Minutes' })).toContainText('6');
+    await expect(content).not.toContainText('Tokens / Task');
+  });
+});
