@@ -51,3 +51,19 @@ _Avoid_: Session, workspace
 **Unassigned Work**:
 Tasks, Agent Sessions, or evidence that Taskbean cannot confidently resolve to a Project. Unassigned Work appears for review instead of creating a fake Project from a session id, GUID, or folder basename.
 _Avoid_: Misc project, unknown project, session project
+
+**Execution Profile**:
+The automatically discovered context Taskbean uses to prepare a Task for agent execution. It includes relevant Project instructions and available agent capabilities, with optional global, Project, or Task overrides.
+_Avoid_: Agent config, skill dump, prompt template
+
+**Kickoff Prompt**:
+The environment-aware, optimized instruction Taskbean prepares for an Agent Session to execute a Task. A Kickoff Prompt can be revised, copied, or launched without changing the Task itself.
+_Avoid_: Task description, chat message
+
+**Execution Record**:
+The link between a canonical Task and the Agent Session that executes it, including the Kickoff Prompt version, execution status, and review evidence.
+_Avoid_: Task, session
+
+**Execution Step**:
+A session-scoped step in an agent's plan for completing a Task. Execution Steps can be added, removed, renamed, or reordered during execution and remain subordinate to the canonical Task.
+_Avoid_: Task, subtask
