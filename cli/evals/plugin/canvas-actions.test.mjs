@@ -28,9 +28,9 @@ after(async () => {
   sandbox.cleanup();
 });
 
-test('declares exactly the seven documented canvas actions', () => {
+test('declares exactly the eight documented canvas actions', () => {
   assert.deepEqual(canvas.actions.map((a) => a.name).sort(), [
-    'add_task', 'block_task', 'complete_task', 'generate_report', 'get_availability', 'get_dashboard', 'start_task',
+    'add_task', 'block_task', 'complete_task', 'generate_report', 'get_availability', 'get_dashboard', 'open_link', 'start_task',
   ]);
 });
 
@@ -128,8 +128,9 @@ test('HTTP surface serves the UI and routes actions with safe errors', async () 
   const html = await (await fetch(opened.url)).text();
   assert.match(html, /Taskbean/);
   assert.doesNotMatch(html, /href="ghapp:/, 'no custom-scheme anchors in the canvas UI');
-  assert.match(html, /data-copy-link/);
-  assert.match(html, /target="_blank" rel="noopener noreferrer"/);
+  assert.match(html, /data-open-link/, 'session and PR buttons go through open_link');
+  assert.doesNotMatch(html, /target="_blank"/, 'no anchors that the loopback iframe cannot open');
+  assert.doesNotMatch(html, /data-primary="details"|kind:\s*"details"/, 'details is not a primary action kind');
   const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
   assert.ok(scripts.length > 0, 'UI ships an inline script');
   for (const script of scripts) assert.doesNotThrow(() => new Function(script), 'inline UI script parses');

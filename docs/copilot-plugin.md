@@ -80,7 +80,10 @@ Windows `add_task` failures in
 [#119](https://github.com/taskbean/taskbean/issues/119) and
 [#120](https://github.com/taskbean/taskbean/issues/120) for this packaged copy;
 older user-extension copies keep the bug until replaced. The canvas iframe cannot
-open `ghapp://` links and the canvas SDK has no navigation API, so session links
-are copy buttons and pull requests open as https links. The canvas exposes
-dashboard/report reads and explicit add/start/block/complete actions. Chronicle
+open `ghapp://` links and the canvas SDK has no navigation API, so the
+`open_link` action asks the OS to open a trusted, allowlisted session or pull
+request link. It never changes a task. The real click in the Copilot app still
+needs host verification, and the `ghapp://github.com/.../pull/<n>` route is not
+yet confirmed. The canvas exposes dashboard/report reads, `open_link`, and
+explicit add/start/block/complete actions. Chronicle
 reconciliation remains a review-first CLI workflow, not a canvas action.

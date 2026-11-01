@@ -39,6 +39,7 @@ function canonicalPr(repo, number, state = "") {
     const cleanNumber = positiveInteger(number);
     if (!REPO_RE.test(cleanRepo) || !cleanNumber) return null;
     const [owner, name] = cleanRepo.split("/");
+    if ([owner, name].some((part) => part === "." || part === ".." || part.length > 100)) return null;
     return {
         repo: `${owner}/${name}`,
         number: cleanNumber,

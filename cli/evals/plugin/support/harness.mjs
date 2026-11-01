@@ -73,7 +73,7 @@ export function createSandbox(name = 'eval') {
     dirs,
     env,
     cleanup() {
-      rmSync(root, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     },
   };
 }
@@ -108,8 +108,32 @@ export const CONTEXT = {
   canvasId: 'taskbean-dashboard',
 };
 
+export const LINK_LAUNCHER = Symbol.for('taskbean.dashboard.linkLauncher');
+
+// Records launches instead of starting a real OS handler. Tests can replace it.
+export function installFakeLauncher({ handler = true, spawnError = null } = {}) {
+  const calls = [];
+  globalThis[LINK_LAUNCHER] = {
+    platform: 'win32',
+    env: { SystemRoot: 'C:\\Windows' },
+    hasHandler: async (scheme) => (typeof handler === 'function' ? handler(scheme) : handler),
+    spawn(command, args, options) {
+      calls.push({ command, args, options });
+      const listeners = {};
+      const child = {
+        once(event, fn) { listeners[event] = fn; return child; },
+        unref() { child.unrefed = true; },
+      };
+      queueMicrotask(() => (spawnError ? listeners.error?.(Object.assign(new Error('spawn failed'), { code: spawnError })) : listeners.spawn?.()));
+      return child;
+    },
+  };
+  return calls;
+}
+
 export async function loadExtension(dir = extensionDir) {
   installSdkStub();
+  if (!globalThis[LINK_LAUNCHER]) installFakeLauncher();
   await import(pathToFileURL(join(dir, 'extension.mjs')).href);
   const captured = globalThis.__taskbeanEval;
   const canvas = captured.canvases.at(-1);
