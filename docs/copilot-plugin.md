@@ -2,9 +2,8 @@
 
 Taskbean 0.7 packages the Agent Skill and Dashboard canvas together. It requires
 Node.js >=22.13.0, npm, the separately installed Taskbean CLI, and a local Copilot
-host with legacy plugin extension and canvas support. The legacy PWA and Foundry
-Local are not required. Cloud sessions and other clients are not supported canvas
-hosts by this package.
+host with legacy plugin extension and canvas support. Cloud sessions and other
+clients are not supported canvas hosts by this package.
 
 ## Install and update
 
@@ -71,11 +70,17 @@ and `TASKBEAN_DB` paths; never test mutations against live tasks.
 `node extensions/taskbean-dashboard/check-availability.mjs` checks packaging,
 not runtime loading. From `cli`, run `npm test`; the marketplace lifecycle test
 is opt-in via `TASKBEAN_TEST_COPILOT` set to the Copilot executable path.
+Run `npm run eval:plugin` from `cli` for the isolated plugin eval suite
+(skill cases, every canvas action, error mapping, links and packaging); see
+`cli/evals/plugin/README.md`.
 
-**Release gaps:** desktop canvas loading still requires isolated host verification.
-Windows dashboard mutation failures remain tracked in
+**Release gaps:** canvas loading in the Copilot app still requires isolated host
+verification. The canvas now runs the CLI without a shell, which fixes the
+Windows `add_task` failures in
 [#119](https://github.com/taskbean/taskbean/issues/119) and
-[#120](https://github.com/taskbean/taskbean/issues/120). Packaging does not fix
-them, and successful reads do not prove mutations work. The canvas exposes
+[#120](https://github.com/taskbean/taskbean/issues/120) for this packaged copy;
+older user-extension copies keep the bug until replaced. The canvas iframe cannot
+open `ghapp://` links and the canvas SDK has no navigation API, so session links
+are copy buttons and pull requests open as https links. The canvas exposes
 dashboard/report reads and explicit add/start/block/complete actions. Chronicle
 reconciliation remains a review-first CLI workflow, not a canvas action.

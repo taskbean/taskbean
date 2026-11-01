@@ -43,7 +43,8 @@ function canonicalPr(repo, number, state = "") {
         repo: `${owner}/${name}`,
         number: cleanNumber,
         state: String(state || "").trim().toLowerCase(),
-        href: `ghapp://github.com/${owner}/${name}/pull/${cleanNumber}`,
+        href: `https://github.com/${owner}/${name}/pull/${cleanNumber}`,
+        appLink: `ghapp://github.com/${owner}/${name}/pull/${cleanNumber}`,
     };
 }
 

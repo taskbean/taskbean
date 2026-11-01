@@ -5,8 +5,7 @@ dashboard canvas. The root `plugin.json` loads it together with the Taskbean ski
 See [installation and migration](../../docs/copilot-plugin.md).
 
 The CLI remains a separate prerequisite. The canvas uses `bean` for local task
-reads and writes and serves its UI on an ephemeral loopback port. It does not
-require the legacy PWA or Foundry Local.
+reads and writes and serves its UI on an ephemeral loopback port.
 
 ## Availability
 
@@ -33,9 +32,20 @@ Chronicle reconciliation is a CLI workflow, not a canvas action.
 
 ```powershell
 node --test extensions/taskbean-dashboard/*.test.mjs
+cd cli; npm run eval:plugin   # full isolated plugin eval suite
 ```
 
-The imported mutation implementation still has the Windows reliability issues
-tracked in [#119](https://github.com/taskbean/taskbean/issues/119) and
-[#120](https://github.com/taskbean/taskbean/issues/120). Packaging checks do not
-establish that task creation works. Do not use live tasks for reproduction.
+`bean-runner.mjs` runs `taskbean/bin/taskbean.js` with Node directly and no
+shell (`TASKBEAN_CLI_ENTRY` overrides the entry). The extension host process is
+`copilot.exe`, so the runner finds `node` on PATH instead of using
+`process.execPath`. If no entry is found it falls back to the `bean` shim with
+cross-spawn style cmd escaping. This fixes the quoting failures in
+[#119](https://github.com/taskbean/taskbean/issues/119) and
+[#120](https://github.com/taskbean/taskbean/issues/120). CLI failures map to
+`taskbean_cli_unavailable`, `taskbean_cli_usage`, `taskbean_cli_rejected`,
+`taskbean_cli_failed`, `taskbean_busy` and `taskbean_task_not_found` with
+home-directory paths redacted.
+
+Links: the canvas iframe cannot open `ghapp://` URLs and the SDK has no
+navigation API. Session links are copy buttons (`ghapp://sessions/<id>`) and
+pull requests open as https links. Do not use live tasks for reproduction.

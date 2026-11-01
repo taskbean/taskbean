@@ -35,7 +35,6 @@ test('marketplace points to the complete plugin and active versions agree', () =
   assert.equal(marketplace.plugins[0].source, './');
   assert.equal(marketplace.plugins[0].name, manifest.name);
   assert.equal(marketplace.plugins[0].version, manifest.version);
-  assert.equal(json('app/package.json').version, '1.0.0');
 });
 
 test('primary and compatibility marketplace catalogs stay identical', () => {

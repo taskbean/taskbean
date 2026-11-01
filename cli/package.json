@@ -52,6 +52,7 @@
   ],
   "scripts": {
     "test": "node --test src/**/*.test.js",
+    "eval:plugin": "node --test evals/plugin/*.test.mjs ../extensions/taskbean-dashboard/*.test.mjs",
     "postinstall": "node scripts/postinstall.cjs"
   },
   "repository": {

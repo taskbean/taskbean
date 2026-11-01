@@ -1,0 +1,148 @@
+{
+  "skill_name": "taskbean",
+  "skill_path": ".agents/skills/taskbean/SKILL.md",
+  "_meta": {
+    "purpose": "Trigger and no-trigger contract for the Taskbean skill shipped in the v0.7 Copilot plugin. skill.test.mjs checks the contract deterministically and replays each expected command sequence against an isolated Taskbean store. Model trigger rates are measured separately with the opt-in live run described in README.md.",
+    "placeholders": {
+      "<title>": "An outcome-oriented task title chosen by the agent.",
+      "<id>": "The id returned by the preceding bean add --json call."
+    },
+    "exclusions": [
+      "pure explanation",
+      "read-only inspection",
+      "brainstorming",
+      "non-code prose",
+      "code review with no changes",
+      "installing taskbean itself"
+    ]
+  },
+  "cases": [
+    {
+      "id": "fix-bug",
+      "prompt": "Fix the JWT refresh bug in src/auth/middleware.ts that logs users out after 15 minutes.",
+      "should_trigger": true,
+      "category": "fix",
+      "replay_title": "fix JWT refresh logging users out after 15 minutes",
+      "expected_commands": [["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+    },
+    {
+      "id": "implement-feature",
+      "prompt": "Implement CSV export for the reports page.",
+      "should_trigger": true,
+      "category": "implement",
+      "replay_title": "implement CSV export for the reports page",
+      "expected_commands": [["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+    },
+    {
+      "id": "debug-long-running",
+      "prompt": "Debug why the integration tests hang on Windows. It might take a while.",
+      "should_trigger": true,
+      "category": "debug",
+      "replay_title": "debug integration tests hanging on Windows",
+      "expected_commands": [["add", "<title>", "--json"], ["start", "<id>", "--json"], ["done", "<id>", "--json"]]
+    },
+    {
+      "id": "investigate-blocked",
+      "prompt": "Investigate the failing deploy. If you need prod credentials from me, stop and tell me.",
+      "should_trigger": true,
+      "category": "investigate",
+      "replay_title": "investigate failing deploy",
+      "expected_commands": [["add", "<title>", "--json"], ["block", "<id>", "--json"]]
+    },
+    {
+      "id": "refactor",
+      "prompt": "Refactor the payment service to use dependency injection.",
+      "should_trigger": true,
+      "category": "refactor",
+      "replay_title": "refactor payment service to use dependency injection",
+      "expected_commands": [["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+    },
+    {
+      "id": "multi-task",
+      "prompt": "Update the README with the new endpoints, add validation to POST /users, and write tests for that validation.",
+      "should_trigger": true,
+      "category": "multi",
+      "replay_title": "add input validation to POST /users",
+      "expected_commands": [["add", "<title>", "--json"], ["add", "<title>", "--json"], ["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+    },
+    {
+      "id": "ci-config",
+      "prompt": "Configure GitHub Actions to run the test suite on pull requests.",
+      "should_trigger": true,
+      "category": "ci",
+      "replay_title": "configure GitHub Actions to run tests on pull requests",
+      "expected_commands": [["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+    },
+    {
+      "id": "shell-hostile-title",
+      "prompt": "Fix the \"50% done & ^caret\" rendering bug in the progress bar.",
+      "should_trigger": true,
+      "category": "fix",
+      "replay_title": "fix \"50% done & ^caret\" rendering in the progress bar",
+      "expected_commands": [["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+    },
+    {
+      "id": "list-tasks",
+      "prompt": "What Taskbean tasks are still pending?",
+      "should_trigger": true,
+      "category": "manage",
+      "expected_commands": [["list", "--status", "pending", "--json"]]
+    },
+    {
+      "id": "weekly-report",
+      "prompt": "Draft my weekly status report from Taskbean.",
+      "should_trigger": true,
+      "category": "report",
+      "expected_commands": [["report", "--date", "week", "--json"]]
+    },
+    {
+      "id": "chronicle-doctor",
+      "prompt": "Why are my Copilot sessions not showing up in Taskbean? Check the Chronicle data.",
+      "should_trigger": true,
+      "category": "chronicle",
+      "expected_commands": [["chronicle", "doctor", "--json"]]
+    },
+    {
+      "id": "explain-closures",
+      "prompt": "Explain how JavaScript closures work.",
+      "should_trigger": false,
+      "category": "pure explanation",
+      "expected_commands": []
+    },
+    {
+      "id": "read-only-inspection",
+      "prompt": "Which file defines the database schema? Do not change anything.",
+      "should_trigger": false,
+      "category": "read-only inspection",
+      "expected_commands": []
+    },
+    {
+      "id": "brainstorm",
+      "prompt": "Brainstorm five names for a coffee-themed todo app.",
+      "should_trigger": false,
+      "category": "brainstorming",
+      "expected_commands": []
+    },
+    {
+      "id": "non-code-prose",
+      "prompt": "Write a short thank-you note to my team for shipping the release.",
+      "should_trigger": false,
+      "category": "non-code prose",
+      "expected_commands": []
+    },
+    {
+      "id": "review-only",
+      "prompt": "Review this diff and leave comments. Do not make changes.",
+      "should_trigger": false,
+      "category": "code review with no changes",
+      "expected_commands": []
+    },
+    {
+      "id": "install-taskbean",
+      "prompt": "Install the taskbean CLI on this machine.",
+      "should_trigger": false,
+      "category": "installing taskbean itself",
+      "expected_commands": []
+    }
+  ]
+}
