@@ -64,7 +64,7 @@ export async function launchUrl(url, options = {}) {
             resolve();
         });
     });
-    return { dispatched: true, navigationConfirmed: false, url };
+    return { launcherStarted: true, navigationConfirmed: false, url };
 }
 
 export async function navigationSupport(options = {}) {

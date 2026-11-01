@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { pathToFileURL } from 'node:url';
@@ -16,7 +17,7 @@ useEnv({ ...sandbox.env, TASKBEAN_CLI_ENTRY: cliEntry });
 process.chdir(sandbox.dirs.project);
 
 const calls = installFakeLauncher();
-const { canvas } = await loadExtension();
+const { canvas, invoke } = await loadExtension();
 const { runBean } = await import(pathToFileURL(join(extensionDir, 'bean-runner.mjs')).href);
 
 const RESUME_SESSION = '4e0f6a52-1c3b-4d5e-8f90-a1b2c3d4e5f6';
@@ -141,7 +142,7 @@ test('Resume and Review blocker open the trusted session and never change tasks'
       await new Promise((r) => setTimeout(r, 100));
       text = await browser.evaluate(`${rowExpr(id)}.querySelector('.row-feedback').textContent`);
     }
-    assert.equal(text, 'Link dispatched to the Copilot app handler. Navigation is not confirmed; check the app. Task status unchanged.');
+    assert.equal(text, 'Link launcher started. Confirm the session opened in the Copilot app. Task status unchanged.');
     assert.deepEqual(calls.at(-1).args, [`ghapp://sessions/${session}`]);
     assert.equal(calls.at(-1).options.shell, false);
   }
@@ -270,5 +271,120 @@ test('action menus stay readable inside 320 and 360 px viewports', { skip }, asy
       assert.ok(item.height <= 32, `${item.text} stays on one line at ${width}px`);
       assert.ok(item.overflow <= 1, `${item.text} is not clipped at ${width}px`);
     }
+  }
+});
+
+test('PR feedback reports only a started launcher and targets validated HTTPS', { skip }, async () => {
+  const task = await add('Review the plugin PR');
+  const edited = JSON.parse(await runBean(['edit', task.id, '--notes', 'https://github.com/octocat/hello-world/pull/42', '--tags', 'review-required', '--json']));
+  assert.match(edited.notes, /github\.com/);
+  const pr = (await invoke('get_dashboard', { period: 'all' })).tasks.find((t) => t.id === task.id);
+  assert.equal(pr.pullRequest?.href, 'https://github.com/octocat/hello-world/pull/42', JSON.stringify({ notes: pr.notes, tags: pr.tags }));
+  await load(760);
+  const before = await ledger();
+  calls.length = 0;
+  const row = await inspectRow(task.id);
+  assert.equal(row.primary?.open, 'pull_request', `the PR is a primary action: ${JSON.stringify(row)}`);
+  await browser.evaluate(`${rowExpr(task.id)}.querySelector('[data-open-link="pull_request"]').click(); true`);
+  let text = '';
+  for (let i = 0; i < 40 && !text.includes('Task status unchanged'); i++) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    text = await browser.evaluate(`${rowExpr(task.id)}.querySelector('.row-feedback').textContent`);
+  }
+  assert.equal(text, 'Link launcher started. Confirm the pull request opened in your browser. Task status unchanged.');
+  assert.deepEqual(calls.map((call) => call.args), [['https://github.com/octocat/hello-world/pull/42']]);
+  assert.deepEqual(await ledger(), before);
+});
+
+test('a cross-site host can embed the canvas, but its own form and preflight cannot mutate tasks', { skip }, async () => {
+  let hostRequests = 0;
+  const host = createServer((req, res) => {
+    hostRequests++;
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`<!doctype html><iframe sandbox="allow-scripts allow-same-origin allow-forms" src="${url}"></iframe>`);
+  });
+  await new Promise((resolve) => host.listen(0, '127.0.0.1', resolve));
+  try {
+    const navigation = await browser.send('Page.navigate', { url: `http://localhost:${host.address().port}/` });
+    let iframeSession;
+    let targets;
+    for (let i = 0; i < 80 && !iframeSession; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      targets = (await browser.send('Target.getTargets')).result.targetInfos;
+      const frame = targets.find((t) => t.type === 'iframe' && t.url.startsWith(new URL(url).origin));
+      if (frame) iframeSession = (await browser.send('Target.attachToTarget', { targetId: frame.targetId, flatten: true })).result?.sessionId;
+    }
+    const targetOrigins = targets.map((t) => {
+      try { return `${t.type}:${new URL(t.url).origin}`; } catch { return t.type; }
+    });
+    assert.ok(iframeSession, `the cross-site canvas iframe loaded (host requests: ${hostRequests}, navigation: ${navigation.result?.errorText || 'ok'}, targets: ${targetOrigins})`);
+    await browser.send('Runtime.enable', {}, iframeSession);
+    const inFrame = async (expression) => {
+      const result = await browser.send('Runtime.evaluate', { expression, returnByValue: true }, iframeSession);
+      if (result.result?.exceptionDetails) throw new Error(result.result.exceptionDetails.text);
+      return result.result?.result?.value;
+    };
+    let state;
+    for (let i = 0; i < 80; i++) {
+      state = await inFrame(`({
+        ready: !!document.querySelector('#content .taskrow, #content .empty'),
+        error: document.getElementById('errorMessage')?.textContent || ''
+      })`);
+      if (state.ready || state.error) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(state.error, '', 'the embedded canvas may load its dashboard');
+    assert.equal(state.ready, true, 'the embedded canvas renders its dashboard');
+    await inFrame(`document.getElementById('newTitle').value = 'Cross-site iframe test outcome';
+      document.querySelector('#addForm button').click(); true`);
+    let task;
+    for (let i = 0; i < 40 && !task; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      task = (await ledger()).find((t) => t.title === 'Cross-site iframe test outcome');
+    }
+    assert.ok(task, 'a legitimate iframe action reaches the isolated ledger');
+    assert.equal((await inFrame("document.getElementById('errorMessage').textContent")), '');
+
+    const before = await ledger();
+    const launchesBefore = calls.length;
+    const attacks = await browser.evaluate(`(async () => {
+      const endpoint = ${JSON.stringify(new URL('/api/action', url).href)};
+      const token = ${JSON.stringify(new URL(url).searchParams.get('token'))};
+      const sink = document.createElement('iframe');
+      sink.name = 'attack-sink';
+      sink.src = 'about:blank';
+      document.body.appendChild(sink);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const form = document.createElement('form');
+      form.action = endpoint;
+      form.method = 'POST';
+      form.enctype = 'text/plain';
+      form.target = sink.name;
+      const field = document.createElement('input');
+      field.name = '{"action":"add_task","input":{"title":"Cross-site form attack","padding":"';
+      field.value = '"}}';
+      form.appendChild(field);
+      document.body.appendChild(form);
+      const formLoaded = new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(false), 5000);
+        sink.onload = () => { clearTimeout(timer); resolve(true); };
+      });
+      form.submit();
+      const submitted = await formLoaded;
+      let preflightBlocked = false;
+      try {
+        await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Taskbean-Token': token },
+          body: JSON.stringify({ action: 'add_task', input: { title: 'Cross-site preflight attack' } }) });
+      } catch {
+        preflightBlocked = true;
+      }
+      return { submitted, preflightBlocked };
+    })()`);
+    assert.equal(attacks.submitted, true, 'the browser sent the cross-site simple form');
+    assert.equal(attacks.preflightBlocked, true, 'the browser blocks the cross-site JSON request at preflight');
+    assert.deepEqual(await ledger(), before, 'neither browser attack changes the isolated ledger');
+    assert.equal(calls.length, launchesBefore);
+  } finally {
+    await new Promise((resolve, reject) => host.close((error) => error ? reject(error) : resolve()));
   }
 });

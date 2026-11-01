@@ -13,7 +13,7 @@ export function rowActions(t, nav) {
     const openSession = (label) => sessionsOk ? ({
         kind: "open", target: "session", style: "nav", group: "links", label, icon: "open", sessionId: session.id,
         ariaLabel: (label === "Open session" ? "Open" : label) + " in Copilot session" + (sessionName ? " " + sessionName : ""),
-        help: "Opens the Copilot session. Task status does not change.",
+        help: "Starts the session link launcher. Navigation is not confirmed; task status does not change.",
     }) : ({
         kind: "copy", copy: "session", style: "nav", group: "links", label: "Copy session ID", icon: "copy", value: session.id, unavailable: true,
         ariaLabel: "Copy session ID" + (sessionName ? " for " + sessionName : "") + ". " + label + " is unavailable: " + sessionReason,
@@ -22,7 +22,7 @@ export function rowActions(t, nav) {
     const openPr = () => ({
         kind: "open", target: "pull_request", style: "nav", group: "links", label: "Open PR", icon: "open",
         ariaLabel: "Open pull request " + pr.repo + " #" + pr.number + (pr.state ? " (" + pr.state + ")" : ""),
-        help: "Opens the pull request. Task status does not change.",
+        help: "Starts the HTTPS link launcher. Navigation is not confirmed; task status does not change.",
     });
     const mutation = (action, label, icon, style) => ({ kind: "mutation", action, label, icon, style, group: "status", help: "Changes the task status in the Taskbean ledger." });
 

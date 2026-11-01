@@ -51,6 +51,14 @@ Taskbean data-removal command for plugin rollback.
 
 ## Compatibility and development
 
+Observe-only collection requires a CLI that implements both
+`chronicle suggestions` and `chronicle reconcile --observe --json`. The CLI
+in this branch reports version 0.7.0 and implements those commands. The
+published 0.6.0 package contains `chronicle doctor` but not reconciliation,
+so it cannot run the canvas `observe_evidence` action. Check the actual CLI
+capability with `bean chronicle reconcile --help` before deploying; a version
+string by itself does not prove that a particular 0.7.0 build includes it.
+
 The primary catalog is `.github/plugin/marketplace.json`; the identical
 `.claude-plugin/marketplace.json` remains for compatibility. Release the manifest,
 catalog entry and `metadata.version` together; tests enforce catalog and version
@@ -83,8 +91,9 @@ older user-extension copies keep the bug until replaced. The canvas iframe canno
 open `ghapp://` links and the canvas SDK has no navigation API, so the
 `open_link` action asks the OS to open a trusted, allowlisted session or pull
 request link after a user click. It never sends a message or changes a task.
-The result confirms only handler-process dispatch, not navigation; the user
-must check the Copilot app or browser. Session links use `ghapp://sessions/<id>`;
+The result confirms only that the launcher process started, not handler
+acceptance or navigation; the user must check the Copilot app or browser.
+Session links use `ghapp://sessions/<id>`;
 PR links always use validated HTTPS, not the native PR route.
 Bare repository and issue links stay blocked because they prompt to clone or
 mark items read. Older user-extension copies show Resume and Review blocker as

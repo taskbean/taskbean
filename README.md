@@ -151,7 +151,7 @@ Run `bean --help` for the grouped command list (outcomes, evidence and review, r
 
 ### The dashboard is the human side
 
-The Taskbean Dashboard canvas runs inside the GitHub Copilot app. It reads the ledger through `bean --json`, groups work by workspace, and lets you add, start, block and complete tasks or generate a weekly report without leaving the session. **Resume** and **Review blocker** open the linked Copilot session, and **Open PR** opens the pull request, after a click; they never send a message or change a task. **Collect evidence (observe only)** gathers pending suggestions from local session metadata and shows them as not accepted outcomes. See [installation](docs/copilot-plugin.md).
+The Taskbean Dashboard canvas runs inside the GitHub Copilot app. It reads the ledger through `bean --json`, groups work by workspace, and lets you add, start, block and complete tasks or generate a weekly report without leaving the session. **Resume**, **Review blocker** and **Open PR** start a system link launcher; they cannot confirm navigation and never send a message or change a task. **Collect evidence (observe only)** gathers pending suggestions from local session metadata and shows them as not accepted outcomes. See [installation](docs/copilot-plugin.md).
 
 > The older desktop PWA in `app/` (FastAPI, Foundry Local) is no longer part of Taskbean's direction. Its code stays in the repository but it is not shipped, tested or supported by the plugin.
 

@@ -62,8 +62,9 @@ PR URL) to the OS: `explorer.exe` on Windows, `open` on macOS, `xdg-open`
 elsewhere. It uses an argument array, no shell, and checks that a `ghapp`
 handler is registered first. Errors are `taskbean_link_unavailable` (409) and
 `taskbean_link_failed` (502). Dispatching a link never sends a message or changes
-a task. The action returns `{dispatched:true, navigationConfirmed:false, url}`
-when the handler process spawns; it cannot confirm that the app or browser
+a task. The action returns `{launcherStarted:true, navigationConfirmed:false, url}`
+when the launcher process spawns; it cannot confirm that a handler accepted the
+link or that the app or browser
 opened the target. Feedback tells the user to check the destination.
 PRs always use validated HTTPS, not a native PR route.
 Bare repository and issue links are not
@@ -100,8 +101,8 @@ menu with zero or more other actions (`row-actions.mjs`):
 | Row | Primary |
 | --- | --- |
 | pending | **Start** (filled; the only status change used as a primary) |
-| in progress with a session | **Resume** (outline, opens the session) |
-| blocked with a session | **Review blocker** (outline, opens the session) |
+| in progress with a session | **Resume** (outline, starts the session link launcher) |
+| blocked with a session | **Review blocker** (outline, starts the session link launcher) |
 | PR ready for review, or done with a PR | **Open PR** (outline) |
 | other | none |
 

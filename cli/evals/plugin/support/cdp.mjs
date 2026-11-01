@@ -48,7 +48,7 @@ export async function launchBrowser(executable, { port = 9300 + Math.floor(Math.
     else if (msg.method === 'Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text);
     else if (msg.method === 'Page.javascriptDialogOpening') send('Page.handleJavaScriptDialog', { accept: true });
   });
-  const send = (method, params = {}) => new Promise((resolve) => { const id = ++next; pending.set(id, resolve); ws.send(JSON.stringify({ id, method, params })); });
+  const send = (method, params = {}, sessionId) => new Promise((resolve) => { const id = ++next; pending.set(id, resolve); ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })); });
   await send('Runtime.enable');
   await send('Page.enable');
 

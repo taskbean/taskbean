@@ -46,7 +46,7 @@ assert.equal(resume.primary.label, "Resume");
 assert.equal(resume.primary.ariaLabel, "Resume in Copilot session Wire deeplinks");
 assert.equal(resume.primary.style, "nav");
 assert.equal(resume.primary.icon, "open");
-assert.equal(resume.primary.help, "Opens the Copilot session. Task status does not change.");
+assert.equal(resume.primary.help, "Starts the session link launcher. Navigation is not confirmed; task status does not change.");
 assert.deepEqual(resume.secondary.map(key), ["mutation:block_task", "mutation:complete_task", "copy:t1"], "status items follow lifecycle order");
 assert.deepEqual(resume.secondary.map((x) => x.group), ["status", "status", "links"], "status items come before links");
 
