@@ -25,13 +25,13 @@
 <div class="model"><strong>Operating model.</strong> Taskbean reconciles outcomes with execution evidence for attribution, AI-value evidence, standups and leadership reports. Planner/To Do own commitments, owners, dates and assignments. Durable Priorities owns strategic outcomes. Copilot sessions and plan mode are execution evidence, not durable task storage.</div>
 <div class="stats">
   <div class="stat"><b>37</b>cases</div>
-  <div class="stat"><b>11</b>pass today</div>
-  <div class="stat"><b>20</b>gap (fail today)</div>
+  <div class="stat"><b>18</b>pass today</div>
+  <div class="stat"><b>13</b>gap (fail today)</div>
   <div class="stat"><b>6</b>not yet testable</div>
 </div>
-<div class="bar"><div class="pass" style="width:29.7%"></div><div class="fail" style="width:54.1%"></div><div class="not_testable" style="width:16.2%"></div></div>
+<div class="bar"><div class="pass" style="width:48.6%"></div><div class="fail" style="width:35.1%"></div><div class="not_testable" style="width:16.2%"></div></div>
 <p>Methods: <strong>runtime</strong> runs the CLI and canvas in an isolated sandbox; <strong>static</strong> is a proxy check on shipped skill or manifest text (model behavior still needs a live agent run); <strong>none</strong> is not yet testable.</p>
-<h2>Outcome grouping <small>1 pass · 4 gap · 0 not testable</small></h2>
+<h2>Outcome grouping <small>3 pass · 2 gap · 0 not testable</small></h2>
     <table><thead><tr><th>ID</th><th>Case</th><th>Issues</th><th>Input</th><th>Expected (target)</th><th>Method</th><th>Current</th></tr></thead><tbody>
       <tr>
         <td class="id">OG-01</td>
@@ -40,7 +40,7 @@
         <td>User: &quot;Update the README with the new endpoints, add validation to POST /users, and write tests for the validation.&quot;</td>
         <td>One outcome (for example &quot;Validate POST /users input&quot;) with README, code and test changes attached as evidence. No separate task per ask.</td>
         <td>static</td>
-        <td><span class="b fail">gap</span><div class="d">SKILL.md still says &quot;capture each separately&quot;</div></td>
+        <td><span class="b pass">pass</span><div class="d">no per-ask split guidance</div></td>
       </tr>
       <tr>
         <td class="id">OG-02</td>
@@ -49,7 +49,7 @@
         <td>Agent fixes a flaky test, reruns CI three times and runs lint between runs.</td>
         <td>One outcome. Reruns, commands and sub-steps are provenance on that outcome. Guidance names commands/retries/branches as evidence.</td>
         <td>static</td>
-        <td><span class="b fail">gap</span><div class="d">SKILL.md does not name commands/retries/branches as evidence</div></td>
+        <td><span class="b pass">pass</span><div class="d">found: &quot;Commands, retries, branches, and sub-steps are evidence&quot;</div></td>
       </tr>
       <tr>
         <td class="id">OG-03</td>
@@ -78,7 +78,7 @@
         <td>runtime</td>
         <td><span class="b fail">gap</span><div class="d">done succeeded with no evidence</div></td>
       </tr></tbody></table>
-<h2>Trigger / over-trigger <small>1 pass · 6 gap · 0 not testable</small></h2>
+<h2>Trigger / over-trigger <small>6 pass · 1 gap · 0 not testable</small></h2>
     <table><thead><tr><th>ID</th><th>Case</th><th>Issues</th><th>Input</th><th>Expected (target)</th><th>Method</th><th>Current</th></tr></thead><tbody>
       <tr>
         <td class="id">TR-01</td>
@@ -87,7 +87,7 @@
         <td>User: &quot;Plan my week and add the SSO launch to my to-do list.&quot;</td>
         <td>No Taskbean write. Guidance points commitments to Planner/To Do.</td>
         <td>static</td>
-        <td><span class="b fail">gap</span><div class="d">no Planner/To Do authority guidance</div></td>
+        <td><span class="b pass">pass</span><div class="d">names Planner/To Do</div></td>
       </tr>
       <tr>
         <td class="id">TR-02</td>
@@ -96,7 +96,7 @@
         <td>Agent produces an 8-step plan in plan mode.</td>
         <td>No Taskbean tasks for plan steps. Plan mode is ephemeral execution evidence.</td>
         <td>static</td>
-        <td><span class="b fail">gap</span><div class="d">no plan-mode guidance</div></td>
+        <td><span class="b pass">pass</span><div class="d">mentions plan mode</div></td>
       </tr>
       <tr>
         <td class="id">TR-03</td>
@@ -114,7 +114,7 @@
         <td>During an outcome, the agent fixes a typo and a lint warning.</td>
         <td>Edits are evidence on the current outcome. Guidance does not tell agents to log every small fix.</td>
         <td>static</td>
-        <td><span class="b fail">gap</span><div class="d">SKILL.md says &quot;Do NOT skip small fixes&quot;</div></td>
+        <td><span class="b pass">pass</span><div class="d">no log-every-fix guidance</div></td>
       </tr>
       <tr>
         <td class="id">TR-05</td>
@@ -123,7 +123,7 @@
         <td>Any coding request.</td>
         <td>The description does not require `bean add` before all coding work. Hooks capture intent; manual add/done is for corrections and exceptions.</td>
         <td>static</td>
-        <td><span class="b fail">gap</span><div class="d">SKILL.md requires capture &quot;before work&quot;</div></td>
+        <td><span class="b pass">pass</span><div class="d">capture is not a mandatory pre-step</div></td>
       </tr>
       <tr>
         <td class="id">TR-06</td>
@@ -132,7 +132,7 @@
         <td>Hooks captured the turn; the user says the title is wrong.</td>
         <td>Guidance uses manual commands to correct captured records, not as the primary capture path.</td>
         <td>static</td>
-        <td><span class="b fail">gap</span><div class="d">manual add/done is still the primary capture path</div></td>
+        <td><span class="b fail">gap</span><div class="d">skill frames manual commands as corrections, but plugin.json declares no hooks</div></td>
       </tr>
       <tr>
         <td class="id">TR-07</td>
@@ -141,7 +141,7 @@
         <td>User: &quot;Prepare my standup and show what AI delivered this week.&quot;</td>
         <td>Taskbean report is used. The description names standups and AI-value evidence.</td>
         <td>static</td>
-        <td><span class="b fail">gap</span><div class="d">description lacks: standup, AI value</div></td>
+        <td><span class="b pass">pass</span><div class="d">description names standup and AI value</div></td>
       </tr></tbody></table>
 <h2>Planner / To Do authority <small>1 pass · 1 gap · 1 not testable</small></h2>
     <table><thead><tr><th>ID</th><th>Case</th><th>Issues</th><th>Input</th><th>Expected (target)</th><th>Method</th><th>Current</th></tr></thead><tbody>
@@ -293,7 +293,7 @@
         <td>Inspect the Taskbean database schema after capture.</td>
         <td>No column stores raw prompts, responses or tool output.</td>
         <td>runtime</td>
-        <td><span class="b pass">pass</span><div class="d">8 tables, no raw-content columns</div></td>
+        <td><span class="b pass">pass</span><div class="d">9 tables, no raw-content columns</div></td>
       </tr>
       <tr>
         <td class="id">PV-02</td>

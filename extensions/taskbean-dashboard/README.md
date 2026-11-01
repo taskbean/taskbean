@@ -29,7 +29,11 @@ this plugin does not remove older copies or change global Git excludes.
 Reads: `get_dashboard`, `get_availability`, `generate_report`.
 Navigation (no task change): `open_link`.
 Writes: `add_task`, `start_task`, `complete_task`, `block_task`.
-Chronicle reconciliation is a CLI workflow, not a canvas action.
+Observe only (no task change): `observe_evidence` runs
+`bean chronicle reconcile --observe --json`. It writes only pending
+suggestions, unlinked evidence and a checkpoint, and returns `tasksChanged: 0`.
+`get_dashboard` includes `suggestedEvidence` (pending suggestions, labelled
+"Suggestion", not accepted outcomes). Approve, link and ignore stay in the CLI.
 
 ```powershell
 node --test extensions/taskbean-dashboard/*.test.mjs
@@ -57,7 +61,11 @@ target from trusted task data and `link-launcher.mjs` hands an allowlisted URL
 PR URL) to the OS: `explorer.exe` on Windows, `open` on macOS, `xdg-open`
 elsewhere. It uses an argument array, no shell, and checks that a `ghapp`
 handler is registered first. Errors are `taskbean_link_unavailable` (409) and
-`taskbean_link_failed` (502). Opening a link never changes a task.
+`taskbean_link_failed` (502). Opening a link never sends a message or changes
+a task. Session and PR links were verified on the Windows Copilot app; the view
+changes after about 20 seconds. Bare repository and issue links are not
+allowlisted (clone prompt and mark-as-read side effects). Older installed copies
+render Resume and Review blocker as detail toggles; those never navigate.
 
 ## Row layout
 

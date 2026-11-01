@@ -18,10 +18,12 @@ export function getDb() {
   }
 
   _db = new DatabaseSync(DB_PATH);
+  // Set the busy timeout first: the journal_mode pragma needs a lock and fails
+  // at once with "database is locked" while another process closes the WAL.
+  _db.exec('PRAGMA busy_timeout = 5000');
   _db.exec('PRAGMA journal_mode = WAL');
   _db.exec('PRAGMA synchronous = NORMAL');
   _db.exec('PRAGMA foreign_keys = ON');
-  _db.exec('PRAGMA busy_timeout = 5000');
 
   // Ensure todos table exists (same schema as the main PWA app)
   _db.exec(`
@@ -259,6 +261,20 @@ export function getDb() {
   try { _db.exec('UPDATE task_evidence SET occurred_at = created_at WHERE occurred_at IS NULL'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_task_evidence_todo ON task_evidence(todo_id)'); } catch {}
   try { _db.exec('CREATE INDEX IF NOT EXISTS idx_task_evidence_suggestion ON task_evidence(suggestion_id)'); } catch {}
+
+  // Observe-only reconciliation cursor. Advanced in the same transaction as
+  // the suggestions it covers, so an interrupted run replays from the last
+  // committed position.
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS reconciliation_checkpoints (
+      source TEXT PRIMARY KEY,
+      last_changed_at TEXT,
+      last_session_id TEXT,
+      runs INTEGER NOT NULL DEFAULT 0,
+      last_run_at TEXT,
+      updated_at TEXT NOT NULL
+    )
+  `);
 
   return _db;
 }

@@ -31,8 +31,10 @@ export function buildLaunch(url, { platform = process.platform, env = process.en
     return { command: "xdg-open", args: [url] };
 }
 
+// Only Windows has a verified handler probe. Other platforms report links as unavailable
+// instead of assuming a handler exists.
 function defaultHandlerCheck(scheme, { platform = process.platform, env = process.env } = {}) {
-    if (platform !== "win32") return Promise.resolve(true);
+    if (platform !== "win32") return Promise.resolve(false);
     const reg = join(env.SystemRoot || env.windir || "C:\\Windows", "System32", "reg.exe");
     return new Promise((resolve) => {
         execFile(reg, ["query", `HKCR\\${scheme}\\shell\\open\\command`, "/ve"], { windowsHide: true, timeout: 5000 }, (error) => resolve(!error));
@@ -45,7 +47,9 @@ export async function launchUrl(url, options = {}) {
     const { command, args } = buildLaunch(url, { platform, env });
     const scheme = url.slice(0, url.indexOf(":"));
     if (scheme !== "https" && !(await hasHandler(scheme))) {
-        throw new LinkError("taskbean_link_unavailable", "The GitHub Copilot app is not registered for ghapp:// links on this machine.");
+        throw new LinkError("taskbean_link_unavailable", platform === "win32"
+            ? "The GitHub Copilot app is not registered for ghapp:// links on this machine."
+            : "Opening Copilot sessions from the canvas is only verified on Windows.");
     }
     await new Promise((resolve, reject) => {
         let child;
@@ -62,4 +66,20 @@ export async function launchUrl(url, options = {}) {
         });
     });
     return { opened: true, url };
+}
+
+export async function navigationSupport(options = {}) {
+    const { platform = process.platform, env = process.env } = options;
+    const hasHandler = options.hasHandler || ((scheme) => defaultHandlerCheck(scheme, { platform, env }));
+    let sessions = false;
+    try { sessions = Boolean(await hasHandler("ghapp")); } catch { sessions = false; }
+    return {
+        sessions: {
+            available: sessions,
+            reason: sessions ? null : platform === "win32"
+                ? "The GitHub Copilot app is not registered for ghapp:// links on this machine."
+                : "Opening Copilot sessions from the canvas is only verified on Windows.",
+        },
+        pullRequests: { available: true, reason: null, fallback: sessions ? null : "https" },
+    };
 }

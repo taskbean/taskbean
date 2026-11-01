@@ -2,105 +2,152 @@
   "skill_name": "taskbean",
   "skill_path": ".agents/skills/taskbean/SKILL.md",
   "_meta": {
-    "purpose": "Trigger and no-trigger contract for the Taskbean skill shipped in the v0.7 Copilot plugin. skill.test.mjs checks the contract deterministically and replays each expected command sequence against an isolated Taskbean store. Model trigger rates are measured separately with the opt-in live run described in README.md.",
+    "purpose": "Trigger and no-trigger contract for the Taskbean skill shipped in the v0.7 Copilot plugin, aligned to the outcome/evidence model (#113, #115, #117). skill.test.mjs checks the contract deterministically against the shipped SKILL.md text and replays each expected command sequence against an isolated Taskbean store. These are contract and proxy checks, not measured model behavior; model trigger rates need the opt-in live run described in README.md.",
     "placeholders": {
       "<title>": "An outcome-oriented task title chosen by the agent.",
-      "<id>": "The id returned by the preceding bean add --json call."
+      "<id>": "The id returned by the preceding bean add --json call (or by setup_commands)."
     },
-    "exclusions": [
-      "pure explanation",
-      "read-only inspection",
-      "brainstorming",
-      "non-code prose",
-      "code review with no changes",
-      "installing taskbean itself"
-    ]
+    "exclusions": ["pure explanation", "read-only inspection", "brainstorming", "non-code prose", "code review with no changes", "installing taskbean itself", "plan-mode steps", "commitments that belong in Planner or Microsoft To Do"]
   },
   "cases": [
     {
       "id": "fix-bug",
       "prompt": "Fix the JWT refresh bug in src/auth/middleware.ts that logs users out after 15 minutes.",
       "should_trigger": true,
-      "category": "fix",
+      "category": "outcome: fix",
       "replay_title": "fix JWT refresh logging users out after 15 minutes",
-      "expected_commands": [["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+      "expected_commands": [
+        ["add", "<title>", "--json"],
+        ["done", "<id>", "--json"]
+      ]
     },
     {
       "id": "implement-feature",
       "prompt": "Implement CSV export for the reports page.",
       "should_trigger": true,
-      "category": "implement",
+      "category": "outcome: implement",
       "replay_title": "implement CSV export for the reports page",
-      "expected_commands": [["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+      "expected_commands": [
+        ["add", "<title>", "--json"],
+        ["done", "<id>", "--json"]
+      ]
     },
     {
       "id": "debug-long-running",
       "prompt": "Debug why the integration tests hang on Windows. It might take a while.",
       "should_trigger": true,
-      "category": "debug",
+      "category": "outcome: debug",
       "replay_title": "debug integration tests hanging on Windows",
-      "expected_commands": [["add", "<title>", "--json"], ["start", "<id>", "--json"], ["done", "<id>", "--json"]]
+      "expected_commands": [
+        ["add", "<title>", "--json"],
+        ["start", "<id>", "--json"],
+        ["done", "<id>", "--json"]
+      ]
     },
     {
       "id": "investigate-blocked",
       "prompt": "Investigate the failing deploy. If you need prod credentials from me, stop and tell me.",
       "should_trigger": true,
-      "category": "investigate",
+      "category": "outcome: investigate",
       "replay_title": "investigate failing deploy",
-      "expected_commands": [["add", "<title>", "--json"], ["block", "<id>", "--json"]]
+      "expected_commands": [
+        ["add", "<title>", "--json"],
+        ["block", "<id>", "--json"]
+      ]
     },
     {
       "id": "refactor",
       "prompt": "Refactor the payment service to use dependency injection.",
       "should_trigger": true,
-      "category": "refactor",
+      "category": "outcome: refactor",
       "replay_title": "refactor payment service to use dependency injection",
-      "expected_commands": [["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+      "expected_commands": [
+        ["add", "<title>", "--json"],
+        ["done", "<id>", "--json"]
+      ]
     },
     {
-      "id": "multi-task",
+      "id": "one-outcome-multi-ask",
       "prompt": "Update the README with the new endpoints, add validation to POST /users, and write tests for that validation.",
       "should_trigger": true,
-      "category": "multi",
+      "category": "outcome grouping",
       "replay_title": "add input validation to POST /users",
-      "expected_commands": [["add", "<title>", "--json"], ["add", "<title>", "--json"], ["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+      "expected_commands": [
+        ["add", "<title>", "--key", "users-post-validation", "--json"],
+        ["done", "<id>", "--json"]
+      ],
+      "note": "One result with docs, code and tests is one outcome; the README and test edits are evidence (#113)."
     },
     {
       "id": "ci-config",
       "prompt": "Configure GitHub Actions to run the test suite on pull requests.",
       "should_trigger": true,
-      "category": "ci",
+      "category": "outcome: ci",
       "replay_title": "configure GitHub Actions to run tests on pull requests",
-      "expected_commands": [["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+      "expected_commands": [
+        ["add", "<title>", "--json"],
+        ["done", "<id>", "--json"]
+      ]
     },
     {
       "id": "shell-hostile-title",
       "prompt": "Fix the \"50% done & ^caret\" rendering bug in the progress bar.",
       "should_trigger": true,
-      "category": "fix",
+      "category": "outcome: fix",
       "replay_title": "fix \"50% done & ^caret\" rendering in the progress bar",
-      "expected_commands": [["add", "<title>", "--json"], ["done", "<id>", "--json"]]
+      "expected_commands": [
+        ["add", "<title>", "--json"],
+        ["done", "<id>", "--json"]
+      ]
     },
     {
       "id": "list-tasks",
-      "prompt": "What Taskbean tasks are still pending?",
+      "prompt": "What Taskbean outcomes are still pending?",
       "should_trigger": true,
       "category": "manage",
-      "expected_commands": [["list", "--status", "pending", "--json"]]
+      "expected_commands": [
+        ["list", "--status", "pending", "--json"]
+      ]
     },
     {
       "id": "weekly-report",
-      "prompt": "Draft my weekly status report from Taskbean.",
+      "prompt": "Prepare my standup and show what AI delivered this week.",
       "should_trigger": true,
-      "category": "report",
-      "expected_commands": [["report", "--date", "week", "--json"]]
+      "category": "report: standup and AI value",
+      "expected_commands": [
+        ["report", "--date", "week", "--json"]
+      ]
     },
     {
       "id": "chronicle-doctor",
       "prompt": "Why are my Copilot sessions not showing up in Taskbean? Check the Chronicle data.",
       "should_trigger": true,
       "category": "chronicle",
-      "expected_commands": [["chronicle", "doctor", "--json"]]
+      "expected_commands": [
+        ["chronicle", "doctor", "--json"]
+      ]
+    },
+    {
+      "id": "correct-title",
+      "prompt": "That Taskbean record has the wrong title. Rename it to: fix flaky upload retry test.",
+      "should_trigger": true,
+      "category": "correction",
+      "replay_title": "fix flaky upload retry test",
+      "setup_commands": [
+        ["add", "fix upload test", "--json"]
+      ],
+      "expected_commands": [
+        ["edit", "<id>", "--title", "<title>", "--json"]
+      ]
+    },
+    {
+      "id": "observe-evidence",
+      "prompt": "Collect what my Copilot sessions did this week for review, but do not change my tasks.",
+      "should_trigger": true,
+      "category": "evidence review",
+      "expected_commands": [
+        ["chronicle", "reconcile", "--observe", "--json"]
+      ]
     },
     {
       "id": "explain-closures",
@@ -142,6 +189,20 @@
       "prompt": "Install the taskbean CLI on this machine.",
       "should_trigger": false,
       "category": "installing taskbean itself",
+      "expected_commands": []
+    },
+    {
+      "id": "plan-mode-steps",
+      "prompt": "Plan mode: break the SSO migration into an 8-step plan before we start.",
+      "should_trigger": false,
+      "category": "plan-mode steps",
+      "expected_commands": []
+    },
+    {
+      "id": "planner-commitment",
+      "prompt": "Add the SSO launch to my to-do list and assign it to Priya for Friday.",
+      "should_trigger": false,
+      "category": "commitments that belong in Planner or Microsoft To Do",
       "expected_commands": []
     }
   ]

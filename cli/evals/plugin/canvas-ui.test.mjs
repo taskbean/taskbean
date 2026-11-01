@@ -141,7 +141,7 @@ test('Resume and Review blocker open the trusted session and never change tasks'
       await new Promise((r) => setTimeout(r, 100));
       text = await browser.evaluate(`${rowExpr(id)}.querySelector('.row-feedback').textContent`);
     }
-    assert.equal(text, 'Opened in the GitHub Copilot app. Task status unchanged.');
+    assert.equal(text, 'Sent to the GitHub Copilot app. The session can take up to 30 seconds to open. If the app no longer has this session, it stays on the current view. Task status unchanged.');
     assert.deepEqual(calls.at(-1).args, [`ghapp://sessions/${session}`]);
     assert.equal(calls.at(-1).options.shell, false);
   }
@@ -168,6 +168,31 @@ test('a failed launch shows an inline error in the row', { skip }, async () => {
   } finally {
     launcher.hasHandler = saved;
   }
+});
+
+test('suggested evidence renders as not accepted and observe never changes tasks', { skip }, async () => {
+  await load(760);
+  const panel = await browser.evaluate(`(() => {
+    const h = document.getElementById('suggestionsHead');
+    const s = h && h.closest('section');
+    const b = document.getElementById('observe');
+    return { heading: h ? h.textContent.trim() : null, text: s ? s.textContent : '', button: b ? b.textContent.trim() : null, approve: s ? [...s.querySelectorAll('button')].filter((x) => /approve|accept|link/i.test(x.textContent)).length : -1 };
+  })()`);
+  assert.equal(panel.heading, 'Suggested evidence');
+  assert.match(panel.text, /Not accepted outcomes/);
+  assert.equal(panel.button, 'Collect evidence (observe only)');
+  assert.equal(panel.approve, 0, 'the canvas never accepts or links suggestions');
+
+  const before = await ledger();
+  await browser.evaluate(`document.getElementById('observe').click(); true`);
+  let fb = {};
+  for (let i = 0; i < 80 && !/No tasks changed/.test(fb.text || ''); i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    fb = await browser.evaluate(`(() => { const f = document.getElementById('observeFeedback'); return f ? { text: f.textContent, kind: f.dataset.kind } : {}; })()`);
+  }
+  assert.match(fb.text, /No tasks changed/);
+  assert.deepEqual(await ledger(), before);
+  assert.deepEqual(browser.errors, []);
 });
 
 async function hoverColors(selector) {

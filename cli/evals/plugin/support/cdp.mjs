@@ -72,7 +72,8 @@ export async function launchBrowser(executable, { port = 9300 + Math.floor(Math.
         const state = await evaluate('document.readyState === "complete" && !document.querySelector("#content .loading") && !!document.querySelector("#content .taskrow, #content .empty")');
         if (state) return;
       }
-      throw new Error('dashboard did not finish loading');
+      const content = await evaluate('(document.querySelector("#errorMessage")?.textContent || "") + " | " + (document.querySelector("#content")?.textContent?.slice(0, 200) || "")').catch(() => '');
+      throw new Error(`dashboard did not finish loading${errors.length ? `; page errors: ${errors.join(' | ')}` : ''}; content: ${content}`);
     },
     async key(key, code = key, keyCode = 0) {
       const text = key === 'Enter' ? '\r' : key === ' ' ? ' ' : undefined;

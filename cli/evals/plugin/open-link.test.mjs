@@ -10,8 +10,9 @@ process.chdir(sandbox.dirs.project);
 
 let calls = installFakeLauncher();
 const { canvas, invoke } = await loadExtension();
+const { rowActions } = await import(pathToFileURL(join(extensionDir, 'row-actions.mjs')).href);
 const { runBean } = await import(pathToFileURL(join(extensionDir, 'bean-runner.mjs')).href);
-const { buildLaunch, isLaunchableUrl, launchUrl } = await import(pathToFileURL(join(extensionDir, 'link-launcher.mjs')).href);
+const { buildLaunch, isLaunchableUrl, launchUrl, navigationSupport } = await import(pathToFileURL(join(extensionDir, 'link-launcher.mjs')).href);
 
 const SESSION_ID = '4e0f6a52-1c3b-4d5e-8f90-a1b2c3d4e5f6';
 const OTHER_SESSION = '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d';
@@ -151,4 +152,43 @@ test('link launcher only allows canonical session and pull request URLs', async 
   assert.deepEqual(buildLaunch(good[0], { platform: 'darwin' }), { command: '/usr/bin/open', args: [good[0]] });
   assert.deepEqual(buildLaunch(good[0], { platform: 'linux' }), { command: 'xdg-open', args: [good[0]] });
   await assert.rejects(launchUrl(bad[1], { spawn: () => assert.fail('must not spawn') }), { code: 'taskbean_link_unavailable' });
+});
+
+test('non-Windows platforms report ghapp session links as unavailable instead of assuming a handler', async () => {
+  for (const platform of ['darwin', 'linux']) {
+    await assert.rejects(
+      launchUrl(`ghapp://sessions/${SESSION_ID}`, { platform, spawn: () => assert.fail('must not spawn') }),
+      { code: 'taskbean_link_unavailable', message: /only verified on Windows/ },
+    );
+    const nav = await navigationSupport({ platform });
+    assert.equal(nav.sessions.available, false);
+    assert.match(nav.sessions.reason, /only verified on Windows/);
+    assert.equal(nav.pullRequests.fallback, 'https');
+  }
+  const win = await navigationSupport({ platform: 'win32', hasHandler: async () => true });
+  assert.deepEqual(win.sessions, { available: true, reason: null });
+});
+
+test('dashboard and availability expose navigation support; rows degrade truthfully when unavailable', async () => {
+  fresh({ handler: false });
+  const dash = await invoke('get_dashboard', { period: 'all' });
+  assert.equal(dash.navigation.sessions.available, false);
+  const availability = await invoke('get_availability', {});
+  assert.equal(availability.navigation.sessions.available, false);
+  fresh();
+  assert.equal((await invoke('get_dashboard', { period: 'all' })).navigation.sessions.available, true);
+
+  const task = { id: 't1', status: 'blocked', origin: { session: { id: SESSION_ID, name: 'Fix auth' } } };
+  const ok = rowActions(task, { sessions: { available: true } });
+  assert.equal(ok.primary.kind, 'open');
+  assert.equal(ok.primary.label, 'Review blocker');
+  const degraded = rowActions(task, { sessions: { available: false, reason: 'No ghapp handler.' } });
+  assert.equal(degraded.primary.kind, 'copy');
+  assert.equal(degraded.primary.copy, 'session');
+  assert.equal(degraded.primary.value, SESSION_ID);
+  assert.equal(degraded.primary.label, 'Copy session ID');
+  assert.match(degraded.primary.help, /Review blocker is unavailable: No ghapp handler\./);
+  assert.ok(!degraded.secondary.some((x) => x.kind === 'open' && x.target === 'session'), 'no fake open-session items remain');
+  const resume = rowActions({ ...task, status: 'in_progress' }, { sessions: { available: false, reason: 'x' } });
+  assert.match(resume.primary.ariaLabel, /Resume is unavailable/);
 });

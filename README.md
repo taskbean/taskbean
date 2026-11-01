@@ -25,7 +25,7 @@ A local-first task ledger for developers whose day job involves a coding agent, 
 | | CLI (`cli/`) | Agent Skill (`.agents/skills/taskbean`) | Dashboard canvas (`extensions/taskbean-dashboard`) |
 |---|---|---|---|
 | **For** | Agents and scripts | The agent | You, inside the GitHub Copilot app |
-| **Does** | Stores tasks and builds reports | Tells the agent when to call `bean add` / `bean done` | Board, quick add, start/block/complete, weekly report |
+| **Does** | Stores outcomes and evidence, builds reports | Tells the agent when to record one outcome, correct it, or report | Board, quick add, start/block/complete, session/PR links, observe-only evidence, weekly report |
 | **Tech** | Node.js, commander, SQLite | Agent Skills spec | Copilot SDK canvas, loopback UI |
 
 All parts read and write `~/.taskbean/taskbean.db`. The agent does the typing; you do the reviewing. Nothing leaves the machine.
@@ -42,7 +42,7 @@ flowchart LR
     DB[("SQLite<br/>~/.taskbean/taskbean.db")]
     CANVAS["Dashboard canvas<br/><i>GitHub Copilot app</i>"]
 
-    A1 & A2 & A3 -->|"Skill auto-logs"| CLI
+    A1 & A2 & A3 -->|"Skill records outcomes"| CLI
     CLI -->|write| DB
     CANVAS -->|"bean --json"| CLI
 ```
@@ -147,11 +147,11 @@ bean install --agent all                     # install everywhere
 
 ### The CLI is the robot
 
-12 commands (`add`, `done`, `list`, `report`, `track`, `untrack`, `projects`, `install`, `init`, `package`, `serve`, `upgrade`). The agent picks up the skill, notices a task is underway, and calls `bean add`. It closes with `bean done`. You never type any of this. You open the dashboard at the end of the day and there it is: a receipt of what got built.
+Run `bean --help` for the grouped command list (outcomes, evidence and review, reports, projects, maintenance, legacy). The skill records one outcome per meaningful result, with `bean add --key` and `bean done` or `bean block`. Commands, retries, branches and sub-steps are evidence, not separate tasks. Planner and To Do own commitments, owners and dates; Copilot sessions and plan mode are execution evidence. Manual `bean edit`/`bean done` calls are corrections. Turn hooks (#115) are not shipped yet.
 
 ### The dashboard is the human side
 
-The Taskbean Dashboard canvas runs inside the GitHub Copilot app. It reads the ledger through `bean --json`, groups work by workspace, and lets you add, start, block and complete tasks or generate a weekly report without leaving the session. See [installation](docs/copilot-plugin.md).
+The Taskbean Dashboard canvas runs inside the GitHub Copilot app. It reads the ledger through `bean --json`, groups work by workspace, and lets you add, start, block and complete tasks or generate a weekly report without leaving the session. **Resume** and **Review blocker** open the linked Copilot session, and **Open PR** opens the pull request, after a click; they never send a message or change a task. **Collect evidence (observe only)** gathers pending suggestions from local session metadata and shows them as not accepted outcomes. See [installation](docs/copilot-plugin.md).
 
 > The older desktop PWA in `app/` (FastAPI, Foundry Local) is no longer part of Taskbean's direction. Its code stays in the repository but it is not shipped, tested or supported by the plugin.
 
@@ -169,6 +169,15 @@ Daily reconciliation:
 bean chronicle reconcile --since 2026-04-20 --until 2026-04-20 --json
 bean chronicle suggestions --status pending --json
 ```
+
+Observe-only collection:
+
+```bash
+bean chronicle reconcile --observe --json             # resume from the last checkpoint
+bean chronicle reconcile --observe --limit 50 --json  # bound one run
+```
+
+`--observe` never auto-links, creates, completes or edits tasks. It writes only pending suggestions, unlinked evidence and a checkpoint, so a replay or a run after a crash creates no duplicates. It skips the current agent session (and any `--exclude-session` ids) so its own runs do not become evidence.
 
 Each pending suggestion includes a stable `id`, `suggested_title`, `evidence_summary`, `confidence`, source session ids, `occurred_at` work time, and privacy-safe evidence metadata such as branch, refs, and changed file paths. Exact session matches to existing Taskbean tasks are auto-linked as evidence and suppressed from the pending inbox; fuzzy matches still stay pending for human review. A suggestion is not a task until you explicitly approve it or link it:
 

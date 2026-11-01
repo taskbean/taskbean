@@ -58,8 +58,9 @@ export function chronicleDoctorCommand(opts) {
 }
 
 function renderReconcileText(result) {
+  const modeLabel = result.mode === 'observe' ? ' (observe only)' : '';
   const lines = [
-    `Chronicle reconciliation: ${result.since} to ${result.until}`,
+    `Chronicle reconciliation${modeLabel}: ${result.since} to ${result.until}`,
     '',
   ];
 
@@ -72,6 +73,13 @@ function renderReconcileText(result) {
   lines.push(`Pending suggestions: ${result.counts.pending}`);
   lines.push(`Created: ${result.counts.created}`);
   lines.push(`Updated: ${result.counts.updated}`);
+  if (result.mode === 'observe') {
+    lines.push(`Excluded sessions: ${result.excluded}`);
+    if (result.checkpoint?.last_changed_at) lines.push(`Checkpoint: ${result.checkpoint.last_changed_at}`);
+    if (result.has_more) lines.push('More sessions remain; run again to continue.');
+    lines.push('Suggestions are not accepted outcomes. Review them with `bean chronicle suggestions`.');
+    for (const note of result.notes || []) lines.push(`Note: ${note}`);
+  }
 
   if (result.suggestions.length) {
     lines.push('');

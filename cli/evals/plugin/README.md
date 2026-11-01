@@ -22,10 +22,11 @@ canvas at this repository's `bin/taskbean.js`.
 
 | File | Checks |
 |---|---|
-| `skill.test.mjs` + `skill-cases.json` | 11 trigger and 6 no-trigger prompts with expected `bean` commands. Each sequence starts with `bean add` and ends with `done`/`block`, uses only commands documented in `SKILL.md`, and replays against an isolated store. |
-| `canvas-actions.test.mjs` | All 8 actions: `get_availability`, `get_dashboard` (period/status/search/project filters), `add_task` (6 hostile titles, project + key), `start_task`, `block_task`, `complete_task`, `generate_report`, `open_link`. Also the HTTP routes, session/PR link output, and that the inline UI script parses. |
+| `skill.test.mjs` + `skill-cases.json` | 13 trigger and 8 no-trigger prompts with expected `bean` commands. Outcome cases record exactly one outcome (with `--key`) and end with `done`/`block`; corrections use `bean edit`; evidence review uses `chronicle reconcile --observe`. Checks that `SKILL.md` has no mandatory pre-work logging, uses only documented commands, and replays against an isolated store. These are contract and proxy checks on shipped text, not measured model behavior. |
+| `canvas-actions.test.mjs` | All 9 actions: `get_availability`, `get_dashboard` (period/status/search/project filters), `add_task` (6 hostile titles, project + key), `start_task`, `block_task`, `complete_task`, `generate_report`, `open_link`, `observe_evidence`. Also the HTTP routes, session/PR link output, and that the inline UI script parses. |
+| `canvas-observe.test.mjs` | `observe_evidence` against a seeded sandbox `session-store.db` that contains secret-looking text: the task ledger stays byte-identical, suggestions are pending with state `suggestion`, no raw text or secret reaches the payload, and a replay creates nothing new. |
 | `open-link.test.mjs` | `open_link` with a fake OS launcher: session and PR targets, ghapp then https fallback, malicious ids (shell metacharacters, `ghapp://sessions/x&calc`, non v1-5 UUIDs, PR path traversal), argument-array spawn with `shell:false`, typed 409/502 errors, and no ledger change. |
-| `canvas-ui.test.mjs` | Headless Edge/Chrome over CDP (skipped if none is found). Row primaries and menus, chevron details toggle, keyboard menu, Resume/Review blocker clicks with no task change, inline error with Copy session ID fallback, hover contrast in light and dark, and no clipping at 560 and 360 px. Set `TASKBEAN_EVAL_SCREENSHOT_DIR` to save screenshots. |
+| `canvas-ui.test.mjs` | Headless Edge/Chrome over CDP (skipped if none is found). Row primaries and menus, chevron details toggle, keyboard menu, Resume/Review blocker clicks with no task change, inline error with Copy session ID fallback, hover contrast in light and dark, no clipping at 560 and 360 px, and the Suggested evidence panel (labelled not accepted, no approve control, observe click changes no task). Set `TASKBEAN_EVAL_SCREENSHOT_DIR` to save screenshots. |
 | `../../../extensions/taskbean-dashboard/row-actions.test.mjs` | Primary per row state, no `details` kind, lifecycle menu order, no duplicate of the primary, empty menu for done rows without evidence. |
 | `canvas-errors.test.mjs` | Missing CLI, usage error, crash, unreadable output, JSON rejection, locked DB (fake CLI and a real `BEGIN EXCLUSIVE` lock), and home-path redaction. |
 | `bean-runner.test.mjs` | Entry discovery, `TASKBEAN_CLI_ENTRY`, Node runtime selection when the host is `copilot.exe`, direct and cmd-fallback round-trip of the hostile titles, and failure classification. |
@@ -37,7 +38,7 @@ The hostile `add_task` titles: `Plain title`,
 
 ## Results
 
-40/40 checks pass on Windows (Node 22+). The real-lock busy case takes about
+All checks pass on Windows (Node 22+). The real-lock busy case takes about
 30 seconds because the CLI waits on SQLite `busy_timeout` for several statements.
 
 ## Out of scope here
@@ -46,7 +47,9 @@ The hostile `add_task` titles: `Plain title`,
   `../trigger-eval.json` and the manual runs in `../README.md`.
 - The live Copilot marketplace install/update flow. It is opt-in:
   `$env:TASKBEAN_TEST_COPILOT='<path to copilot>'; node --test src/tests/plugin-lifecycle.test.js`.
-- Opening the canvas in the GitHub Copilot app and `ghapp://` navigation.
+- Opening the canvas in the GitHub Copilot app. `ghapp://` session and PR
+  navigation was verified once on the real Windows host with this launcher; it is
+  not automated here.
 
 ## Target cases (draft, not a release gate)
 
@@ -67,4 +70,7 @@ npm run eval:target -- --strict                       # exit 1 on any gap or dri
   Static checks are proxies on shipped text; model behavior needs a live run.
 - `target/catalog.html`: the case catalog with gaps and open questions.
 
-Current: 37 cases, 11 pass, 20 gap, 6 not testable.
+Current: 37 cases, 18 pass, 13 gap, 6 not testable. The 7 new passes (OG-01,
+OG-02, TR-01, TR-02, TR-04, TR-05, TR-07) are static proxies on the rewritten
+`SKILL.md`, not measured model behavior. TR-06 also requires hooks declared in
+`plugin.json`, so it stays a gap until #115 ships.

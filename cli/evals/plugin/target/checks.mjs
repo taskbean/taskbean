@@ -52,9 +52,15 @@ export const checks = {
     const m = /before (?:you start )?(?:any )?(?:coding )?work/i.exec(skill);
     return result(!m, m ? `SKILL.md requires capture "${m[0]}"` : 'capture is not a mandatory pre-step');
   },
+  // Text alone cannot pass: the skill may say hooks are not shipped yet. Require a
+  // declared hook in plugin.json so manual add/done really is a correction path.
   skill_manual_is_correction: ({ skill }) => {
-    const ok = /\bhooks?\b/i.test(skill) && /\bcorrect(?:ion|ions|ing)?\b/i.test(skill);
-    return result(ok, ok ? 'mentions hooks and corrections' : 'manual add/done is still the primary capture path');
+    const text = /\bhooks?\b/i.test(skill) && /\bcorrect(?:ion|ions|ing)?\b/i.test(skill);
+    const manifest = JSON.parse(readFileSync(join(repoRoot, 'plugin.json'), 'utf8'));
+    const ok = text && Boolean(manifest.hooks);
+    return result(ok, ok ? 'hooks declared; manual commands are corrections'
+      : text ? 'skill frames manual commands as corrections, but plugin.json declares no hooks'
+        : 'manual add/done is still the primary capture path');
   },
   skill_triggers_standup_ai_value: ({ description }) => {
     const missing = [!/standup/i.test(description) && 'standup', !/AI[- ]value/i.test(description) && 'AI value'].filter(Boolean);

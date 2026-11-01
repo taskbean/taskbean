@@ -82,8 +82,17 @@ Windows `add_task` failures in
 older user-extension copies keep the bug until replaced. The canvas iframe cannot
 open `ghapp://` links and the canvas SDK has no navigation API, so the
 `open_link` action asks the OS to open a trusted, allowlisted session or pull
-request link. It never changes a task. The real click in the Copilot app still
-needs host verification, and the `ghapp://github.com/.../pull/<n>` route is not
-yet confirmed. The canvas exposes dashboard/report reads, `open_link`, and
-explicit add/start/block/complete actions. Chronicle
-reconciliation remains a review-first CLI workflow, not a canvas action.
+request link after a user click. It never sends a message or changes a task.
+On Windows, the Copilot app opened `ghapp://sessions/<id>` and
+`ghapp://github.com/<o>/<r>/pull/<n>` links from this launcher; the view changes
+after up to about 20 seconds, and an unknown session leaves the view unchanged.
+Bare repository and issue links stay blocked because they prompt to clone or
+mark items read. Older user-extension copies show Resume and Review blocker as
+detail toggles that never navigate; replace them to get working links.
+
+The canvas exposes dashboard/report reads, `open_link`, explicit
+add/start/block/complete actions, and `observe_evidence`. `observe_evidence`
+runs `bean chronicle reconcile --observe`: it collects local session metadata
+into pending suggestions and never creates, links, completes or edits tasks. The
+canvas shows those suggestions as "not accepted outcomes". Approve, link and
+ignore stay in the CLI review workflow.

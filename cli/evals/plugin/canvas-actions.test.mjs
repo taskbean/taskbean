@@ -28,9 +28,9 @@ after(async () => {
   sandbox.cleanup();
 });
 
-test('declares exactly the eight documented canvas actions', () => {
+test('declares exactly the nine documented canvas actions', () => {
   assert.deepEqual(canvas.actions.map((a) => a.name).sort(), [
-    'add_task', 'block_task', 'complete_task', 'generate_report', 'get_availability', 'get_dashboard', 'open_link', 'start_task',
+    'add_task', 'block_task', 'complete_task', 'generate_report', 'get_availability', 'get_dashboard', 'observe_evidence', 'open_link', 'start_task',
   ]);
 });
 

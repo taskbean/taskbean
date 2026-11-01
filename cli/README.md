@@ -1,6 +1,6 @@
 # 🫘 taskbean
 
-Task management CLI for AI coding agents. Agents push tasks as they work. No session scraping, no post-hoc extraction.
+Outcomes and execution evidence for AI-assisted coding work. The agent records one outcome per meaningful result; local Copilot session metadata becomes reviewable evidence. Raw prompts, responses and tool output are never stored.
 
 Both `taskbean` and `bean` work. Same tool, shorter name.
 
@@ -41,12 +41,12 @@ bean chronicle reconcile --json       # create review-only work suggestions
 
 ### Task Management
 ```bash
-bean add "title"                      # create a task
+bean add "title"                      # record an outcome
 bean add "title" --key dedup-1        # upsert (won't duplicate)
 bean done <id|#>                      # mark complete (idempotent)
 bean start <id|#>                     # mark in-progress
 bean block <id|#>                     # mark blocked
-bean edit <id|#> "new title"          # rename a task
+bean edit <id|#> --title "new title"  # correct an outcome
 bean remove <id|#>                    # delete a task (alias: bean rm)
 bean remind "title" tomorrow          # task with due date
 bean remind "standup" "friday 9am"    # natural language dates
@@ -77,6 +77,7 @@ The plain report is canonical Taskbean data only. `--include-chronicle` adds lin
 bean chronicle doctor                 # local session-data capability check
 bean chronicle doctor --json          # machine-readable diagnostics
 bean chronicle reconcile --json       # generate review-only suggestions
+bean chronicle reconcile --observe --json # observe only: no auto-link, no task change
 bean chronicle suggestions --json     # list pending suggestions
 bean chronicle approve <id> --json    # create a task from a suggestion
 bean chronicle link <id> <todo> --json # attach evidence to an existing task
@@ -85,7 +86,7 @@ bean chronicle ignore <id> --json     # dismiss a suggestion
 
 `chronicle doctor` inspects only local Copilot session metadata/schema availability. It does not copy raw prompts, responses, or tool outputs into taskbean.
 
-Chronicle reconciliation turns local session metadata into a review inbox. Pending suggestions are not Taskbean tasks and do not appear in canonical task reports until you approve or link them. Exact session matches to existing tasks are auto-linked as evidence and suppressed from the pending inbox; fuzzy matches stay pending for review.
+Chronicle reconciliation turns local session metadata into a review inbox. Pending suggestions are not Taskbean tasks and do not appear in canonical task reports until you approve or link them. Exact session matches to existing tasks are auto-linked as evidence and suppressed from the pending inbox; fuzzy matches stay pending for review. With `--observe`, nothing is auto-linked and no task changes: runs advance a checkpoint, cap at `--limit` sessions (default 200), and skip the current agent session.
 
 Daily reconciliation:
 

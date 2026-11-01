@@ -17,14 +17,14 @@
       "title": "Several asks that serve one result become one outcome",
       "input": "User: \"Update the README with the new endpoints, add validation to POST /users, and write tests for the validation.\"",
       "expected": "One outcome (for example \"Validate POST /users input\") with README, code and test changes attached as evidence. No separate task per ask.",
-      "check": "skill_no_split_per_ask", "method": "static", "current": "fail"
+      "check": "skill_no_split_per_ask", "method": "static", "current": "pass"
     },
     {
       "id": "OG-02", "area": "Outcome grouping", "issues": ["#113"],
       "title": "Retries, CI reruns and commands are evidence, not tasks",
       "input": "Agent fixes a flaky test, reruns CI three times and runs lint between runs.",
       "expected": "One outcome. Reruns, commands and sub-steps are provenance on that outcome. Guidance names commands/retries/branches as evidence.",
-      "check": "skill_names_evidence_not_tasks", "method": "static", "current": "fail"
+      "check": "skill_names_evidence_not_tasks", "method": "static", "current": "pass"
     },
     {
       "id": "OG-03", "area": "Outcome grouping", "issues": ["#113", "#115"],
@@ -54,14 +54,14 @@
       "title": "Planning and commitment requests do not trigger Taskbean",
       "input": "User: \"Plan my week and add the SSO launch to my to-do list.\"",
       "expected": "No Taskbean write. Guidance points commitments to Planner/To Do.",
-      "check": "skill_names_planner_authority", "method": "static", "current": "fail"
+      "check": "skill_names_planner_authority", "method": "static", "current": "pass"
     },
     {
       "id": "TR-02", "area": "Trigger / over-trigger", "issues": ["#117"],
       "title": "Plan-mode todo lists are not stored as tasks",
       "input": "Agent produces an 8-step plan in plan mode.",
       "expected": "No Taskbean tasks for plan steps. Plan mode is ephemeral execution evidence.",
-      "check": "skill_plan_mode_ephemeral", "method": "static", "current": "fail"
+      "check": "skill_plan_mode_ephemeral", "method": "static", "current": "pass"
     },
     {
       "id": "TR-03", "area": "Trigger / over-trigger", "issues": ["#117"],
@@ -75,7 +75,7 @@
       "title": "Small edits inside an outcome are not standalone tasks",
       "input": "During an outcome, the agent fixes a typo and a lint warning.",
       "expected": "Edits are evidence on the current outcome. Guidance does not tell agents to log every small fix.",
-      "check": "skill_no_log_every_small_fix", "method": "static", "current": "fail",
+      "check": "skill_no_log_every_small_fix", "method": "static", "current": "pass",
       "open_question": "A standalone small fix with no surrounding outcome: record an outcome, or evidence only?"
     },
     {
@@ -83,7 +83,7 @@
       "title": "Capture is not a mandatory pre-step for all coding work",
       "input": "Any coding request.",
       "expected": "The description does not require `bean add` before all coding work. Hooks capture intent; manual add/done is for corrections and exceptions.",
-      "check": "skill_add_not_mandatory", "method": "static", "current": "fail"
+      "check": "skill_add_not_mandatory", "method": "static", "current": "pass"
     },
     {
       "id": "TR-06", "area": "Trigger / over-trigger", "issues": ["#115", "#117"],
@@ -97,7 +97,7 @@
       "title": "Standup and AI-value requests trigger reporting",
       "input": "User: \"Prepare my standup and show what AI delivered this week.\"",
       "expected": "Taskbean report is used. The description names standups and AI-value evidence.",
-      "check": "skill_triggers_standup_ai_value", "method": "static", "current": "fail"
+      "check": "skill_triggers_standup_ai_value", "method": "static", "current": "pass"
     },
     {
       "id": "PL-01", "area": "Planner / To Do authority", "issues": ["#113", "#116", "#117"],
