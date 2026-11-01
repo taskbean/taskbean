@@ -1,0 +1,287 @@
+{
+  "_meta": {
+    "status": "TARGET BEHAVIOR (draft for review). These cases describe where Taskbean should go, not what it does today. Failures are the expected gap, not regressions.",
+    "model": "Taskbean reconciles outcomes with execution evidence for attribution, AI-value evidence, standups and leadership reports. Planner/To Do own commitments, owners, dates and assignments. Durable Priorities owns strategic outcomes. Copilot sessions and plan mode are execution evidence, not durable task storage.",
+    "sources": ["#113", "#115", "#116", "#117"],
+    "fields": {
+      "input": "What the user, agent or host does.",
+      "expected": "Target behavior.",
+      "check": "Name of the automated check in checks.mjs, or null.",
+      "method": "runtime = runs the CLI/canvas in an isolated sandbox; static = proxy check on shipped text/manifest; none = not yet testable.",
+      "current": "Recorded result for the current code: pass, fail or not_testable. The runner reports drift when the measured result differs."
+    }
+  },
+  "cases": [
+    {
+      "id": "OG-01", "area": "Outcome grouping", "issues": ["#113", "#117"],
+      "title": "Several asks that serve one result become one outcome",
+      "input": "User: \"Update the README with the new endpoints, add validation to POST /users, and write tests for the validation.\"",
+      "expected": "One outcome (for example \"Validate POST /users input\") with README, code and test changes attached as evidence. No separate task per ask.",
+      "check": "skill_no_split_per_ask", "method": "static", "current": "fail"
+    },
+    {
+      "id": "OG-02", "area": "Outcome grouping", "issues": ["#113"],
+      "title": "Retries, CI reruns and commands are evidence, not tasks",
+      "input": "Agent fixes a flaky test, reruns CI three times and runs lint between runs.",
+      "expected": "One outcome. Reruns, commands and sub-steps are provenance on that outcome. Guidance names commands/retries/branches as evidence.",
+      "check": "skill_names_evidence_not_tasks", "method": "static", "current": "fail"
+    },
+    {
+      "id": "OG-03", "area": "Outcome grouping", "issues": ["#113", "#115"],
+      "title": "Retried capture with the same key does not duplicate",
+      "input": "Capture the same outcome twice with the same stable key (retry after a crash).",
+      "expected": "One outcome remains; the second capture updates it.",
+      "check": "runtime_key_upsert", "method": "runtime", "current": "pass"
+    },
+    {
+      "id": "OG-04", "area": "Outcome grouping", "issues": ["#113"],
+      "title": "Same work across a new worktree stays one unit",
+      "input": "Outcome captured in worktree A with key K; work continues in worktree B of the same repository with key K.",
+      "expected": "One human-facing outcome with both worktrees as provenance.",
+      "check": "runtime_cross_worktree_identity", "method": "runtime", "current": "fail",
+      "open_question": "Which identity joins worktrees: repository + key, an explicit outcome id, or #57 Project identity?"
+    },
+    {
+      "id": "OG-05", "area": "Outcome grouping", "issues": ["#113", "#115"],
+      "title": "Completion needs outcome evidence, not only agent activity",
+      "input": "Agent runs `bean done <id>` with no evidence after a turn ends.",
+      "expected": "Outcome is not reported as delivered without evidence; it is marked done-without-evidence or held for review.",
+      "check": "runtime_done_requires_evidence", "method": "runtime", "current": "fail",
+      "open_question": "Should user-directed corrections still allow done without evidence?"
+    },
+    {
+      "id": "TR-01", "area": "Trigger / over-trigger", "issues": ["#117"],
+      "title": "Planning and commitment requests do not trigger Taskbean",
+      "input": "User: \"Plan my week and add the SSO launch to my to-do list.\"",
+      "expected": "No Taskbean write. Guidance points commitments to Planner/To Do.",
+      "check": "skill_names_planner_authority", "method": "static", "current": "fail"
+    },
+    {
+      "id": "TR-02", "area": "Trigger / over-trigger", "issues": ["#117"],
+      "title": "Plan-mode todo lists are not stored as tasks",
+      "input": "Agent produces an 8-step plan in plan mode.",
+      "expected": "No Taskbean tasks for plan steps. Plan mode is ephemeral execution evidence.",
+      "check": "skill_plan_mode_ephemeral", "method": "static", "current": "fail"
+    },
+    {
+      "id": "TR-03", "area": "Trigger / over-trigger", "issues": ["#117"],
+      "title": "Pure explanation does not trigger",
+      "input": "User: \"Explain how the JWT middleware works.\"",
+      "expected": "No Taskbean activity.",
+      "check": "skill_excludes_explanation", "method": "static", "current": "pass"
+    },
+    {
+      "id": "TR-04", "area": "Trigger / over-trigger", "issues": ["#117"],
+      "title": "Small edits inside an outcome are not standalone tasks",
+      "input": "During an outcome, the agent fixes a typo and a lint warning.",
+      "expected": "Edits are evidence on the current outcome. Guidance does not tell agents to log every small fix.",
+      "check": "skill_no_log_every_small_fix", "method": "static", "current": "fail",
+      "open_question": "A standalone small fix with no surrounding outcome: record an outcome, or evidence only?"
+    },
+    {
+      "id": "TR-05", "area": "Trigger / over-trigger", "issues": ["#117", "#115"],
+      "title": "Capture is not a mandatory pre-step for all coding work",
+      "input": "Any coding request.",
+      "expected": "The description does not require `bean add` before all coding work. Hooks capture intent; manual add/done is for corrections and exceptions.",
+      "check": "skill_add_not_mandatory", "method": "static", "current": "fail"
+    },
+    {
+      "id": "TR-06", "area": "Trigger / over-trigger", "issues": ["#115", "#117"],
+      "title": "Manual commands are positioned as corrections",
+      "input": "Hooks captured the turn; the user says the title is wrong.",
+      "expected": "Guidance uses manual commands to correct captured records, not as the primary capture path.",
+      "check": "skill_manual_is_correction", "method": "static", "current": "fail"
+    },
+    {
+      "id": "TR-07", "area": "Trigger / over-trigger", "issues": ["#117"],
+      "title": "Standup and AI-value requests trigger reporting",
+      "input": "User: \"Prepare my standup and show what AI delivered this week.\"",
+      "expected": "Taskbean report is used. The description names standups and AI-value evidence.",
+      "check": "skill_triggers_standup_ai_value", "method": "static", "current": "fail"
+    },
+    {
+      "id": "PL-01", "area": "Planner / To Do authority", "issues": ["#113", "#116", "#117"],
+      "title": "Work on an existing commitment links evidence instead of creating a task",
+      "input": "User: \"Work on my Planner task 'Ship SSO' - fix the redirect bug.\"",
+      "expected": "Evidence links to the Planner/To Do commitment reference. No competing Taskbean commitment is created.",
+      "check": "runtime_commitment_link_option", "method": "runtime", "current": "fail"
+    },
+    {
+      "id": "PL-02", "area": "Planner / To Do authority", "issues": ["#113", "#117"],
+      "title": "Owners and due dates of commitments stay in Planner/To Do",
+      "input": "Agent learns a deadline for a Planner commitment.",
+      "expected": "Taskbean does not author a competing due date or owner for that commitment.",
+      "check": null, "method": "none", "current": "not_testable",
+      "open_question": "Taskbean still has due dates, reminders and `bean edit --due-date`. Keep them for personal items, or retire them?"
+    },
+    {
+      "id": "PL-03", "area": "Planner / To Do authority", "issues": ["#115", "#116"],
+      "title": "Taskbean never mutates Planner/To Do autonomously",
+      "input": "Any capture or report flow.",
+      "expected": "No Planner/To Do/Graph writes from the CLI or canvas.",
+      "check": "static_no_planner_writes", "method": "static", "current": "pass"
+    },
+    {
+      "id": "EV-01", "area": "Evidence linking", "issues": ["#115"],
+      "title": "Session identity is attached to captured work",
+      "input": "Capture from a Copilot session with agent and session id.",
+      "expected": "Stored record carries the agent and session id.",
+      "check": "runtime_session_attribution", "method": "runtime", "current": "pass"
+    },
+    {
+      "id": "EV-02", "area": "Evidence linking", "issues": ["#115", "#113"],
+      "title": "PRs and commits attach to an outcome as evidence",
+      "input": "Outcome produced PR #42 and two commits.",
+      "expected": "PR and commit references are stored as evidence on the outcome.",
+      "check": "runtime_pr_evidence_option", "method": "runtime", "current": "fail"
+    },
+    {
+      "id": "EV-03", "area": "Evidence linking", "issues": ["#113", "#115"],
+      "title": "Multiple sessions contribute to one outcome",
+      "input": "Session A starts outcome K; session B continues it with the same key.",
+      "expected": "One outcome with both sessions retained as evidence.",
+      "check": "runtime_multi_session_evidence", "method": "runtime", "current": "fail"
+    },
+    {
+      "id": "EV-04", "area": "Evidence linking", "issues": ["#115"],
+      "title": "Interrupted session is not a false success",
+      "input": "Outcome started; the session terminates without an end event or done.",
+      "expected": "Outcome stays incomplete, not done.",
+      "check": "runtime_interrupted_not_done", "method": "runtime", "current": "pass"
+    },
+    {
+      "id": "EV-05", "area": "Evidence linking", "issues": ["#115"],
+      "title": "Interrupted session shows a recoverable state",
+      "input": "Same as EV-04, then a new session opens in the project.",
+      "expected": "Outcome shows a visible recoverable/incomplete marker linked to the lost session, with no duplicate created.",
+      "check": null, "method": "none", "current": "not_testable"
+    },
+    {
+      "id": "EV-06", "area": "Evidence linking", "issues": ["#115", "#116"],
+      "title": "Turn start/end hooks are packaged",
+      "input": "Install the plugin.",
+      "expected": "The manifest declares start-of-turn and end-of-turn hooks (observe-only first).",
+      "check": "static_manifest_hooks", "method": "static", "current": "fail"
+    },
+    {
+      "id": "EV-07", "area": "Evidence linking", "issues": ["#115"],
+      "title": "One logical turn yields one intent and one result record",
+      "input": "Hook events are retried and delivered out of order.",
+      "expected": "Exactly one intent record and one result record per turn (idempotency keys).",
+      "check": null, "method": "none", "current": "not_testable"
+    },
+    {
+      "id": "RP-01", "area": "Report value", "issues": ["#113", "#117"],
+      "title": "Report is organized by outcomes",
+      "input": "`generate_report` for a week with work.",
+      "expected": "Report JSON has outcomes, not only a task list grouped by status.",
+      "check": "runtime_report_outcomes", "method": "runtime", "current": "fail"
+    },
+    {
+      "id": "RP-02", "area": "Report value", "issues": ["#113", "#115"],
+      "title": "Each reported outcome cites its evidence",
+      "input": "Outcome with a session and PR.",
+      "expected": "Report item carries an evidence list (sessions, PRs, commits).",
+      "check": "runtime_report_item_evidence", "method": "runtime", "current": "fail"
+    },
+    {
+      "id": "RP-03", "area": "Report value", "issues": ["#113", "#115"],
+      "title": "Blockers carry a reason and HITL state",
+      "input": "Agent blocks an outcome waiting on a reviewer.",
+      "expected": "Block records a reason and whether a human decision is needed.",
+      "check": "runtime_block_reason_option", "method": "runtime", "current": "fail"
+    },
+    {
+      "id": "RP-04", "area": "Report value", "issues": ["#117"],
+      "title": "Report includes usage evidence for AI value",
+      "input": "`generate_report`.",
+      "expected": "Report includes a usage/efficiency section usable as AI-value evidence.",
+      "check": "runtime_report_usage", "method": "runtime", "current": "pass",
+      "open_question": "How is \"AI value\" defined beyond token/session counts?"
+    },
+    {
+      "id": "RP-05", "area": "Report value", "issues": ["#117"],
+      "title": "Pending reconciliation suggestions are not completed work",
+      "input": "Weekly report with pending Chronicle suggestions.",
+      "expected": "Pending suggestions are review-only, not counted as done.",
+      "check": "skill_pending_review_only", "method": "static", "current": "pass"
+    },
+    {
+      "id": "PV-01", "area": "Privacy and confirmation", "issues": ["#115", "#116"],
+      "title": "No raw prompt, response or tool-output columns",
+      "input": "Inspect the Taskbean database schema after capture.",
+      "expected": "No column stores raw prompts, responses or tool output.",
+      "check": "runtime_schema_no_raw_content", "method": "runtime", "current": "pass"
+    },
+    {
+      "id": "PV-02", "area": "Privacy and confirmation", "issues": ["#116"],
+      "title": "Credentials in the environment are not stored",
+      "input": "Capture while GH_TOKEN and similar variables are set.",
+      "expected": "No credential value appears in the database.",
+      "check": "runtime_env_secret_not_stored", "method": "runtime", "current": "pass"
+    },
+    {
+      "id": "PV-03", "area": "Privacy and confirmation", "issues": ["#116"],
+      "title": "Agent-invoked canvas changes need confirmation",
+      "input": "Agent invokes add/start/block/complete on the canvas.",
+      "expected": "Mutation actions are approval-gated (explicit confirmation input or host approval).",
+      "check": "static_canvas_mutation_confirmation", "method": "static", "current": "fail",
+      "open_question": "Action-level confirm flag, or rely on host approval? Exempt mutations the user directly asked for?"
+    },
+    {
+      "id": "PV-04", "area": "Privacy and confirmation", "issues": ["#116"],
+      "title": "Canvas errors redact local paths",
+      "input": "CLI crashes with a message that contains the home directory.",
+      "expected": "Error shown to the agent/user has the home directory redacted.",
+      "check": "runtime_error_redaction", "method": "runtime", "current": "pass"
+    },
+    {
+      "id": "PV-05", "area": "Privacy and confirmation", "issues": ["#116"],
+      "title": "Secret-looking text in a title",
+      "input": "Agent captures a title that contains a token-shaped string.",
+      "expected": "To be decided.",
+      "check": null, "method": "none", "current": "not_testable",
+      "open_question": "Redact, reject or warn?"
+    },
+    {
+      "id": "VS-01", "area": "Version skew", "issues": ["#116"],
+      "title": "Availability reports plugin and CLI versions",
+      "input": "`get_availability`.",
+      "expected": "Output includes plugin version, CLI version and compatibility status.",
+      "check": "runtime_availability_versions", "method": "runtime", "current": "fail"
+    },
+    {
+      "id": "VS-02", "area": "Version skew", "issues": ["#116"],
+      "title": "Older CLI fails with an actionable version error",
+      "input": "Plugin 0.7.0 with CLI 0.5.2 installed.",
+      "expected": "Explicit version-skew error naming both versions and the upgrade step; no silent fallback.",
+      "check": "runtime_old_cli_skew_error", "method": "runtime", "current": "fail"
+    },
+    {
+      "id": "VS-03", "area": "Version skew", "issues": ["#116"],
+      "title": "Unsupported Copilot host is diagnosed",
+      "input": "Plugin loaded by a Copilot host without canvas support.",
+      "expected": "Diagnostic names the host version and the missing capability.",
+      "check": null, "method": "none", "current": "not_testable"
+    },
+    {
+      "id": "VS-04", "area": "Version skew", "issues": ["#116"],
+      "title": "Shipped versions agree",
+      "input": "Repository at release.",
+      "expected": "plugin.json, both marketplaces, CLI package and skill marker share one version.",
+      "check": "static_versions_aligned", "method": "static", "current": "pass"
+    },
+    {
+      "id": "IN-01", "area": "Version skew", "issues": ["#116"],
+      "title": "Upgrade and uninstall keep Taskbean data",
+      "input": "Install, update and uninstall the plugin through Copilot.",
+      "expected": "Data stays; only plugin-owned files are removed.",
+      "check": null, "method": "none", "current": "not_testable",
+      "note": "Covered by the opt-in live test cli/src/tests/plugin-lifecycle.test.js (TASKBEAN_TEST_COPILOT)."
+    }
+  ],
+  "open_questions": [
+    "Issue cross-references disagree: #113's body says #116 defines skills/triggers, #116 says #117 does. These cases treat #117 as the owner of trigger language.",
+    "Report value (#114) is out of this session's scope; RP cases only assert the minimum shape."
+  ]
+}

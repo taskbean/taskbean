@@ -44,3 +44,24 @@ The hostile `add_task` titles: `Plain title`,
 - The live Copilot marketplace install/update flow. It is opt-in:
   `$env:TASKBEAN_TEST_COPILOT='<path to copilot>'; node --test src/tests/plugin-lifecycle.test.js`.
 - Opening the canvas in the GitHub Copilot app and `ghapp://` navigation.
+
+## Target cases (draft, not a release gate)
+
+`target/` holds outcome-focused goldens for where Taskbean should go (#113,
+#115, #116, #117). They are **target behavior**: a failing case is the expected
+gap, not a regression. They do not run under `npm test` or `npm run eval:plugin`.
+
+```bash
+npm run eval:target                                   # gap report, exits 0
+npm run eval:target -- --json                         # machine-readable
+npm run eval:target -- --html evals/plugin/target/catalog.html
+npm run eval:target -- --strict                       # exit 1 on any gap or drift
+```
+
+- `target/cases.json`: each case has input, expected behavior, source issues,
+  method (`runtime`, `static`, `none`) and the recorded current result.
+- `target/checks.mjs`: the checks. Runtime checks use the isolated sandbox.
+  Static checks are proxies on shipped text; model behavior needs a live run.
+- `target/catalog.html`: the case catalog with gaps and open questions.
+
+Current: 37 cases, 11 pass, 20 gap, 6 not testable.

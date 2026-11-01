@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Taskbean target eval catalog</title>
+<style>
+  body{font:14px/1.45 "Segoe UI",system-ui,sans-serif;margin:24px auto;max-width:1400px;padding:0 20px;color:#1f1d1a;background:#faf8f5}
+  .banner{background:#fff4d6;border:1px solid #e0b84d;border-radius:8px;padding:12px 16px;margin-bottom:16px}
+  .model{background:#fff;border:1px solid #ddd5c8;border-radius:8px;padding:12px 16px}
+  .stats{display:flex;gap:12px;margin:16px 0}
+  .stat{flex:1;background:#fff;border:1px solid #ddd5c8;border-radius:8px;padding:10px 14px}
+  .stat b{font-size:24px;display:block}
+  .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:8px 0 20px}
+  .bar .pass{background:#3f8f5a}.bar .fail{background:#c0582f}.bar .not_testable{background:#9a9186}
+  table{border-collapse:collapse;width:100%;background:#fff;margin-bottom:24px}
+  th,td{border:1px solid #e5ddd1;padding:6px 8px;vertical-align:top;text-align:left}
+  th{background:#f1ebe2}
+  td.id{font-family:Consolas,monospace;white-space:nowrap}
+  h2 small{font-weight:normal;color:#6b6258;font-size:13px;margin-left:8px}
+  .b{display:inline-block;padding:1px 8px;border-radius:10px;color:#fff;font-size:12px}
+  .b.pass{background:#3f8f5a}.b.fail{background:#c0582f}.b.not_testable{background:#9a9186}
+  .d{color:#6b6258;font-size:12px;margin-top:4px}
+  .q{color:#8a5a00;font-size:12px;margin-top:4px}
+  code{background:#f1ebe2;padding:1px 4px;border-radius:3px}
+</style></head><body>
+<h1>Taskbean target eval catalog</h1>
+<div class="banner"><strong>Target behavior, draft for review.</strong> These cases describe where Taskbean should go. A gap is expected, not a regression. Release gates stay in <code>npm run eval:plugin</code>. Run this report with <code>npm run eval:target</code> from <code>cli/</code>.</div>
+<div class="model"><strong>Operating model.</strong> Taskbean reconciles outcomes with execution evidence for attribution, AI-value evidence, standups and leadership reports. Planner/To Do own commitments, owners, dates and assignments. Durable Priorities owns strategic outcomes. Copilot sessions and plan mode are execution evidence, not durable task storage.</div>
+<div class="stats">
+  <div class="stat"><b>37</b>cases</div>
+  <div class="stat"><b>11</b>pass today</div>
+  <div class="stat"><b>20</b>gap (fail today)</div>
+  <div class="stat"><b>6</b>not yet testable</div>
+</div>
+<div class="bar"><div class="pass" style="width:29.7%"></div><div class="fail" style="width:54.1%"></div><div class="not_testable" style="width:16.2%"></div></div>
+<p>Methods: <strong>runtime</strong> runs the CLI and canvas in an isolated sandbox; <strong>static</strong> is a proxy check on shipped skill or manifest text (model behavior still needs a live agent run); <strong>none</strong> is not yet testable.</p>
+<h2>Outcome grouping <small>1 pass · 4 gap · 0 not testable</small></h2>
+    <table><thead><tr><th>ID</th><th>Case</th><th>Issues</th><th>Input</th><th>Expected (target)</th><th>Method</th><th>Current</th></tr></thead><tbody>
+      <tr>
+        <td class="id">OG-01</td>
+        <td><strong>Several asks that serve one result become one outcome</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/113">#113</a> <a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>User: &quot;Update the README with the new endpoints, add validation to POST /users, and write tests for the validation.&quot;</td>
+        <td>One outcome (for example &quot;Validate POST /users input&quot;) with README, code and test changes attached as evidence. No separate task per ask.</td>
+        <td>static</td>
+        <td><span class="b fail">gap</span><div class="d">SKILL.md still says &quot;capture each separately&quot;</div></td>
+      </tr>
+      <tr>
+        <td class="id">OG-02</td>
+        <td><strong>Retries, CI reruns and commands are evidence, not tasks</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/113">#113</a></td>
+        <td>Agent fixes a flaky test, reruns CI three times and runs lint between runs.</td>
+        <td>One outcome. Reruns, commands and sub-steps are provenance on that outcome. Guidance names commands/retries/branches as evidence.</td>
+        <td>static</td>
+        <td><span class="b fail">gap</span><div class="d">SKILL.md does not name commands/retries/branches as evidence</div></td>
+      </tr>
+      <tr>
+        <td class="id">OG-03</td>
+        <td><strong>Retried capture with the same key does not duplicate</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/113">#113</a> <a href="https://github.com/taskbean/taskbean/issues/115">#115</a></td>
+        <td>Capture the same outcome twice with the same stable key (retry after a crash).</td>
+        <td>One outcome remains; the second capture updates it.</td>
+        <td>runtime</td>
+        <td><span class="b pass">pass</span><div class="d">ids match, 1 row(s)</div></td>
+      </tr>
+      <tr>
+        <td class="id">OG-04</td>
+        <td><strong>Same work across a new worktree stays one unit</strong><div class="q">Open question: Which identity joins worktrees: repository + key, an explicit outcome id, or #57 Project identity?</div></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/113">#113</a></td>
+        <td>Outcome captured in worktree A with key K; work continues in worktree B of the same repository with key K.</td>
+        <td>One human-facing outcome with both worktrees as provenance.</td>
+        <td>runtime</td>
+        <td><span class="b fail">gap</span><div class="d">2 unit(s) for one outcome across two worktrees</div></td>
+      </tr>
+      <tr>
+        <td class="id">OG-05</td>
+        <td><strong>Completion needs outcome evidence, not only agent activity</strong><div class="q">Open question: Should user-directed corrections still allow done without evidence?</div></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/113">#113</a> <a href="https://github.com/taskbean/taskbean/issues/115">#115</a></td>
+        <td>Agent runs `bean done &lt;id&gt;` with no evidence after a turn ends.</td>
+        <td>Outcome is not reported as delivered without evidence; it is marked done-without-evidence or held for review.</td>
+        <td>runtime</td>
+        <td><span class="b fail">gap</span><div class="d">done succeeded with no evidence</div></td>
+      </tr></tbody></table>
+<h2>Trigger / over-trigger <small>1 pass · 6 gap · 0 not testable</small></h2>
+    <table><thead><tr><th>ID</th><th>Case</th><th>Issues</th><th>Input</th><th>Expected (target)</th><th>Method</th><th>Current</th></tr></thead><tbody>
+      <tr>
+        <td class="id">TR-01</td>
+        <td><strong>Planning and commitment requests do not trigger Taskbean</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>User: &quot;Plan my week and add the SSO launch to my to-do list.&quot;</td>
+        <td>No Taskbean write. Guidance points commitments to Planner/To Do.</td>
+        <td>static</td>
+        <td><span class="b fail">gap</span><div class="d">no Planner/To Do authority guidance</div></td>
+      </tr>
+      <tr>
+        <td class="id">TR-02</td>
+        <td><strong>Plan-mode todo lists are not stored as tasks</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>Agent produces an 8-step plan in plan mode.</td>
+        <td>No Taskbean tasks for plan steps. Plan mode is ephemeral execution evidence.</td>
+        <td>static</td>
+        <td><span class="b fail">gap</span><div class="d">no plan-mode guidance</div></td>
+      </tr>
+      <tr>
+        <td class="id">TR-03</td>
+        <td><strong>Pure explanation does not trigger</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>User: &quot;Explain how the JWT middleware works.&quot;</td>
+        <td>No Taskbean activity.</td>
+        <td>static</td>
+        <td><span class="b pass">pass</span><div class="d">description excludes pure explanation</div></td>
+      </tr>
+      <tr>
+        <td class="id">TR-04</td>
+        <td><strong>Small edits inside an outcome are not standalone tasks</strong><div class="q">Open question: A standalone small fix with no surrounding outcome: record an outcome, or evidence only?</div></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>During an outcome, the agent fixes a typo and a lint warning.</td>
+        <td>Edits are evidence on the current outcome. Guidance does not tell agents to log every small fix.</td>
+        <td>static</td>
+        <td><span class="b fail">gap</span><div class="d">SKILL.md says &quot;Do NOT skip small fixes&quot;</div></td>
+      </tr>
+      <tr>
+        <td class="id">TR-05</td>
+        <td><strong>Capture is not a mandatory pre-step for all coding work</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/117">#117</a> <a href="https://github.com/taskbean/taskbean/issues/115">#115</a></td>
+        <td>Any coding request.</td>
+        <td>The description does not require `bean add` before all coding work. Hooks capture intent; manual add/done is for corrections and exceptions.</td>
+        <td>static</td>
+        <td><span class="b fail">gap</span><div class="d">SKILL.md requires capture &quot;before work&quot;</div></td>
+      </tr>
+      <tr>
+        <td class="id">TR-06</td>
+        <td><strong>Manual commands are positioned as corrections</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/115">#115</a> <a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>Hooks captured the turn; the user says the title is wrong.</td>
+        <td>Guidance uses manual commands to correct captured records, not as the primary capture path.</td>
+        <td>static</td>
+        <td><span class="b fail">gap</span><div class="d">manual add/done is still the primary capture path</div></td>
+      </tr>
+      <tr>
+        <td class="id">TR-07</td>
+        <td><strong>Standup and AI-value requests trigger reporting</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>User: &quot;Prepare my standup and show what AI delivered this week.&quot;</td>
+        <td>Taskbean report is used. The description names standups and AI-value evidence.</td>
+        <td>static</td>
+        <td><span class="b fail">gap</span><div class="d">description lacks: standup, AI value</div></td>
+      </tr></tbody></table>
+<h2>Planner / To Do authority <small>1 pass · 1 gap · 1 not testable</small></h2>
+    <table><thead><tr><th>ID</th><th>Case</th><th>Issues</th><th>Input</th><th>Expected (target)</th><th>Method</th><th>Current</th></tr></thead><tbody>
+      <tr>
+        <td class="id">PL-01</td>
+        <td><strong>Work on an existing commitment links evidence instead of creating a task</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/113">#113</a> <a href="https://github.com/taskbean/taskbean/issues/116">#116</a> <a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>User: &quot;Work on my Planner task 'Ship SSO' - fix the redirect bug.&quot;</td>
+        <td>Evidence links to the Planner/To Do commitment reference. No competing Taskbean commitment is created.</td>
+        <td>runtime</td>
+        <td><span class="b fail">gap</span><div class="d">bean add has no commitment reference option</div></td>
+      </tr>
+      <tr>
+        <td class="id">PL-02</td>
+        <td><strong>Owners and due dates of commitments stay in Planner/To Do</strong><div class="q">Open question: Taskbean still has due dates, reminders and `bean edit --due-date`. Keep them for personal items, or retire them?</div></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/113">#113</a> <a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>Agent learns a deadline for a Planner commitment.</td>
+        <td>Taskbean does not author a competing due date or owner for that commitment.</td>
+        <td>none</td>
+        <td><span class="b not_testable">not testable</span><div class="d">no automated check yet</div></td>
+      </tr>
+      <tr>
+        <td class="id">PL-03</td>
+        <td><strong>Taskbean never mutates Planner/To Do autonomously</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/115">#115</a> <a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>Any capture or report flow.</td>
+        <td>No Planner/To Do/Graph writes from the CLI or canvas.</td>
+        <td>static</td>
+        <td><span class="b pass">pass</span><div class="d">no Planner/Graph calls</div></td>
+      </tr></tbody></table>
+<h2>Evidence linking <small>2 pass · 3 gap · 2 not testable</small></h2>
+    <table><thead><tr><th>ID</th><th>Case</th><th>Issues</th><th>Input</th><th>Expected (target)</th><th>Method</th><th>Current</th></tr></thead><tbody>
+      <tr>
+        <td class="id">EV-01</td>
+        <td><strong>Session identity is attached to captured work</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/115">#115</a></td>
+        <td>Capture from a Copilot session with agent and session id.</td>
+        <td>Stored record carries the agent and session id.</td>
+        <td>runtime</td>
+        <td><span class="b pass">pass</span><div class="d">agent=copilot session=copilot:7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f</div></td>
+      </tr>
+      <tr>
+        <td class="id">EV-02</td>
+        <td><strong>PRs and commits attach to an outcome as evidence</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/115">#115</a> <a href="https://github.com/taskbean/taskbean/issues/113">#113</a></td>
+        <td>Outcome produced PR #42 and two commits.</td>
+        <td>PR and commit references are stored as evidence on the outcome.</td>
+        <td>runtime</td>
+        <td><span class="b fail">gap</span><div class="d">no PR/commit evidence option on add or done</div></td>
+      </tr>
+      <tr>
+        <td class="id">EV-03</td>
+        <td><strong>Multiple sessions contribute to one outcome</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/113">#113</a> <a href="https://github.com/taskbean/taskbean/issues/115">#115</a></td>
+        <td>Session A starts outcome K; session B continues it with the same key.</td>
+        <td>One outcome with both sessions retained as evidence.</td>
+        <td>runtime</td>
+        <td><span class="b fail">gap</span><div class="d">only one session retained</div></td>
+      </tr>
+      <tr>
+        <td class="id">EV-04</td>
+        <td><strong>Interrupted session is not a false success</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/115">#115</a></td>
+        <td>Outcome started; the session terminates without an end event or done.</td>
+        <td>Outcome stays incomplete, not done.</td>
+        <td>runtime</td>
+        <td><span class="b pass">pass</span><div class="d">status=in_progress</div></td>
+      </tr>
+      <tr>
+        <td class="id">EV-05</td>
+        <td><strong>Interrupted session shows a recoverable state</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/115">#115</a></td>
+        <td>Same as EV-04, then a new session opens in the project.</td>
+        <td>Outcome shows a visible recoverable/incomplete marker linked to the lost session, with no duplicate created.</td>
+        <td>none</td>
+        <td><span class="b not_testable">not testable</span><div class="d">no automated check yet</div></td>
+      </tr>
+      <tr>
+        <td class="id">EV-06</td>
+        <td><strong>Turn start/end hooks are packaged</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/115">#115</a> <a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>Install the plugin.</td>
+        <td>The manifest declares start-of-turn and end-of-turn hooks (observe-only first).</td>
+        <td>static</td>
+        <td><span class="b fail">gap</span><div class="d">plugin.json has no hooks</div></td>
+      </tr>
+      <tr>
+        <td class="id">EV-07</td>
+        <td><strong>One logical turn yields one intent and one result record</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/115">#115</a></td>
+        <td>Hook events are retried and delivered out of order.</td>
+        <td>Exactly one intent record and one result record per turn (idempotency keys).</td>
+        <td>none</td>
+        <td><span class="b not_testable">not testable</span><div class="d">no automated check yet</div></td>
+      </tr></tbody></table>
+<h2>Report value <small>2 pass · 3 gap · 0 not testable</small></h2>
+    <table><thead><tr><th>ID</th><th>Case</th><th>Issues</th><th>Input</th><th>Expected (target)</th><th>Method</th><th>Current</th></tr></thead><tbody>
+      <tr>
+        <td class="id">RP-01</td>
+        <td><strong>Report is organized by outcomes</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/113">#113</a> <a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>`generate_report` for a week with work.</td>
+        <td>Report JSON has outcomes, not only a task list grouped by status.</td>
+        <td>runtime</td>
+        <td><span class="b fail">gap</span><div class="d">report keys: period, since, until, tasks, taskGroups, usage, efficiency</div></td>
+      </tr>
+      <tr>
+        <td class="id">RP-02</td>
+        <td><strong>Each reported outcome cites its evidence</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/113">#113</a> <a href="https://github.com/taskbean/taskbean/issues/115">#115</a></td>
+        <td>Outcome with a session and PR.</td>
+        <td>Report item carries an evidence list (sessions, PRs, commits).</td>
+        <td>runtime</td>
+        <td><span class="b fail">gap</span><div class="d">7 item(s) without an evidence list</div></td>
+      </tr>
+      <tr>
+        <td class="id">RP-03</td>
+        <td><strong>Blockers carry a reason and HITL state</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/113">#113</a> <a href="https://github.com/taskbean/taskbean/issues/115">#115</a></td>
+        <td>Agent blocks an outcome waiting on a reviewer.</td>
+        <td>Block records a reason and whether a human decision is needed.</td>
+        <td>runtime</td>
+        <td><span class="b fail">gap</span><div class="d">bean block takes no reason/HITL state</div></td>
+      </tr>
+      <tr>
+        <td class="id">RP-04</td>
+        <td><strong>Report includes usage evidence for AI value</strong><div class="q">Open question: How is &quot;AI value&quot; defined beyond token/session counts?</div></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>`generate_report`.</td>
+        <td>Report includes a usage/efficiency section usable as AI-value evidence.</td>
+        <td>runtime</td>
+        <td><span class="b pass">pass</span><div class="d">report has usage</div></td>
+      </tr>
+      <tr>
+        <td class="id">RP-05</td>
+        <td><strong>Pending reconciliation suggestions are not completed work</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/117">#117</a></td>
+        <td>Weekly report with pending Chronicle suggestions.</td>
+        <td>Pending suggestions are review-only, not counted as done.</td>
+        <td>static</td>
+        <td><span class="b pass">pass</span><div class="d">pending suggestions are review-only</div></td>
+      </tr></tbody></table>
+<h2>Privacy and confirmation <small>3 pass · 1 gap · 1 not testable</small></h2>
+    <table><thead><tr><th>ID</th><th>Case</th><th>Issues</th><th>Input</th><th>Expected (target)</th><th>Method</th><th>Current</th></tr></thead><tbody>
+      <tr>
+        <td class="id">PV-01</td>
+        <td><strong>No raw prompt, response or tool-output columns</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/115">#115</a> <a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>Inspect the Taskbean database schema after capture.</td>
+        <td>No column stores raw prompts, responses or tool output.</td>
+        <td>runtime</td>
+        <td><span class="b pass">pass</span><div class="d">8 tables, no raw-content columns</div></td>
+      </tr>
+      <tr>
+        <td class="id">PV-02</td>
+        <td><strong>Credentials in the environment are not stored</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>Capture while GH_TOKEN and similar variables are set.</td>
+        <td>No credential value appears in the database.</td>
+        <td>runtime</td>
+        <td><span class="b pass">pass</span><div class="d">no credential value in database</div></td>
+      </tr>
+      <tr>
+        <td class="id">PV-03</td>
+        <td><strong>Agent-invoked canvas changes need confirmation</strong><div class="q">Open question: Action-level confirm flag, or rely on host approval? Exempt mutations the user directly asked for?</div></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>Agent invokes add/start/block/complete on the canvas.</td>
+        <td>Mutation actions are approval-gated (explicit confirmation input or host approval).</td>
+        <td>static</td>
+        <td><span class="b fail">gap</span><div class="d">no confirmation input on: add_task, start_task, block_task, complete_task</div></td>
+      </tr>
+      <tr>
+        <td class="id">PV-04</td>
+        <td><strong>Canvas errors redact local paths</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>CLI crashes with a message that contains the home directory.</td>
+        <td>Error shown to the agent/user has the home directory redacted.</td>
+        <td>runtime</td>
+        <td><span class="b pass">pass</span><div class="d">code=taskbean_cli_failed</div></td>
+      </tr>
+      <tr>
+        <td class="id">PV-05</td>
+        <td><strong>Secret-looking text in a title</strong><div class="q">Open question: Redact, reject or warn?</div></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>Agent captures a title that contains a token-shaped string.</td>
+        <td>To be decided.</td>
+        <td>none</td>
+        <td><span class="b not_testable">not testable</span><div class="d">no automated check yet</div></td>
+      </tr></tbody></table>
+<h2>Version skew <small>1 pass · 2 gap · 2 not testable</small></h2>
+    <table><thead><tr><th>ID</th><th>Case</th><th>Issues</th><th>Input</th><th>Expected (target)</th><th>Method</th><th>Current</th></tr></thead><tbody>
+      <tr>
+        <td class="id">VS-01</td>
+        <td><strong>Availability reports plugin and CLI versions</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>`get_availability`.</td>
+        <td>Output includes plugin version, CLI version and compatibility status.</td>
+        <td>runtime</td>
+        <td><span class="b fail">gap</span><div class="d">no version or compatibility fields</div></td>
+      </tr>
+      <tr>
+        <td class="id">VS-02</td>
+        <td><strong>Older CLI fails with an actionable version error</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>Plugin 0.7.0 with CLI 0.5.2 installed.</td>
+        <td>Explicit version-skew error naming both versions and the upgrade step; no silent fallback.</td>
+        <td>runtime</td>
+        <td><span class="b fail">gap</span><div class="d">CLI 0.5.2 accepted silently</div></td>
+      </tr>
+      <tr>
+        <td class="id">VS-03</td>
+        <td><strong>Unsupported Copilot host is diagnosed</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>Plugin loaded by a Copilot host without canvas support.</td>
+        <td>Diagnostic names the host version and the missing capability.</td>
+        <td>none</td>
+        <td><span class="b not_testable">not testable</span><div class="d">no automated check yet</div></td>
+      </tr>
+      <tr>
+        <td class="id">VS-04</td>
+        <td><strong>Shipped versions agree</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>Repository at release.</td>
+        <td>plugin.json, both marketplaces, CLI package and skill marker share one version.</td>
+        <td>static</td>
+        <td><span class="b pass">pass</span><div class="d">all 0.7.0</div></td>
+      </tr>
+      <tr>
+        <td class="id">IN-01</td>
+        <td><strong>Upgrade and uninstall keep Taskbean data</strong></td>
+        <td><a href="https://github.com/taskbean/taskbean/issues/116">#116</a></td>
+        <td>Install, update and uninstall the plugin through Copilot.</td>
+        <td>Data stays; only plugin-owned files are removed.</td>
+        <td>none</td>
+        <td><span class="b not_testable">not testable</span><div class="d">no automated check yet</div></td>
+      </tr></tbody></table>
+<h2>Open questions</h2><ul><li><strong>OG-04</strong>: Which identity joins worktrees: repository + key, an explicit outcome id, or #57 Project identity?</li><li><strong>OG-05</strong>: Should user-directed corrections still allow done without evidence?</li><li><strong>TR-04</strong>: A standalone small fix with no surrounding outcome: record an outcome, or evidence only?</li><li><strong>PL-02</strong>: Taskbean still has due dates, reminders and `bean edit --due-date`. Keep them for personal items, or retire them?</li><li><strong>RP-04</strong>: How is &quot;AI value&quot; defined beyond token/session counts?</li><li><strong>PV-03</strong>: Action-level confirm flag, or rely on host approval? Exempt mutations the user directly asked for?</li><li><strong>PV-05</strong>: Redact, reject or warn?</li><li>Issue cross-references disagree: #113's body says #116 defines skills/triggers, #116 says #117 does. These cases treat #117 as the owner of trigger language.</li><li>Report value (#114) is out of this session's scope; RP cases only assert the minimum shape.</li></ul>
+<p class="d">Generated by cli/evals/plugin/target/run-target.mjs.</p>
+</body></html>
