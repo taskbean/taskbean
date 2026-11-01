@@ -53,6 +53,12 @@ flowchart LR
 
 ## Quick start
 
+### GitHub Copilot plugin
+
+Taskbean 0.7 brings the Agent Skill and Dashboard canvas into one Copilot plugin.
+The CLI remains an explicit prerequisite; the legacy PWA is optional.
+See [installation, compatibility and migration](docs/copilot-plugin.md).
+
 ### CLI (agent skill)
 
 ```bash

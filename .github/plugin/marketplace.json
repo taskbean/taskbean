@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "taskbean",
+  "metadata": {
+    "description": "Taskbean task capture and dashboard for GitHub Copilot.",
+    "version": "0.7.0"
+  },
+  "owner": {
+    "name": "taskbean",
+    "email": "hello@taskbean.ai"
+  },
+  "plugins": [
+    {
+      "name": "taskbean",
+      "source": "./",
+      "description": "Taskbean Agent Skill and Dashboard canvas for GitHub Copilot. Install the Taskbean CLI separately.",
+      "version": "0.7.0",
+      "author": {
+        "name": "Nick Brady"
+      },
+      "category": "productivity",
+      "tags": ["task-management", "agent-skill", "productivity", "todo", "local-first", "claude-code", "copilot", "codex", "opencode"]
+    }
+  ]
+}

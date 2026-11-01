@@ -143,7 +143,7 @@ export const SKILL_MD = [
   'description: >-',
   '  Captures concrete coding tasks in Taskbean so work appears in weekly reports, 1-on-1s, and performance reviews. Use when asked to fix, implement, debug, investigate, refactor, test, document, configure CI/CD, or change code: call `bean add "<outcome-oriented title>" --json` before work and `bean done <id> --json` when finished. Also use for Taskbean task management/reporting and for diagnosing local Copilot Chronicle/session data with `bean chronicle doctor --json`. Do NOT use for pure explanation, read-only inspection, brainstorming, non-code prose, code review with no changes, or installing taskbean itself.',
   'metadata:',
-  '  taskbean_version: "0.6.0"',
+  '  taskbean_version: "0.7.0"',
   '---',
   '# taskbean — make your coding work visible to the developer',
   '',

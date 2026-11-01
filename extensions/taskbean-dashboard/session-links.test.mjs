@@ -1,0 +1,23 @@
+import assert from "node:assert/strict";
+import { escapeHtmlAttribute, resolveTrustedCopilotSession, resolveTrustedPullRequest, sessionDeepLink } from "./session-links.mjs";
+
+const sessionId = "11111111-1111-4111-8111-111111111111";
+const recorded = resolveTrustedCopilotSession({ session_id: sessionId, session_name: "Example session" });
+assert.deepEqual(recorded, { id: sessionId, name: "Example session" });
+assert.equal(sessionDeepLink(recorded.id), `ghapp://sessions/${sessionId}`);
+assert.equal(resolveTrustedCopilotSession({ session_id: "not-a-uuid", id: sessionId }, { slug: "unresolved-slug" }), null);
+assert.equal(resolveTrustedCopilotSession({ id: sessionId }, { slug: "example-worktree" }), null);
+assert.deepEqual(resolveTrustedCopilotSession({ agent_session_id: `copilot:${sessionId}` }), { id: sessionId, name: "" });
+assert.deepEqual(resolveTrustedCopilotSession({ agent: "copilot", agent_session_id: sessionId }), { id: sessionId, name: "" });
+assert.equal(resolveTrustedCopilotSession({ agent: "codex", agent_session_id: sessionId }), null);
+assert.equal(sessionDeepLink("unresolved-slug"), "");
+assert.equal(resolveTrustedCopilotSession({ github_task_id: sessionId, id: sessionId }), null);
+assert.equal(escapeHtmlAttribute('" onmouseover="alert(1)&<'), "&quot; onmouseover=&quot;alert(1)&amp;&lt;");
+const explicit = resolveTrustedPullRequest({ created_pr_repo: "octocat/hello-world", created_pr_number: 42 });
+assert.equal(explicit.href, "ghapp://github.com/octocat/hello-world/pull/42");
+const fromUrl = resolveTrustedPullRequest({ notes: "Review https://github.com/github/copilot-cli/pull/317?notification=1" });
+assert.equal(fromUrl.href, "ghapp://github.com/github/copilot-cli/pull/317");
+assert.equal(resolveTrustedPullRequest({ title: "Review #123", project: "octocat/hello-world" }), null);
+assert.equal(resolveTrustedPullRequest({ created_pr_repo: "octocat/hello-world", created_pr_number: -1 }), null);
+assert.equal(escapeHtmlAttribute(explicit.href + '" data-x="bad'), "ghapp://github.com/octocat/hello-world/pull/42&quot; data-x=&quot;bad");
+console.log("session and PR link assertions passed");
