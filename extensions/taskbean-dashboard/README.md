@@ -57,15 +57,40 @@ The canvas iframe cannot open `ghapp://` URLs and the SDK has no navigation
 API. `open_link` takes `{target:"session", taskId|sessionId}` or
 `{target:"pull_request", taskId}`, never a URL. The server re-resolves the
 target from trusted task data and `link-launcher.mjs` hands an allowlisted URL
-(`ghapp://sessions/<uuid>`, `ghapp://github.com/<o>/<r>/pull/<n>`, or the https
+(`ghapp://sessions/<uuid>` or a validated `https://github.com/<o>/<r>/pull/<n>`
 PR URL) to the OS: `explorer.exe` on Windows, `open` on macOS, `xdg-open`
 elsewhere. It uses an argument array, no shell, and checks that a `ghapp`
 handler is registered first. Errors are `taskbean_link_unavailable` (409) and
-`taskbean_link_failed` (502). Opening a link never sends a message or changes
-a task. Session and PR links were verified on the Windows Copilot app; the view
-changes after about 20 seconds. Bare repository and issue links are not
+`taskbean_link_failed` (502). Dispatching a link never sends a message or changes
+a task. The action returns `{dispatched:true, navigationConfirmed:false, url}`
+when the handler process spawns; it cannot confirm that the app or browser
+opened the target. Feedback tells the user to check the destination.
+PRs always use validated HTTPS, not a native PR route.
+Bare repository and issue links are not
 allowlisted (clone prompt and mark-as-read side effects). Older installed copies
 render Resume and Review blocker as detail toggles; those never navigate.
+
+## Browser-to-loopback boundary
+
+Each canvas server binds only to `127.0.0.1` on a random port and generates a
+256-bit token, valid until that server closes. The SDK receives a bootstrap URL
+with that token; the page requires it and sends it in `X-Taskbean-Token` on each
+action request. Native SDK actions call their handlers directly and do not use
+this HTTP boundary.
+
+`/api/action` requires the exact loopback Host, the token and JSON content type.
+An Origin, when present, must match the canvas origin (including the port);
+opaque and cross-origin requests and `Sec-Fetch-Site: cross-site` are rejected.
+There is no CORS opt-in. Simple-form posts and cross-origin preflights cannot
+invoke actions. The tokenized page may be embedded by the SDK from another
+origin; its own action fetches are same-origin. Responses use `no-store`,
+`no-referrer` and `nosniff` to limit caching and capability leakage.
+
+This protects against browser CSRF and DNS rebinding, not malicious local
+processes, compromised host/SDK code, or script injection in the authorized
+page. Anyone who obtains the bootstrap URL has the capability; do not share it.
+The token is not ledger data and is regenerated on a fresh server. This boundary
+does not add user confirmation or authentication to native SDK actions.
 
 ## Row layout
 

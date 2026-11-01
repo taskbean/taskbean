@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { pathToFileURL } from 'node:url';
-import { CONTEXT, REGRESSION_TITLES, cliEntry, cliRoot, createSandbox, extensionDir, loadExtension, rejectsWithCode, useEnv } from './support/harness.mjs';
+import { CONTEXT, REGRESSION_TITLES, canvasRequestHeaders, cliEntry, cliRoot, createSandbox, extensionDir, loadExtension, rejectsWithCode, useEnv } from './support/harness.mjs';
 
 const sandbox = createSandbox('canvas');
 useEnv({ ...sandbox.env, TASKBEAN_CLI_ENTRY: cliEntry });
@@ -123,7 +123,7 @@ test('Copilot session tasks get a validated ghapp session link and no raw anchor
 
 test('HTTP surface serves the UI and routes actions with safe errors', async () => {
   opened = await canvas.open({ ...CONTEXT, input: {} });
-  assert.match(opened.url, /^http:\/\/127\.0\.0\.1:\d+\/$/);
+  assert.match(opened.url, /^http:\/\/127\.0\.0\.1:\d+\/\?token=[0-9a-f]{64}$/);
 
   const html = await (await fetch(opened.url)).text();
   assert.match(html, /Taskbean/);
@@ -135,7 +135,7 @@ test('HTTP surface serves the UI and routes actions with safe errors', async () 
   assert.ok(scripts.length > 0, 'UI ships an inline script');
   for (const script of scripts) assert.doesNotThrow(() => new Function(script), 'inline UI script parses');
 
-  const post = (body) => fetch(new URL('/api/action', opened.url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+  const post = (body) => fetch(new URL('/api/action', opened.url), { method: 'POST', headers: canvasRequestHeaders(opened.url), body });
   const ok = await post(JSON.stringify({ action: 'add_task', input: { title: '%PATH% & echo pwned via http' } }));
   assert.equal(ok.status, 200);
   assert.equal((await ok.json()).result.title, '%PATH% & echo pwned via http');

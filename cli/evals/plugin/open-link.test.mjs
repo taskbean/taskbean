@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { pathToFileURL } from 'node:url';
-import { CONTEXT, cliEntry, cliRoot, createSandbox, extensionDir, installFakeLauncher, loadExtension, rejectsWithCode, useEnv } from './support/harness.mjs';
+import { CONTEXT, canvasRequestHeaders, cliEntry, cliRoot, createSandbox, extensionDir, installFakeLauncher, loadExtension, rejectsWithCode, useEnv } from './support/harness.mjs';
 
 const sandbox = createSandbox('open-link');
 useEnv({ ...sandbox.env, TASKBEAN_CLI_ENTRY: cliEntry });
@@ -42,7 +43,7 @@ test('open_link session launches explorer with one ghapp argument and no shell',
   fresh();
   const before = await ledger();
   const result = await invoke('open_link', { target: 'session', taskId: sessionTask.id });
-  assert.deepEqual(result, { opened: true, url: `ghapp://sessions/${SESSION_ID}` });
+  assert.deepEqual(result, { dispatched: true, navigationConfirmed: false, url: `ghapp://sessions/${SESSION_ID}` });
   assert.equal(calls.length, 1);
   const [call] = calls;
   assert.equal(call.command, join('C:\\Windows', 'explorer.exe'));
@@ -84,10 +85,12 @@ test('open_link rejects ids that are not trusted session UUIDs before any launch
   assert.equal(calls.length, 0, 'nothing was launched');
 });
 
-test('open_link pull_request prefers ghapp and falls back to https without a handler', async () => {
+test('open_link pull_request always dispatches validated HTTPS, regardless of ghapp handler', async () => {
   fresh();
   const app = await invoke('open_link', { target: 'pull_request', taskId: prTask.id });
-  assert.equal(app.url, 'ghapp://github.com/octocat/hello-world/pull/42');
+  assert.equal(app.url, 'https://github.com/octocat/hello-world/pull/42');
+  assert.equal(app.navigationConfirmed, false);
+  assert.equal(app.dispatched, true);
   fresh({ handler: (scheme) => scheme !== 'ghapp' });
   const web = await invoke('open_link', { target: 'pull_request', taskId: prTask.id });
   assert.equal(web.url, 'https://github.com/octocat/hello-world/pull/42');
@@ -103,16 +106,34 @@ test('missing ghapp handler and spawn failures map to typed errors', async () =>
   await rejectsWithCode(invoke('open_link', { target: 'session', taskId: sessionTask.id }), 'taskbean_link_failed');
 });
 
+test('a spawned handler that later exits unsuccessfully never confirms navigation', async () => {
+  const result = await launchUrl(`ghapp://sessions/${SESSION_ID}`, {
+    hasHandler: async () => true,
+    spawn() {
+      const child = new EventEmitter();
+      child.unref = () => {};
+      queueMicrotask(() => {
+        child.emit('spawn');
+        child.emit('exit', 1);
+      });
+      return child;
+    },
+  });
+  assert.equal(result.dispatched, true);
+  assert.equal(result.navigationConfirmed, false);
+  assert.equal(Object.hasOwn(result, 'opened'), false);
+});
+
 test('HTTP open_link returns typed errors with status codes and never mutates tasks', async () => {
   fresh();
   opened = await canvas.open({ ...CONTEXT, input: {} });
   const before = await ledger();
   const post = (input) => fetch(new URL('/api/action', opened.url), {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'open_link', input }),
+    method: 'POST', headers: canvasRequestHeaders(opened.url), body: JSON.stringify({ action: 'open_link', input }),
   });
   const ok = await post({ target: 'session', taskId: sessionTask.id });
   assert.equal(ok.status, 200);
-  assert.equal((await ok.json()).result.opened, true);
+  assert.deepEqual((await ok.json()).result, { dispatched: true, navigationConfirmed: false, url: `ghapp://sessions/${SESSION_ID}` });
 
   const unavailable = await post({ target: 'session', taskId: plainTask.id });
   assert.equal(unavailable.status, 409);
@@ -131,11 +152,11 @@ test('HTTP open_link returns typed errors with status codes and never mutates ta
 test('link launcher only allows canonical session and pull request URLs', async () => {
   const good = [
     `ghapp://sessions/${SESSION_ID}`,
-    'ghapp://github.com/octocat/hello-world/pull/42',
     'https://github.com/octocat/hello-world/pull/42',
   ];
   for (const url of good) assert.ok(isLaunchableUrl(url), url);
   const bad = [
+    'ghapp://github.com/octocat/hello-world/pull/42',
     `ghapp://sessions/${SESSION_ID.toUpperCase()}`,
     `ghapp://sessions/${SESSION_ID}&calc`,
     `ghapp://sessions/${SESSION_ID}/../x`,

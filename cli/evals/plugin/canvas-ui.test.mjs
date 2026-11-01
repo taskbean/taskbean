@@ -141,7 +141,7 @@ test('Resume and Review blocker open the trusted session and never change tasks'
       await new Promise((r) => setTimeout(r, 100));
       text = await browser.evaluate(`${rowExpr(id)}.querySelector('.row-feedback').textContent`);
     }
-    assert.equal(text, 'Sent to the GitHub Copilot app. The session can take up to 30 seconds to open. If the app no longer has this session, it stays on the current view. Task status unchanged.');
+    assert.equal(text, 'Link dispatched to the Copilot app handler. Navigation is not confirmed; check the app. Task status unchanged.');
     assert.deepEqual(calls.at(-1).args, [`ghapp://sessions/${session}`]);
     assert.equal(calls.at(-1).options.shell, false);
   }
@@ -239,7 +239,7 @@ test('narrow and dark layouts do not clip rows and keep accessible names', { ski
     assert.equal(layout.clipped, 0, `${width}px rows are not clipped`);
     assert.equal(layout.unnamed, 0, 'every control has an accessible name');
     shots.push([`${width}-${dark ? 'dark' : 'light'}`, await browser.screenshot()]);
-    if (screenshotDir && width === 560 && !dark) rendered = await browser.evaluate('"<!doctype html>" + document.documentElement.outerHTML');
+    if (screenshotDir && width === 560 && !dark) rendered = (await browser.evaluate('"<!doctype html>" + document.documentElement.outerHTML')).replaceAll(new URL(url).searchParams.get('token'), 'REDACTED_CANVAS_TOKEN');
   }
   assert.deepEqual(browser.errors, []);
   if (screenshotDir) {
@@ -247,5 +247,28 @@ test('narrow and dark layouts do not clip rows and keep accessible names', { ski
     for (const [name, png] of shots) writeFileSync(join(screenshotDir, `taskbean-dashboard-rows-${name}.png`), png);
     // Rendered DOM for static design detectors, which cannot parse HTML inside the JS template.
     if (rendered) writeFileSync(join(screenshotDir, 'taskbean-dashboard-rendered.html'), rendered);
+  }
+});
+
+test('action menus stay readable inside 320 and 360 px viewports', { skip }, async () => {
+  for (const width of [320, 360]) {
+    await load(width);
+    await browser.evaluate(`${rowExpr(ids.resume)}.querySelector('.action-menu').open = true; true`);
+    const menu = await browser.evaluate(`(() => {
+      const m = ${rowExpr(ids.resume)}.querySelector('.menu');
+      const rect = m.getBoundingClientRect();
+      return { width: rect.width, left: rect.left, right: rect.right,
+        items: [...m.querySelectorAll('[role=menuitem]')].map(b => ({
+          text: b.textContent.trim(), height: b.getBoundingClientRect().height,
+          overflow: b.scrollWidth - b.clientWidth
+        })) };
+    })()`);
+    assert.ok(menu.width >= 220, `${width}px menu is comfortably wide (${menu.width}px)`);
+    assert.ok(menu.left >= 0 && menu.right <= width, `${width}px menu fits the viewport`);
+    assert.ok(menu.items.some(b => b.text === 'Mark blocked'));
+    for (const item of menu.items) {
+      assert.ok(item.height <= 32, `${item.text} stays on one line at ${width}px`);
+      assert.ok(item.overflow <= 1, `${item.text} is not clipped at ${width}px`);
+    }
   }
 });

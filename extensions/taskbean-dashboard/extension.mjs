@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
@@ -623,12 +624,7 @@ async function openLink(input = {}) {
 
     const pr = task.pullRequest;
     if (!pr?.href) throw new LinkError("taskbean_link_unavailable", "No trusted pull request is recorded for this task.");
-    try {
-        return await launchUrl(pr.appLink, options);
-    } catch (error) {
-        if (error?.code !== "taskbean_link_unavailable") throw error;
-        return launchUrl(pr.href, options);
-    }
+    return launchUrl(pr.href, options);
 }
 
 async function routeApi(action, input) {
@@ -684,7 +680,7 @@ function escapeHtml(value) {
         .replaceAll("'", "&#39;");
 }
 
-function renderHtml() {
+function renderHtml(token) {
     return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="icon" href="data:,"><title>Taskbean Dashboard</title>
 <style>
@@ -697,6 +693,7 @@ function renderHtml() {
 .link-button{min-height:0;padding:0 2px;margin-left:4px;border:0;background:none;color:inherit;font-size:12px;text-decoration:underline;text-underline-offset:2px}.link-button:hover:not(:disabled){background:none;border:0;text-decoration-thickness:2px}
 .menu-label{padding:4px 8px 2px;color:var(--muted);font-size:12px;line-height:16px;font-weight:var(--font-weight-semibold,600)}.menu hr{border:0;border-top:1px solid var(--border);margin:4px 0}.nowrap{white-space:nowrap;font-variant-numeric:tabular-nums}
 .row-feedback{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.row-feedback:not(:empty){margin-top:3px}.row-feedback[data-kind=ok]{color:var(--success)}.row-feedback[data-kind=error]{color:var(--danger)}.action-menu{position:relative}.action-menu>summary{display:grid;place-items:center;width:30px;height:30px;border:1px solid var(--border);border-radius:8px;cursor:pointer;list-style:none;color:var(--muted)}.action-menu[open]>summary{border-color:var(--focus);color:var(--text);background:var(--surface)}.menu{position:absolute;z-index:10;right:0;top:34px;width:min(250px,calc(100vw - 28px));padding:5px;border:1px solid var(--border);border-radius:8px;background:var(--bg);box-shadow:0 8px 20px color-mix(in srgb,var(--text) 16%,transparent)}.action-menu:not([open])>.menu{display:none}.menu button,.menu a{display:flex;align-items:center;gap:7px;width:100%;min-height:30px;padding:4px 8px;border:0;border-radius:8px;background:var(--bg);color:var(--text);text-align:left;text-decoration:none;font-size:12px;font-weight:500}.menu button:hover:not(:disabled),.menu button:focus-visible{background:var(--raised);border:0}.task-detail{grid-column:3/-1;padding:5px 0 2px;font-size:12px;color:var(--muted);overflow-wrap:anywhere}.task-detail[hidden]{display:none}.stack{display:grid;gap:7px}.outcome{border:1px solid var(--border);border-radius:var(--r);background:var(--surface);overflow:visible}.outcome>summary{list-style:none;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:8px 9px;cursor:pointer}.outcome-title{font-weight:var(--font-weight-semibold,600);overflow-wrap:anywhere}.outcome-meta{font-size:12px;color:var(--muted);margin-top:1px}.outcome-body{border-top:1px solid var(--border);overflow:visible}.more{width:100%;margin-top:7px}.footer-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.panel{border:1px solid var(--border);border-radius:var(--r);padding:9px;background:var(--surface)}.panel h2{font-size:14px;margin:0 0 6px}.addform{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px}.addform select{grid-column:1/-1}.reportout{white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;font:var(--text-code-inline,12px)/1.45 var(--font-mono,Consolas,monospace);color:var(--muted);margin:6px 0 0}.loading{padding:24px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:var(--r);margin-top:10px}@media(max-width:560px){.app{padding:5px 9px 24px}.filters{grid-template-columns:82px 96px minmax(0,1fr) auto}.workspace-field{grid-column:3}.search-field{grid-column:1/4}.footer-grid{grid-template-columns:1fr}}@media(max-width:419px){.taskrow{grid-template-columns:22px 17px minmax(0,1fr);gap:4px 5px;padding-inline:6px}.taskrow>.rowactions{grid-column:3;justify-self:start;position:relative}.taskrow .action-menu{position:static}.taskrow .menu{left:0;right:auto;width:min(250px,100%)}}
+@media(max-width:419px){.taskrow>.rowactions{justify-self:stretch}}
 @media(max-width:399px){.app{padding-inline:8px}.filterbar{padding-top:1px}.filters{grid-template-columns:1fr 1fr}.workspace-field,.search-field{grid-column:1/-1}#refresh{grid-column:2}.sectionhead p{display:none}.summary{padding-top:4px}.section{margin-top:7px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 .suggestions{display:grid;gap:6px}.suggestion{border:1px dashed var(--border);border-radius:8px;padding:6px 10px;background:var(--surface)}.suggestion .s-title{font-weight:var(--font-weight-semibold,600);overflow-wrap:anywhere}.suggestion .s-meta,.suggestion .s-sum{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.s-badge{display:inline-block;font-size:11px;line-height:16px;padding:0 6px;margin-right:6px;border:1px solid var(--border);border-radius:999px;color:var(--muted);vertical-align:1px}.observe-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px}
 </style></head><body><svg class="sr-only" aria-hidden="true"><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 19h18.4L12 3Z"/><path d="M12 9v4m0 3h.01"/></symbol><symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></symbol><symbol id="i-blocked" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></symbol><symbol id="i-chevron" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></symbol><symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.1"/><circle cx="12" cy="12" r="1.1"/><circle cx="18" cy="12" r="1.1"/></symbol><symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10m-7 6h4"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></symbol><symbol id="i-open" viewBox="0 0 24 24"><path d="M14 5h5v5m0-5-8 8"/><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol><symbol id="i-session" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h6m-6 4h4m6-2v5m-2-2h4"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol><symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-9h.01"/></symbol></svg><main class="app"><div class="filterbar"><details id="filtersPanel" class="filter-disclosure" open><summary><svg class="icon filter-icon" aria-hidden="true"><use href="#i-filter"/></svg><span id="filterToggleLabel">Hide filters</span></summary><div class="filters"><div class="field"><label for="period">Period</label><select id="period" title="Period"><option value="today">Today</option><option value="week" selected>This week</option><option value="all">All time</option></select></div><div class="field"><label for="status">Status</label><select id="status" title="Status"><option value="all">All states</option><option value="pending">Pending</option><option value="in_progress">In progress</option><option value="blocked">Blocked</option><option value="done">Done</option></select></div><div class="field workspace-field"><label for="project">Workspace</label><select id="project" title="Workspace"><option value="all">All workspaces</option></select></div><div class="field search-field"><label for="search">Search</label><input id="search" type="search" placeholder="Search work…" aria-label="Search work"></div><button id="refresh" class="primary">Refresh</button></div></details><div id="error" class="error" role="alert" hidden><strong>Taskbean needs attention.</strong> <span id="errorMessage"></span> <span id="errorHint"></span></div></div><div id="stats" class="summary" aria-label="Scoped counts"></div><div id="content"><div class="loading">Reading the local ledger…</div></div><section class="footer-grid"><div class="panel"><h2>Add task</h2><form id="addForm" class="addform"><input id="newTitle" placeholder="What needs doing?" aria-label="Task title" required><button type="submit">Add</button><select id="newProject" aria-label="Stored task project"><option value="">Current/default project</option></select></form></div><div class="panel"><h2>Weekly evidence</h2><button id="report">Generate report JSON</button><pre id="reportOut" class="reportout">No report generated.</pre></div></section></main>
@@ -706,7 +703,7 @@ class DashboardActionError extends Error{constructor(d){super(d.message);this.co
 const icon=(name,label="")=>'<svg class="icon" '+(label?'role="img" aria-label="'+esc(label)+'"':'aria-hidden="true"')+'><use href="#i-'+name+'"/></svg>';
 const statusIcon=t=>icon(t.status==="blocked"?"blocked":t.status==="in_progress"?"play":t.status==="done"?"check":"clock",t.statusLabel||t.status);
 function filters(){return{period:$("period").value,status:$("status").value,project:$("project").value,search:$("search").value}}
-async function api(action,input={}){const r=await fetch("/api/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,input})});let p;try{p=await r.json()}catch{throw new Error("Taskbean returned an unreadable response.")}if(!r.ok||p.error){const e=p.error||{};throw new DashboardActionError({message:e.message||p.message||"Taskbean action failed.",code:e.code,status:e.status||r.status,retryable:e.retryable})}return p.result}
+async function api(action,input={}){const r=await fetch("/api/action",{method:"POST",headers:{"Content-Type":"application/json","X-Taskbean-Token":${JSON.stringify(token)}},body:JSON.stringify({action,input})});let p;try{p=await r.json()}catch{throw new Error("Taskbean returned an unreadable response.")}if(!r.ok||p.error){const e=p.error||{};throw new DashboardActionError({message:e.message||p.message||"Taskbean action failed.",code:e.code,status:e.status||r.status,retryable:e.retryable})}return p.result}
 function setError(error){const el=$("error");if(!error){el.hidden=true;return}el.hidden=false;$("errorMessage").textContent=error.message||String(error);$("errorHint").textContent=error.retryable?" Try again; check the extension log if it persists.":" Check the input and refresh."}
 function relative(value){if(!value)return"Date unavailable";const d=new Date(value);if(Number.isNaN(d.getTime()))return String(value);const seconds=Math.round((d-Date.now())/1000),abs=Math.abs(seconds);if(abs<45)return"just now";const units=[[31536000,"year"],[2592000,"month"],[604800,"week"],[86400,"day"],[3600,"hour"],[60,"minute"]];for(const [size,name] of units)if(abs>=size){const n=Math.round(seconds/size);return new Intl.RelativeTimeFormat(undefined,{numeric:"auto"}).format(n,name)}return"just now"}
 ${rowActions.toString()}
@@ -727,26 +724,55 @@ function feedbackFor(b){return b.closest(".taskrow")?.querySelector(".row-feedba
 function closeMenu(b){const m=b.closest(".action-menu");if(m){m.open=false;m.querySelector("summary")?.focus()}}
 async function copyText(value){if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(value);return}const area=document.createElement("textarea");area.value=value;area.setAttribute("readonly","");area.style.position="fixed";area.style.opacity="0";document.body.append(area);area.select();const ok=document.execCommand("copy");area.remove();if(!ok)throw new Error("Copy failed")}
 async function copyId(button){const session=button.dataset.copySession,task=button.dataset.copyTask;const value=session||task;const fb=feedbackFor(button);closeMenu(button);if(session&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(session))return;if(!value)return;const what=session?"Session ID":"Task ID";try{await copyText(value);feedback(fb,what+" copied.","ok")}catch{feedback(fb,"Could not copy the "+what.toLowerCase()+". Open the details to read it.","error")}}
-async function openLink(b){const fb=feedbackFor(b);closeMenu(b);const input={target:b.dataset.openLink};if(b.dataset.taskId)input.taskId=b.dataset.taskId;if(b.dataset.sessionId)input.sessionId=b.dataset.sessionId;b.disabled=true;b.setAttribute("aria-busy","true");feedback(fb,"Opening…","pending");try{await api("open_link",input);feedback(fb,input.target==="session"?"Sent to the GitHub Copilot app. The session can take up to 30 seconds to open. If the app no longer has this session, it stays on the current view. Task status unchanged.":"Sent to the GitHub Copilot app. The pull request opens there. Task status unchanged.","ok")}catch(x){feedback(fb,(x.message||"Could not open the link.")+(x.retryable?" Try again.":""),"error",input.target==="session"?input.sessionId:"")}finally{b.disabled=false;b.removeAttribute("aria-busy")}}
+async function openLink(b){const fb=feedbackFor(b);closeMenu(b);const input={target:b.dataset.openLink};if(b.dataset.taskId)input.taskId=b.dataset.taskId;if(b.dataset.sessionId)input.sessionId=b.dataset.sessionId;b.disabled=true;b.setAttribute("aria-busy","true");feedback(fb,"Sending link…","pending");try{const result=await api("open_link",input);if(result.dispatched!==true)throw new Error("The link handler did not confirm dispatch.");feedback(fb,input.target==="session"?"Link dispatched to the Copilot app handler. Navigation is not confirmed; check the app. Task status unchanged.":"HTTPS link dispatched to the browser handler. Navigation is not confirmed; check your browser. Task status unchanged.","ok")}catch(x){feedback(fb,(x.message||"Could not send the link.")+(x.retryable?" Try again.":""),"error",input.target==="session"?input.sessionId:"")}finally{b.disabled=false;b.removeAttribute("aria-busy")}}
 function toggleDetails(b){const d=$(b.getAttribute("aria-controls"));if(!d)return;d.hidden=!d.hidden;b.setAttribute("aria-expanded",String(!d.hidden));const title=b.getAttribute("aria-label").replace(/^(Show|Hide) details for /,"");b.setAttribute("aria-label",(d.hidden?"Show":"Hide")+" details for "+title);b.title=d.hidden?"Show details":"Hide details"}
 $("refresh").onclick=refresh;["period","status","project"].forEach(id=>$(id).onchange=refresh);$("search").oninput=()=>{clearTimeout(window.__searchTimer);window.__searchTimer=setTimeout(refresh,250)};$("content").onclick=async e=>{const disclosure=e.target.closest("button[data-disclosure]");if(disclosure){toggleDetails(disclosure);return}const open=e.target.closest("button[data-open-link]");if(open){e.preventDefault();e.stopPropagation();if(!open.disabled)await openLink(open);return}const copy=e.target.closest("button[data-copy-session],button[data-copy-task]");if(copy){e.preventDefault();e.stopPropagation();await copyId(copy);return}const b=e.target.closest("button[data-action]");if(!b)return;closeMenu(b);const message=(b.dataset.action==="start_task"?"Mark this Taskbean item in progress?":b.dataset.action==="complete_task"?"Mark this Taskbean item complete?":"Mark this Taskbean item blocked?")+" This updates the local ledger.";if(!confirm(message))return;b.disabled=true;setError(null);try{await api(b.dataset.action,{id:b.dataset.id});await refresh()}catch(x){setError(x)}finally{b.disabled=false}};document.addEventListener("click",e=>{document.querySelectorAll(".action-menu[open]").forEach(d=>{if(!d.contains(e.target))d.open=false})});document.addEventListener("pointerdown",e=>{const m=e.target.closest?.(".action-menu");if(m)m.__pointer=true},true);document.addEventListener("toggle",e=>{const d=e.target;if(!d.matches?.(".action-menu"))return;if(d.open){document.querySelectorAll(".action-menu[open]").forEach(x=>{if(x!==d)x.open=false});if(!d.__pointer)d.querySelector(".menu [role=menuitem]")?.focus()}d.__pointer=false},true);document.addEventListener("focusout",e=>{const d=e.target.closest?.(".action-menu");if(d?.open&&e.relatedTarget&&!d.contains(e.relatedTarget))d.open=false});document.addEventListener("keydown",e=>{const d=e.target.closest?.(".action-menu");if(!d)return;if(d.open&&["Home","End"].includes(e.key)){const items=[...d.querySelectorAll(".menu [role=menuitem]")];items[e.key==="Home"?0:items.length-1]?.focus();e.preventDefault()}if(e.key==="Escape"){d.open=false;d.querySelector("summary").focus();e.preventDefault()}if(["ArrowDown","ArrowUp"].includes(e.key)){const items=[...d.querySelectorAll(".menu [role=menuitem]")];if(!items.length)return;const i=items.indexOf(document.activeElement),next=e.key==="ArrowDown"?(i+1)%items.length:(i-1+items.length)%items.length;items[next].focus();e.preventDefault()}});$("addForm").onsubmit=async e=>{e.preventDefault();setError(null);try{await api("add_task",{title:$("newTitle").value,project:$("newProject").value||undefined});$("newTitle").value="";await refresh()}catch(x){setError(x)}};$("report").onclick=async()=>{const b=$("report");b.disabled=true;setError(null);try{$("reportOut").textContent=JSON.stringify(await api("generate_report",{period:$("period").value==="all"?"week":$("period").value}),null,2)}catch(x){setError(x)}finally{b.disabled=false}};refresh();
 </script></body></html>`;
 }
 
 async function startServer(instanceId) {
+    const token = randomBytes(32).toString("hex");
+    let origin;
+    const deny = (res, status, code, message) => sendJson(res, status, {
+        error: { code, message, status, retryable: false },
+    });
     const server = createServer(async (req, res) => {
         try {
-            const url = new URL(req.url || "/", "http://127.0.0.1");
+            res.setHeader("Referrer-Policy", "no-referrer");
+            res.setHeader("X-Content-Type-Options", "nosniff");
+            if (req.headers.host !== new URL(origin).host) {
+                deny(res, 403, "taskbean_request_forbidden", "Requests must come from this Taskbean canvas.");
+                return;
+            }
+            const url = new URL(req.url || "/", origin);
+            if (url.pathname === "/api/action" &&
+                ((req.headers.origin !== undefined && req.headers.origin !== origin) ||
+                    req.headers["sec-fetch-site"] === "cross-site")) {
+                deny(res, 403, "taskbean_request_forbidden", "Requests must come from this Taskbean canvas.");
+                return;
+            }
             if (req.method === "GET" && url.pathname === "/") {
+                if (url.searchParams.get("token") !== token) {
+                    deny(res, 403, "taskbean_request_forbidden", "Reopen the Taskbean canvas to authorize this view.");
+                    return;
+                }
                 res.writeHead(200, {
                     "Content-Type": "text/html; charset=utf-8",
                     "Cache-Control": "no-store",
                 });
-                res.end(renderHtml());
+                res.end(renderHtml(token));
                 return;
             }
 
             if (req.method === "POST" && url.pathname === "/api/action") {
+                if (req.headers["x-taskbean-token"] !== token) {
+                    deny(res, 403, "taskbean_request_forbidden", "Reopen the Taskbean canvas to authorize this request.");
+                    return;
+                }
+                if (!/^application\/json(?:\s*;.*)?$/i.test(req.headers["content-type"] || "")) {
+                    deny(res, 415, "taskbean_json_required", "Taskbean actions require application/json.");
+                    return;
+                }
                 const body = await parseJsonBody(req);
                 const result = await routeApi(body.action, body.input || {});
                 sendJson(res, 200, { result });
@@ -764,7 +790,8 @@ async function startServer(instanceId) {
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     const port = typeof address === "object" && address ? address.port : 0;
-    return { server, url: `http://127.0.0.1:${port}/` };
+    origin = `http://127.0.0.1:${port}`;
+    return { server, url: `${origin}/?token=${token}` };
 }
 
 function action(name, description, inputSchema, handler) {

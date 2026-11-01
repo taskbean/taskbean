@@ -3,7 +3,6 @@ import { join } from "node:path";
 
 const SESSION_URL_RE = /^ghapp:\/\/sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const PR_PATH = "github\\.com\\/[A-Za-z0-9_.-]{1,100}\\/[A-Za-z0-9_.-]{1,100}\\/pull\\/[1-9]\\d{0,9}";
-const APP_PR_URL_RE = new RegExp(`^ghapp:\\/\\/${PR_PATH}$`);
 const WEB_PR_URL_RE = new RegExp(`^https:\\/\\/${PR_PATH}$`);
 const DOT_SEGMENT_RE = /\/\.{1,2}(\/|$)/;
 
@@ -18,7 +17,7 @@ export class LinkError extends Error {
 export function isLaunchableUrl(url) {
     const text = String(url || "");
     if (DOT_SEGMENT_RE.test(text.replace(/^[a-z]+:\/\//, "/"))) return false;
-    return SESSION_URL_RE.test(text) || APP_PR_URL_RE.test(text) || WEB_PR_URL_RE.test(text);
+    return SESSION_URL_RE.test(text) || WEB_PR_URL_RE.test(text);
 }
 
 export function buildLaunch(url, { platform = process.platform, env = process.env } = {}) {
@@ -65,7 +64,7 @@ export async function launchUrl(url, options = {}) {
             resolve();
         });
     });
-    return { opened: true, url };
+    return { dispatched: true, navigationConfirmed: false, url };
 }
 
 export async function navigationSupport(options = {}) {
@@ -80,6 +79,6 @@ export async function navigationSupport(options = {}) {
                 ? "The GitHub Copilot app is not registered for ghapp:// links on this machine."
                 : "Opening Copilot sessions from the canvas is only verified on Windows.",
         },
-        pullRequests: { available: true, reason: null, fallback: sessions ? null : "https" },
+        pullRequests: { available: true, reason: null, fallback: "https" },
     };
 }

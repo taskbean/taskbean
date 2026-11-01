@@ -83,9 +83,9 @@ older user-extension copies keep the bug until replaced. The canvas iframe canno
 open `ghapp://` links and the canvas SDK has no navigation API, so the
 `open_link` action asks the OS to open a trusted, allowlisted session or pull
 request link after a user click. It never sends a message or changes a task.
-On Windows, the Copilot app opened `ghapp://sessions/<id>` and
-`ghapp://github.com/<o>/<r>/pull/<n>` links from this launcher; the view changes
-after up to about 20 seconds, and an unknown session leaves the view unchanged.
+The result confirms only handler-process dispatch, not navigation; the user
+must check the Copilot app or browser. Session links use `ghapp://sessions/<id>`;
+PR links always use validated HTTPS, not the native PR route.
 Bare repository and issue links stay blocked because they prompt to clone or
 mark items read. Older user-extension copies show Resume and Review blocker as
 detail toggles that never navigate; replace them to get working links.
@@ -96,3 +96,11 @@ runs `bean chronicle reconcile --observe`: it collects local session metadata
 into pending suggestions and never creates, links, completes or edits tasks. The
 canvas shows those suggestions as "not accepted outcomes". Approve, link and
 ignore stay in the CLI review workflow.
+
+Browser actions require a per-server capability token, the exact loopback Host,
+a matching Origin when present, and JSON content type. Cross-origin requests and
+simple-form posts are rejected without invoking handlers. The SDK's tokenized
+iframe bootstrap and native actions still work. This protects the browser
+boundary, not malicious local processes, compromised host code, or an attacker
+who already has the bootstrap URL. See the
+[boundary contract](../extensions/taskbean-dashboard/README.md#browser-to-loopback-boundary).

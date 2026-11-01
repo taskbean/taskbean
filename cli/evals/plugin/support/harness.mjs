@@ -110,6 +110,15 @@ export const CONTEXT = {
 
 export const LINK_LAUNCHER = Symbol.for('taskbean.dashboard.linkLauncher');
 
+export function canvasRequestHeaders(url) {
+  const canvas = new URL(url);
+  return {
+    'Content-Type': 'application/json',
+    'X-Taskbean-Token': canvas.searchParams.get('token'),
+    Origin: canvas.origin,
+  };
+}
+
 // Records launches instead of starting a real OS handler. Tests can replace it.
 export function installFakeLauncher({ handler = true, spawnError = null } = {}) {
   const calls = [];
