@@ -2,7 +2,7 @@ import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -225,6 +225,146 @@ test('keyed adds accept registered paths for the same project identity', () => {
   assert.equal(updated.id, original.id);
   assert.equal(task(f.db, original.id).title, 'Updated through alias');
   assertCacheMatches(f, original.id);
+});
+
+for (const suffix of ['short', 'long'.repeat(20)]) {
+  test(`filesystem aliases preserve project identity and replay with a ${suffix === 'short' ? 'short' : 'long'} path suffix`, () => {
+    const f = fixture();
+    const realRoot = join(f.root, 'real');
+    const aliasRoot = join(f.root, 'alias');
+    const project = join(realRoot, suffix, 'project');
+    const alias = join(aliasRoot, suffix, 'project');
+    mkdirSync(project, { recursive: true });
+    symlinkSync(realRoot, aliasRoot, process.platform === 'win32' ? 'junction' : 'dir');
+
+    seed(f, alias);
+    const original = json(f, ['add', 'Original via alias', '--key', 'shared', '--project', alias]);
+    database(f.db, db => db.prepare('DELETE FROM project_aliases WHERE path = ?').run(alias));
+    const updated = json(f, ['add', 'Updated through real path', '--key', 'shared'], { cwd: project });
+    assert.equal(updated.id, original.id);
+    assert.equal(updated.project_path, alias, 'existing task path is not rewritten');
+    assert.equal(rows(f.db, 'SELECT * FROM projects').length, 1, 'filesystem aliases do not create duplicate projects');
+    assert.equal(json(f, ['rebuild', '--project', project]).status, 'in_sync');
+    assert.equal(json(f, ['rebuild', '--project', alias]).status, 'in_sync');
+    json(f, ['rebuild', '--write', '--project', project]);
+    assertCacheMatches(f, original.id, project);
+    const registered = rows(f.db, 'SELECT path, tasks_db_path FROM projects')[0];
+    assert.equal(registered.path, alias, 'registered path is not rewritten');
+    assert.equal(registered.tasks_db_path, join(project, '.taskbean', 'tasks.db'));
+  });
+}
+
+test('tracking and project management use the existing row through a filesystem alias', () => {
+  const f = fixture();
+  const aliasRoot = join(f.root, 'alias');
+  symlinkSync(f.root, aliasRoot, process.platform === 'win32' ? 'junction' : 'dir');
+  const alias = join(aliasRoot, 'project');
+  execute(f, ['track', '--path', alias]);
+  const original = rows(f.db, 'SELECT * FROM projects')[0];
+  execute(f, ['track', '--path', f.project]);
+  const projects = rows(f.db, 'SELECT * FROM projects');
+  assert.equal(projects.length, 1);
+  assert.equal(projects[0].id, original.id);
+  assert.equal(projects[0].path, alias);
+  assert.ok(projects[0].project_uuid);
+  assert.equal(projects[0].skill_installed, 1);
+  assert.equal(json(f, ['projects', 'hide'], { cwd: f.project }).hidden, true);
+  assert.equal(json(f, ['projects', 'show'], { cwd: f.project }).hidden, false);
+  assert.equal(json(f, ['untrack', '--path', f.project]).status, 'untracked');
+  assert.equal(rows(f.db, 'SELECT tracked FROM projects')[0].tracked, 0);
+});
+
+test('concurrent registration through filesystem aliases creates one project', async () => {
+  const f = fixture();
+  const aliasRoot = join(f.root, 'alias');
+  symlinkSync(f.root, aliasRoot, process.platform === 'win32' ? 'junction' : 'dir');
+  const alias = join(aliasRoot, 'project');
+  trackedProject(f.project);
+  json(f, ['list', '--all']);
+  const results = await Promise.all(Array.from({ length: 10 }, (_, index) =>
+    runAsync(f, [ENTRY, 'add', `Aliased outcome ${index}`, '--project', index % 2 ? alias : f.project, '--json'])));
+  for (const result of results) assert.equal(result.code, 0, result.stderr);
+  assert.equal(rows(f.db, 'SELECT COUNT(*) AS n FROM projects')[0].n, 1);
+  assert.equal(rows(f.db, 'SELECT COUNT(*) AS n FROM todos')[0].n, 10);
+  assert.equal(json(f, ['rebuild', '--project', f.project]).status, 'in_sync');
+});
+
+test('waiting alias registrations recheck identity after acquiring the database write lock', async () => {
+  const f = fixture();
+  const aliasRoot = join(f.root, 'alias');
+  symlinkSync(f.root, aliasRoot, process.platform === 'win32' ? 'junction' : 'dir');
+  const alias = join(aliasRoot, 'project');
+  json(f, ['list', '--all']);
+  const gate = join(f.root, 'registration-gate');
+  const ready = Array.from({ length: 6 }, (_, index) => join(f.root, `registration-ready-${index}`));
+  const moduleUrl = pathToFileURL(resolve('src', 'data', 'store.js')).href;
+  const script = `
+    const { existsSync, writeFileSync } = await import('node:fs');
+    const { ensureProject, getDb } = await import(${JSON.stringify(moduleUrl)});
+    getDb();
+    writeFileSync(process.argv[2], '');
+    while (!existsSync(process.argv[3])) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    console.log(ensureProject(process.argv[1], 'project'));
+  `;
+  const children = ready.map((marker, index) =>
+    runAsync(f, ['--input-type=module', '-e', script, index % 2 ? alias : f.project, marker, gate]));
+  const deadline = Date.now() + 15000;
+  while (!ready.every(existsSync) && Date.now() < deadline) {
+    await new Promise(resolvePromise => setTimeout(resolvePromise, 20));
+  }
+  if (!ready.every(existsSync)) {
+    writeFileSync(gate, '');
+    await Promise.all(children);
+    assert.fail('Registration workers did not become ready');
+  }
+  const lock = new DatabaseSync(f.db);
+  try {
+    lock.exec('BEGIN IMMEDIATE');
+    writeFileSync(gate, '');
+    await new Promise(resolvePromise => setTimeout(resolvePromise, 250));
+    lock.exec('COMMIT');
+  } finally {
+    lock.close();
+  }
+  const results = await Promise.all(children);
+  for (const result of results) assert.equal(result.code, 0, result.stderr);
+  assert.equal(new Set(results.map(result => result.stdout.trim())).size, 1);
+  assert.equal(rows(f.db, 'SELECT COUNT(*) AS n FROM projects')[0].n, 1);
+});
+
+test('colliding project IDs for different directories are rejected', () => {
+  const f = fixture();
+  const suffix = 'long'.repeat(20);
+  const first = join(f.root, 'first', suffix, 'project');
+  const second = join(f.root, 'second', suffix, 'project');
+  mkdirSync(first, { recursive: true });
+  mkdirSync(second, { recursive: true });
+  seed(f, first);
+  trackedProject(second);
+  const result = execute(f, ['add', 'Different physical project', '--project', second, '--json'], { allowFailure: true });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /generated ID is already in use/);
+  assert.equal(rows(f.db, 'SELECT * FROM projects').length, 1);
+});
+
+test('ambiguous registered filesystem aliases fail without changing projects or tasks', () => {
+  const f = fixture();
+  const aliases = ['first', 'second', 'third'].map(name => join(f.root, name));
+  for (const alias of aliases) {
+    symlinkSync(f.project, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  }
+  json(f, ['list', '--all']);
+  database(f.db, db => {
+    const insert = db.prepare('INSERT INTO projects (id, name, path, tracked) VALUES (?, ?, ?, 1)');
+    insert.run('first', 'project', aliases[0]);
+    insert.run('second', 'project', aliases[1]);
+  });
+  const before = rows(f.db, 'SELECT * FROM projects ORDER BY id');
+  const result = execute(f, ['add', 'Ambiguous project', '--project', aliases[2], '--json'], { allowFailure: true });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /multiple registered paths point to the same directory/);
+  assert.deepEqual(rows(f.db, 'SELECT * FROM projects ORDER BY id'), before);
+  assert.equal(rows(f.db, 'SELECT COUNT(*) AS n FROM todos')[0].n, 0);
 });
 
 test('list prefers a read-only project cache; all-project status filters use the ledger', () => {

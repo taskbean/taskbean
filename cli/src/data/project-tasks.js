@@ -1,15 +1,18 @@
-import { allRows, getAliasPathsForUuid } from './store.js';
+import { allRows, findProjectByPath, getAliasPathsForUuid } from './store.js';
+import { canonicalCwd } from './project.js';
 
 function pathKey(value) {
   if (!value) return value;
+  value = canonicalCwd(value);
   return /^[A-Za-z]:[\\/]|^\\\\/.test(value)
     ? value.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
     : value.replace(/\/+$/, '') || '/';
 }
 
 function projectPaths(project) {
-  const paths = [...new Set([project.path, ...(project.projectUuid
-    ? getAliasPathsForUuid(project.projectUuid) : [])])];
+  const registeredPath = findProjectByPath(project.path)?.path;
+  const paths = [...new Set([project.path, registeredPath, canonicalCwd(project.path), ...(project.projectUuid
+    ? getAliasPathsForUuid(project.projectUuid) : [])].filter(Boolean))];
   return { paths, pathKeys: new Set(paths.map(pathKey)) };
 }
 

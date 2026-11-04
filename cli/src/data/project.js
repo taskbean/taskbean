@@ -1,7 +1,19 @@
 import { execSync } from 'child_process';
 import { randomUUID } from 'crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'fs';
 import { resolve, basename, dirname, isAbsolute } from 'path';
+
+/** Resolve existing paths and case-fold on Windows for identity matching. */
+export function canonicalCwd(path) {
+  if (!path) return null;
+  let resolved;
+  try {
+    resolved = realpathSync(path);
+  } catch {
+    resolved = path;
+  }
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
 
 function isWindowsAbsolutePath(value) {
   return /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]/.test(value);

@@ -12,26 +12,14 @@
 // CLI is READ-ONLY for agent_sessions / agent_turns / agent_sources / agent_settings.
 // This module only stamps todos.agent + todos.agent_session_id.
 
-import { realpathSync } from 'fs';
 import { allRows, getAliasPathsForUuid } from './store.js';
-import { resolveProjectUuid } from './project.js';
+import { canonicalCwd, resolveProjectUuid } from './project.js';
 import { AGENTS, AGENT_REGISTRY } from './agents.js';
 
 export { AGENTS };
+export { canonicalCwd };
 
 const ATTRIBUTION_WINDOW_MS = 30 * 60 * 1000;
-
-/** Windows-aware realpath + case-fold (mirrors Python `canonical_cwd`). */
-export function canonicalCwd(p) {
-  if (!p) return null;
-  let resolved;
-  try {
-    resolved = realpathSync(p);
-  } catch {
-    resolved = p;
-  }
-  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
-}
 
 function isAncestorOrSame(candidate, child) {
   if (!candidate || !child) return false;

@@ -11,7 +11,7 @@
  * history differs from the ledger or cache data would be overwritten.
  */
 
-import { run } from '../data/store.js';
+import { findProjectByPath, run } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { readEvents } from '../data/events.js';
 import { allTasksFromProjectDb, createProjectDb, getProjectDbPath, openProjectDb } from '../data/project-db.js';
@@ -339,6 +339,7 @@ class UnsafeCacheError extends Error {
 
 /** Recheck the cache under its write lock before adding missing rows. */
 function writeProjectCache(project, rows) {
+  const registeredProject = findProjectByPath(project.path);
   const dbPath = getProjectDbPath(project.path);
   const db = openProjectDb(project.path) ?? createProjectDb(project.path);
   db.exec('BEGIN IMMEDIATE');
@@ -358,7 +359,7 @@ function writeProjectCache(project, rows) {
     try { db.exec('ROLLBACK'); } catch {}
     throw e;
   }
-  run('UPDATE projects SET tasks_db_path = ? WHERE path = ?', [dbPath, project.path]);
+  if (registeredProject) run('UPDATE projects SET tasks_db_path = ? WHERE id = ?', [dbPath, registeredProject.id]);
   return { tasks: rows.length, dbPath };
 }
 
@@ -399,8 +400,8 @@ export async function rebuildProjectDb(project, replayed, liveRows = null) {
       priority: t.priority ?? 'none',
       notes: t.notesKnown ? t.notes : live?.notes ?? null,
       tags: t.tagsKnown ? JSON.stringify(t.tags) : live?.tags ?? '[]',
-      project: project.name,
-      project_path: project.path,
+      project: live ? live.project : project.name,
+      project_path: live ? live.project_path : project.path,
       upsert_key: live ? live.upsert_key : t.upsertKey ?? null,
       session_id: sessionId,
       agent,

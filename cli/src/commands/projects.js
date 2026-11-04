@@ -1,6 +1,6 @@
 import { existsSync, rmSync } from 'fs';
 import { resolve, join } from 'path';
-import { allRows, getRow, run } from '../data/store.js';
+import { allRows, findProjectByPath, getRow, run } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { PROJECT_SKILL_DIRS } from '../data/skill-dirs.js';
 
@@ -16,10 +16,10 @@ function findProject(nameOrPath) {
     const byName = allRows('SELECT * FROM projects WHERE name = ?', [nameOrPath]);
     if (byName.length === 1) return byName[0];
     if (byName.length > 1) return { _ambiguous: true, matches: byName };
-    return null;
+    return findProjectByPath(nameOrPath);
   }
   const project = resolveProject();
-  return getRow('SELECT * FROM projects WHERE path = ?', [project.path]);
+  return findProjectByPath(project.path);
 }
 
 // ---------------------------------------------------------------------------

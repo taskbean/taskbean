@@ -1,6 +1,6 @@
 import { writeFileSync, existsSync, rmSync } from 'fs';
 import { resolve, basename, join } from 'path';
-import { run, getRow, ensureProject, ensureProjectAlias } from '../data/store.js';
+import { run, getRow, ensureProject, ensureProjectAlias, findProjectByPath } from '../data/store.js';
 import { ensureProjectUuid, resolveProject } from '../data/project.js';
 import { canonicalCwd } from '../data/attribution.js';
 import { appendEvent } from '../data/events.js';
@@ -16,10 +16,10 @@ export function trackCommand(opts) {
 
   const targetPath = opts.path || process.cwd();
   const project = resolveProject(targetPath);
-  ensureProject(project.path, project.name);
+  const projectId = ensureProject(project.path, project.name);
 
   // Mark as tracked
-  run('UPDATE projects SET tracked = 1 WHERE path = ?', [project.path]);
+  run('UPDATE projects SET tracked = 1 WHERE id = ?', [projectId]);
 
   // Auto-create .taskbean.json if missing
   const configPath = resolve(project.path, '.taskbean.json');
@@ -30,7 +30,7 @@ export function trackCommand(opts) {
 
   const projectUuid = project.projectUuid || ensureProjectUuid(project.path);
   ensureProjectAlias(projectUuid, canonicalCwd(project.path));
-  run('UPDATE projects SET project_uuid = ? WHERE path = ?', [projectUuid, project.path]);
+  run('UPDATE projects SET project_uuid = ? WHERE id = ?', [projectUuid, projectId]);
   appendEvent({
     projectPath: project.path,
     projectUuid,
@@ -44,7 +44,7 @@ export function trackCommand(opts) {
   try {
     process.chdir(project.path);
     installCommand({ json: opts.json, global: false });
-    run('UPDATE projects SET skill_installed = 1 WHERE path = ?', [project.path]);
+    run('UPDATE projects SET skill_installed = 1 WHERE id = ?', [projectId]);
   } catch (e) {
     if (!opts.json) {
       console.error(`⚠️  Could not install agent skill: ${e.message}`);
@@ -54,7 +54,7 @@ export function trackCommand(opts) {
   }
 
   if (opts.json) {
-    const proj = getRow('SELECT * FROM projects WHERE path = ?', [project.path]);
+    const proj = getRow('SELECT * FROM projects WHERE id = ?', [projectId]);
     console.log(JSON.stringify(proj));
   } else {
     console.log(`📍 Now tracking: ${project.name} (${project.path})`);
@@ -65,7 +65,7 @@ export function untrackCommand(opts) {
   const targetPath = opts.path || process.cwd();
   const project = resolveProject(targetPath);
 
-  const existing = getRow('SELECT * FROM projects WHERE path = ?', [project.path]);
+  const existing = findProjectByPath(project.path);
   if (!existing) {
     if (opts.json) {
       console.log(JSON.stringify({ error: 'not_found', message: `Project not tracked: ${project.path}` }));

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { detectHost } from './host.js';
+import { canonicalCwd } from './project.js';
 
 export function resolveDbPaths(env = process.env, getHost = detectHost, home = homedir()) {
   if (env.TASKBEAN_DB) {
@@ -313,16 +314,48 @@ export function run(sql, params = []) {
   return getDb().prepare(sql).run(...params);
 }
 
-export function ensureProject(projectPath, projectName) {
-  const id = projectPath.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase().slice(-60);
-  run('INSERT INTO projects (id, name, path, tracked) VALUES (?, ?, ?, 1) ON CONFLICT DO NOTHING',
-    [id, projectName, projectPath]);
-  const project = getRow('SELECT id, tracked FROM projects WHERE path = ?', [projectPath]);
-  if (!project) {
-    throw new Error(`Cannot register project ${projectPath}: its generated ID is already in use`);
+export function findProjectByPath(projectPath) {
+  if (!projectPath) return null;
+  const exact = getRow('SELECT * FROM projects WHERE path = ?', [projectPath]);
+  if (exact || !existsSync(projectPath)) return exact;
+
+  const canonical = canonicalCwd(projectPath);
+  const matches = allRows('SELECT * FROM projects')
+    .filter(project => existsSync(project.path) && canonicalCwd(project.path) === canonical);
+  if (matches.length > 1) {
+    throw new Error(`Cannot resolve project ${projectPath}: multiple registered paths point to the same directory`);
   }
-  if (!project.tracked) run('UPDATE projects SET tracked = 1 WHERE id = ?', [project.id]);
-  return project.id;
+  return matches[0] || null;
+}
+
+export function ensureProject(projectPath, projectName) {
+  const db = getDb();
+  db.exec('SAVEPOINT register_project');
+  try {
+    // Take the write lock before checking aliases so concurrent registrations cannot race.
+    db.exec('UPDATE projects SET tracked = tracked WHERE 0');
+    const id = projectPath.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase().slice(-60);
+    let project = findProjectByPath(projectPath);
+    if (!project) {
+      run('INSERT INTO projects (id, name, path, tracked) VALUES (?, ?, ?, 1) ON CONFLICT DO NOTHING',
+        [id, projectName, projectPath]);
+      project = findProjectByPath(projectPath);
+    }
+    if (!project) {
+      throw new Error(`Cannot register project ${projectPath}: its generated ID is already in use`);
+    }
+    if (!project.tracked) run('UPDATE projects SET tracked = 1 WHERE id = ?', [project.id]);
+    db.exec('RELEASE SAVEPOINT register_project');
+    return project.id;
+  } catch (error) {
+    try {
+      db.exec('ROLLBACK TO SAVEPOINT register_project');
+      db.exec('RELEASE SAVEPOINT register_project');
+    } catch (rollbackError) {
+      throw new AggregateError([error, rollbackError], 'Project registration and rollback failed', { cause: error });
+    }
+    throw error;
+  }
 }
 
 export function ensureProjectAlias(projectUuid, projectPath, host = null) {
