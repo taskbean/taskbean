@@ -543,14 +543,18 @@ test('rebuild rechecks cache-only rows after waiting for a concurrent writer', a
   const f = fixture();
   const baseline = seed(f);
   const cache = join(f.project, '.taskbean', 'tasks.db');
+  const projectAlias = join(f.root, 'cache-project-alias');
+  symlinkSync(f.project, projectAlias, process.platform === 'win32' ? 'junction' : 'dir');
   const preload = join(f.root, 'cache-lock-observer.cjs');
   const signal = join(f.root, 'cache-lock-attempt');
   writeFileSync(preload, `
     const { DatabaseSync } = require('node:sqlite');
-    const { writeFileSync } = require('node:fs');
-    const { resolve } = require('node:path');
+    const { realpathSync, writeFileSync } = require('node:fs');
     const exec = DatabaseSync.prototype.exec;
-    const pathKey = path => process.platform === 'win32' ? resolve(path).toLowerCase() : resolve(path);
+    const pathKey = path => {
+      const realPath = realpathSync(path);
+      return process.platform === 'win32' ? realPath.toLowerCase() : realPath;
+    };
     DatabaseSync.prototype.exec = function(sql) {
       if (sql === 'BEGIN IMMEDIATE') {
         const file = this.prepare('PRAGMA database_list').get()?.file;
@@ -561,7 +565,7 @@ test('rebuild rechecks cache-only rows after waiting for a concurrent writer', a
       return exec.call(this, sql);
     };
   `);
-  f.env.TASKBEAN_TEST_CACHE_PATH = cache;
+  f.env.TASKBEAN_TEST_CACHE_PATH = join(projectAlias, '.taskbean', 'tasks.db');
   f.env.TASKBEAN_TEST_LOCK_SIGNAL = signal;
   const db = new DatabaseSync(cache);
   let transactionOpen = false;
