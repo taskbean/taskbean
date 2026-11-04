@@ -1,6 +1,7 @@
 import { getRow, run } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { resolveTask } from '../data/resolve-task.js';
+import { recordTaskEvents } from '../data/task-events.js';
 
 export function editCommand(id, opts) {
   const project = resolveProject(opts.project);
@@ -54,6 +55,13 @@ export function editCommand(id, opts) {
   run(`UPDATE todos SET ${sets.join(', ')} WHERE id = ?`, params);
 
   const updated = getRow('SELECT * FROM todos WHERE id = ?', [task.id]);
+  const fields = {};
+  if (opts.title) fields.title = opts.title;
+  if (opts.priority) fields.priority = opts.priority;
+  if (opts.notes !== undefined) fields.notes = opts.notes || null;
+  if (opts.dueDate !== undefined) fields.dueDate = opts.dueDate || null;
+  if (opts.tags) fields.tags = opts.tags.split(',');
+  recordTaskEvents(project, updated, [{ type: 'task.update', payload: { taskId: task.id, fields } }]);
   if (opts.json) {
     console.log(JSON.stringify(updated));
   } else {

@@ -12,47 +12,36 @@
 // CLI is READ-ONLY for agent_sessions / agent_turns / agent_sources / agent_settings.
 // This module only stamps todos.agent + todos.agent_session_id.
 
-import { realpathSync } from 'fs';
-import { sep as pathSep } from 'path';
-import { allRows } from './store.js';
+import { allRows, getAliasPathsForUuid } from './store.js';
+import { canonicalCwd, resolveProjectUuid } from './project.js';
+import { AGENTS, AGENT_REGISTRY } from './agents.js';
 
-export const AGENTS = ['copilot', 'claude-code', 'codex', 'opencode'];
+export { AGENTS };
+export { canonicalCwd };
 
 const ATTRIBUTION_WINDOW_MS = 30 * 60 * 1000;
 
-/** Windows-aware realpath + case-fold (mirrors Python `canonical_cwd`). */
-export function canonicalCwd(p) {
-  if (!p) return null;
-  let resolved;
-  try {
-    resolved = realpathSync(p);
-  } catch {
-    resolved = p;
-  }
-  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
-}
-
 function isAncestorOrSame(candidate, child) {
   if (!candidate || !child) return false;
-  if (candidate === child) return true;
-  const prefix = candidate.endsWith(pathSep) ? candidate : candidate + pathSep;
-  return child.startsWith(prefix);
+  const normalize = value => {
+    let path = value.replace(/\\/g, '/').replace(/\/+$/, '');
+    if (process.platform === 'win32' || /^[A-Za-z]:\//.test(path) || path.startsWith('//')) {
+      path = path.toLowerCase();
+    }
+    return path;
+  };
+  const parentPath = normalize(candidate);
+  const childPath = normalize(child);
+  return parentPath === childPath || childPath.startsWith(`${parentPath}/`);
 }
 
 /** Tier 3: vendor env var detection. */
 function fromVendorEnv(env = process.env) {
   const hits = [];
-  if (env.CLAUDECODE === '1' || env.CLAUDE_CODE || env.ANTHROPIC_CLI) {
-    hits.push({ agent: 'claude-code', nativeId: env.CLAUDE_SESSION_ID || null });
-  }
-  if (env.CODEX_SESSION_ID || env.CODEX_HOME) {
-    hits.push({ agent: 'codex', nativeId: env.CODEX_SESSION_ID || null });
-  }
-  if (env.OPENCODE_SESSION || env.OPENCODE_SESSION_ID) {
-    hits.push({ agent: 'opencode', nativeId: env.OPENCODE_SESSION || env.OPENCODE_SESSION_ID || null });
-  }
-  if (env.COPILOT_CLI_SESSION_ID || env.COPILOT_SESSION_ID) {
-    hits.push({ agent: 'copilot', nativeId: env.COPILOT_CLI_SESSION_ID || env.COPILOT_SESSION_ID });
+  for (const agent of AGENT_REGISTRY) {
+    if (agent.envDetect.some(spec => spec.eq === undefined ? Boolean(env[spec.var]) : env[spec.var] === spec.eq)) {
+      hits.push({ agent: agent.id, nativeId: agent.envSessionId.map(name => env[name]).find(Boolean) || null });
+    }
   }
   // Exactly one vendor env var tier-3 hit is the only unambiguous case.
   if (hits.length === 1) return hits[0];
@@ -61,28 +50,28 @@ function fromVendorEnv(env = process.env) {
 }
 
 /** Tier 4: cwd+time lookup against PWA-populated agent_sessions. */
-function fromCwdHeuristic(cwd, nowIso) {
+function fromCwdHeuristic(cwd, nowIso, projectUuid = null) {
   if (!cwd) return null;
   const cutoffMs = new Date(nowIso).getTime() - ATTRIBUTION_WINDOW_MS;
   const cutoffFuture = new Date(nowIso).getTime() + ATTRIBUTION_WINDOW_MS;
 
-  let rows;
-  try {
-    rows = allRows(
-      `SELECT s.agent, s.native_id, s.cwd, s.started_at, s.updated_at
-       FROM agent_sessions s
-       LEFT JOIN agent_settings g ON g.agent = s.agent
-       WHERE COALESCE(g.enabled, 1) = 1
-         AND s.cwd IS NOT NULL
-       ORDER BY s.updated_at DESC`
-    );
-  } catch {
-    return null; // Tables not yet created
+  const paths = new Set([cwd]);
+  const uuid = projectUuid || resolveProjectUuid(cwd)?.uuid;
+  if (uuid) {
+    for (const path of getAliasPathsForUuid(uuid)) paths.add(path);
   }
+  const rows = allRows(
+    `SELECT s.agent, s.native_id, s.cwd, s.started_at, s.updated_at
+     FROM agent_sessions s
+     LEFT JOIN agent_settings g ON g.agent = s.agent
+     WHERE COALESCE(g.enabled, 1) = 1
+       AND s.cwd IS NOT NULL
+     ORDER BY s.updated_at DESC`
+  );
 
   const candidates = [];
   for (const r of rows) {
-    if (!isAncestorOrSame(r.cwd, cwd)) continue;
+    if (![...paths].some(path => isAncestorOrSame(r.cwd, path))) continue;
     const t = new Date(r.updated_at || r.started_at).getTime();
     if (Number.isNaN(t)) continue;
     if (t < cutoffMs || t > cutoffFuture) continue;
@@ -107,6 +96,7 @@ function fromCwdHeuristic(cwd, nowIso) {
  * @param {string=} opts.sessionId    --session-id flag (legacy Copilot + new native)
  * @param {string=} opts.cwd          Usually process.cwd()
  * @param {string=} opts.now          ISO timestamp (defaults to now)
+ * @param {string=} opts.projectUuid  Stable project identity, when known
  * @param {object=} opts.env          For tests
  * @returns {{agent: (string|null), nativeId: (string|null), source: string}}
  */
@@ -142,7 +132,7 @@ export function resolveAttribution(opts = {}) {
   }
 
   // Tier 4: cwd + ±30min heuristic.
-  const guess = fromCwdHeuristic(cwd, now);
+  const guess = fromCwdHeuristic(cwd, now, opts.projectUuid);
   if (guess && !guess.ambiguous) {
     return { agent: guess.agent, nativeId: guess.nativeId, source: 'cwd-heuristic' };
   }

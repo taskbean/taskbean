@@ -1,6 +1,6 @@
 {
   "name": "taskbean",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Task management CLI for AI coding agents. Push tasks from Copilot, Claude, or any agent.",
   "type": "module",
   "bin": {
@@ -16,8 +16,10 @@
     "src/commands/edit.js",
     "src/commands/install.js",
     "src/commands/list.js",
+    "src/commands/migrate-events.js",
     "src/commands/package.js",
     "src/commands/projects.js",
+    "src/commands/rebuild.js",
     "src/commands/remind.js",
     "src/commands/remove.js",
     "src/commands/report.js",
@@ -31,11 +33,19 @@
     "src/chronicle/reconcile.js",
     "src/chronicle/suggestions.js",
     "src/data/attribution.js",
+    "src/data/agents.js",
+    "src/data/completions.js",
+    "src/data/events.js",
+    "src/data/host.js",
     "src/data/parse-date.js",
+    "src/data/periods.js",
     "src/data/project.js",
+    "src/data/project-db.js",
+    "src/data/project-tasks.js",
     "src/data/resolve-task.js",
     "src/data/skill-dirs.js",
     "src/data/store.js",
+    "src/data/task-events.js",
     "src/lib/skill-drift-notifier.js",
     "src/lib/update-notifier.js",
     "src/version.js",
@@ -52,6 +62,8 @@
   ],
   "scripts": {
     "test": "node --test src/**/*.test.js",
+    "eval:plugin": "node --test evals/plugin/*.test.mjs ../extensions/taskbean-dashboard/*.test.mjs",
+    "eval:target": "node evals/plugin/target/run-target.mjs",
     "postinstall": "node scripts/postinstall.cjs"
   },
   "repository": {

@@ -1,6 +1,8 @@
 import { allRows } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { discoverChronicleCapabilities } from '../chronicle/adapter.js';
+import { completionTimes } from '../data/completions.js';
+import { getDateRange, inPeriod, parseInstant, formatLocal } from '../data/periods.js';
 
 const AGENT_DISPLAY = {
   copilot: 'Copilot',
@@ -15,7 +17,7 @@ function fmtNum(n) {
   return Number(n || 0).toLocaleString('en-US');
 }
 
-function collectUsage(since, until) {
+function collectUsage(start, end) {
   try {
     const enabled = allRows(
       'SELECT agent FROM agent_settings WHERE enabled = 1'
@@ -33,19 +35,19 @@ function collectUsage(since, until) {
               COALESCE(SUM(total_tokens), 0) AS totalTokens,
               COALESCE(SUM(tool_calls), 0) AS toolCalls
          FROM agent_turns
-        WHERE date(occurred_at) BETWEEN ? AND ?
+        WHERE julianday(occurred_at) >= julianday(?) AND julianday(occurred_at) < julianday(?)
           AND agent IN (${placeholders})
         GROUP BY agent`,
-      [since, until, ...enabled]
+      [start, end, ...enabled]
     );
 
     const sessionStats = allRows(
       `SELECT agent, COUNT(*) AS sessions
          FROM agent_sessions
-        WHERE date(started_at) BETWEEN ? AND ?
+        WHERE julianday(started_at) >= julianday(?) AND julianday(started_at) < julianday(?)
           AND agent IN (${placeholders})
         GROUP BY agent`,
-      [since, until, ...enabled]
+      [start, end, ...enabled]
     );
 
     const byAgent = [];
@@ -88,7 +90,7 @@ function zeroTotals() {
   return { sessions: 0, turns: 0, inputTokens: 0, outputTokens: 0, toolCalls: 0, totalTokens: 0 };
 }
 
-function collectEfficiency(since, until) {
+function collectEfficiency(start, end) {
   try {
     const enabled = allRows(
       'SELECT agent FROM agent_settings WHERE enabled = 1'
@@ -104,7 +106,7 @@ function collectEfficiency(since, until) {
                 COUNT(*) AS turns,
                 COALESCE(SUM(total_tokens), 0) AS totalTokens
            FROM agent_turns
-          WHERE date(occurred_at) BETWEEN ? AND ?
+          WHERE julianday(occurred_at) >= julianday(?) AND julianday(occurred_at) < julianday(?)
           GROUP BY session_id
        ),
        linked_tasks AS (
@@ -123,8 +125,8 @@ function collectEfficiency(since, until) {
          LEFT JOIN period_turns pt ON pt.session_id = s.id
          LEFT JOIN linked_tasks lt ON lt.session_id = s.id
         WHERE s.agent IN (${placeholders})
-          AND (pt.session_id IS NOT NULL OR date(s.started_at) BETWEEN ? AND ?)`,
-      [since, until, ...enabled, since, until]
+          AND (pt.session_id IS NOT NULL OR (julianday(s.started_at) >= julianday(?) AND julianday(s.started_at) < julianday(?)))`,
+      [start, end, ...enabled, start, end]
     ).map(row => ({
       ...row,
       turns: Number(row.turns),
@@ -207,7 +209,8 @@ function parseJsonObject(value) {
   }
 }
 
-function serializeEvidence(row) {
+function serializeEvidence(row, includeCommits = false) {
+  const commits = parseJsonArray(row.commit_refs);
   return {
     id: row.id,
     todo_id: row.todo_id,
@@ -219,10 +222,11 @@ function serializeEvidence(row) {
     branch: row.branch,
     pr_refs: parseJsonArray(row.pr_refs),
     issue_refs: parseJsonArray(row.issue_refs),
+    ...(includeCommits && commits.length ? { commit_refs: commits } : {}),
     files_changed: parseJsonArray(row.files_changed),
     summary: row.summary,
     confidence: Number(row.confidence),
-    occurred_at: row.occurred_at,
+    occurred_at: row.occurred_at || row.created_at,
     created_at: row.created_at,
   };
 }
@@ -242,7 +246,7 @@ function serializeSuggestion(row) {
     auto_linked: Boolean(row.auto_linked),
     decision_reason: row.decision_reason,
     decision_details: parseJsonObject(row.decision_details),
-    occurred_at: row.occurred_at,
+    occurred_at: row.occurred_at || row.created_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
     decided_at: row.decided_at,
@@ -258,7 +262,7 @@ function groupTasks(tasks) {
   };
 }
 
-function collectChronicleReport(since, until, tasks, scope = {}) {
+function collectChronicleReport(range, tasks, scope = {}, includeCommits = false) {
   const capabilities = discoverChronicleCapabilities();
   const available = capabilities.localSessionStore.status === 'available';
   const taskIds = tasks.map(t => t.id);
@@ -271,8 +275,9 @@ function collectChronicleReport(since, until, tasks, scope = {}) {
     )
     : [];
 
-  const pendingConditions = ['s.state = \'pending\'', 'date(COALESCE(s.occurred_at, s.created_at)) BETWEEN ? AND ?'];
-  const pendingParams = [since, until];
+  // Period filtering happens in JS (inPeriod) so local-day boundaries match the rest of the report.
+  const pendingConditions = ['s.state = \'pending\''];
+  const pendingParams = [];
   if (scope.project) {
     pendingConditions.push(`(
       s.suggested_project = ?
@@ -301,14 +306,13 @@ function collectChronicleReport(since, until, tasks, scope = {}) {
       WHERE ${pendingConditions.join(' AND ')}
       ORDER BY COALESCE(s.occurred_at, s.created_at), s.id`,
     pendingParams
-  );
+  ).filter(row => inPeriod(row.occurred_at || row.created_at, range));
 
   const autoLinkedConditions = [
     's.state = \'linked\'',
     's.auto_linked = 1',
-    'date(COALESCE(s.decided_at, s.occurred_at, s.created_at)) BETWEEN ? AND ?',
   ];
-  const autoLinkedParams = [since, until];
+  const autoLinkedParams = [];
   if (scope.project) {
     autoLinkedConditions.push(`(
       s.linked_todo_id IN (SELECT id FROM todos WHERE project = ? OR project_path = ?)
@@ -337,9 +341,9 @@ function collectChronicleReport(since, until, tasks, scope = {}) {
       WHERE ${autoLinkedConditions.join(' AND ')}
       ORDER BY COALESCE(s.decided_at, s.occurred_at, s.created_at), s.id`,
     autoLinkedParams
-  );
+  ).filter(row => inPeriod(row.decided_at || row.occurred_at || row.created_at, range));
 
-  const evidence = evidenceRows.map(serializeEvidence);
+  const evidence = evidenceRows.map(row => serializeEvidence(row, includeCommits));
   const pendingSuggestions = pendingRows.map(serializeSuggestion);
   const autoLinked = autoLinkedRows.map(serializeSuggestion);
 
@@ -378,6 +382,7 @@ function renderChronicleMd(chronicle, tasksById) {
         if (ev.branch) details.push(`branch ${ev.branch}`);
         if (ev.pr_refs.length) details.push(`PR ${ev.pr_refs.join(', ')}`);
         if (ev.issue_refs.length) details.push(`issue ${ev.issue_refs.join(', ')}`);
+        if (ev.commit_refs?.length) details.push(`commit ${ev.commit_refs.join(', ')}`);
         if (ev.files_changed.length) details.push(`files ${ev.files_changed.slice(0, 3).join(', ')}`);
         const suffix = details.length ? ` (${details.join('; ')})` : '';
         md += `  - ${ev.summary || ev.source_session_id}${suffix}\n`;
@@ -443,38 +448,159 @@ function renderEfficiencyMd(efficiency) {
   return md;
 }
 
-function getDateRange(range) {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayStr = today.toISOString().split('T')[0];
+function stateOf(task) {
+  if (task.completed || task.status === 'done') return 'done';
+  if (task.status === 'in_progress' || task.status === 'blocked') return task.status;
+  return 'pending';
+}
 
-  switch (range) {
-    case 'yesterday': {
-      const y = new Date(today); y.setDate(y.getDate() - 1);
-      const yStr = y.toISOString().split('T')[0];
-      return { since: yStr, until: yStr, label: 'Yesterday' };
-    }
-    case 'week': {
-      const w = new Date(today); w.setDate(w.getDate() - 7);
-      return { since: w.toISOString().split('T')[0], until: todayStr, label: 'This Week' };
-    }
-    case 'all':
-      return { since: '1970-01-01', until: '2099-12-31', label: 'All Time' };
-    case 'today':
-    default:
-      return { since: todayStr, until: todayStr, label: 'Today' };
+function collectEvidence(taskIds) {
+  const byTask = new Map();
+  if (!taskIds.length) return byTask;
+  let rows = [];
+  try {
+    rows = allRows(
+      `SELECT todo_id, pr_refs, issue_refs, commit_refs, branch, source_session_id FROM task_evidence
+        WHERE todo_id IN (${taskIds.map(() => '?').join(',')})
+        ORDER BY todo_id, COALESCE(occurred_at, created_at), id`,
+      taskIds
+    );
+  } catch {
+    return byTask;
   }
+  for (const row of rows) {
+    if (!byTask.has(row.todo_id)) {
+      byTask.set(row.todo_id, { prs: new Set(), issues: new Set(), commits: new Set(), branches: new Set(), sessions: new Set() });
+    }
+    const ev = byTask.get(row.todo_id);
+    parseJsonArray(row.pr_refs).forEach(v => ev.prs.add(String(v)));
+    parseJsonArray(row.issue_refs).forEach(v => ev.issues.add(String(v)));
+    parseJsonArray(row.commit_refs).forEach(v => ev.commits.add(String(v)));
+    if (row.branch) ev.branches.add(row.branch);
+    if (row.source_session_id) ev.sessions.add(row.source_session_id);
+  }
+  const result = new Map();
+  for (const [id, ev] of byTask) {
+    const out = {};
+    for (const key of ['prs', 'issues', 'commits', 'branches', 'sessions']) {
+      if (ev[key].size) out[key] = [...ev[key]];
+    }
+    if (Object.keys(out).length) result.set(id, out);
+  }
+  return result;
+}
+
+function evidenceText(ev) {
+  if (!ev) return 'no evidence';
+  const parts = [];
+  if (ev.prs) parts.push(`PR ${ev.prs.join(', ')}`);
+  if (ev.issues) parts.push(`issue ${ev.issues.join(', ')}`);
+  if (ev.commits) parts.push(`commit ${ev.commits.join(', ')}`);
+  if (ev.branches) parts.push(`branch ${ev.branches.join(', ')}`);
+  if (ev.sessions) parts.push(`session ${ev.sessions.join(', ')}`);
+  return parts.join('; ');
+}
+
+/**
+ * Outcome view of the period: delivered by completion time, completed items
+ * whose completion time is unknown, and items open at report time.
+ */
+function buildOutcomes(allTasks, range) {
+  const completions = completionTimes(allTasks.map(t => ({ ...t, completed: stateOf(t) === 'done' })));
+  const delivered = [];
+  const completedTimeUnknown = [];
+  const blocked = [];
+  const inProgress = [];
+  const pending = [];
+  for (const task of allTasks) {
+    const state = stateOf(task);
+    if (state === 'done') {
+      const info = completions.get(task.id) || { completed_at: null, completion_source: null };
+      if (info.completed_at) {
+        if (inPeriod(info.completed_at, range)) delivered.push({ task, ...info });
+      } else if (inPeriod(task.created_at, range)) {
+        completedTimeUnknown.push({ task, ...info });
+      }
+    } else if (state === 'blocked') blocked.push({ task });
+    else if (state === 'in_progress') inProgress.push({ task });
+    else pending.push({ task });
+  }
+  delivered.sort((a, b) => parseInstant(a.completed_at) - parseInstant(b.completed_at));
+  const evidence = collectEvidence([...delivered, ...completedTimeUnknown].map(e => e.task.id));
+  for (const entry of [...delivered, ...completedTimeUnknown]) entry.evidence = evidence.get(entry.task.id) || null;
+  return { delivered, completedTimeUnknown, blocked, inProgress, pending };
+}
+
+function compactOutcomes(outcomes, range) {
+  const base = ({ task }) => ({ id: task.id, title: task.title, project: task.project || null });
+  return {
+    period: range.label,
+    since: range.since,
+    until: range.until,
+    counts: {
+      delivered: outcomes.delivered.length,
+      completedTimeUnknown: outcomes.completedTimeUnknown.length,
+      blocked: outcomes.blocked.length,
+      inProgress: outcomes.inProgress.length,
+      pending: outcomes.pending.length,
+    },
+    delivered: outcomes.delivered.map(e => ({
+      ...base(e), completedAt: e.completed_at, completionSource: e.completion_source, evidence: e.evidence,
+    })),
+    completedTimeUnknown: outcomes.completedTimeUnknown.map(e => ({ ...base(e), evidence: e.evidence })),
+    blocked: outcomes.blocked.map(e => ({ ...base(e), reason: e.task.notes || null })),
+    inProgress: outcomes.inProgress.map(base),
+  };
+}
+
+function groupByProject(entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = entry.task.project || '(no project)';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+}
+
+function renderSection(title, entries, line, emptyText) {
+  let md = `## ${title} (${entries.length})\n`;
+  if (!entries.length) return `${md}${emptyText}\n\n`;
+  for (const [project, group] of groupByProject(entries)) {
+    md += `\n### 📁 ${project}\n`;
+    for (const entry of group) md += `- ${line(entry)}\n`;
+  }
+  return `${md}\n`;
+}
+
+function renderOutcomesMd(outcomes) {
+  let md = '';
+  md += renderSection('✅ Delivered', outcomes.delivered,
+    e => `${e.task.title} — completed ${formatLocal(e.completed_at)}${e.completion_source === 'event-history' ? ' (from event history)' : ''} — evidence: ${evidenceText(e.evidence)}`,
+    'No outcomes completed in this period.');
+  if (outcomes.completedTimeUnknown.length) {
+    md += renderSection('☑️ Completed, completion time unknown', outcomes.completedTimeUnknown,
+      e => `${e.task.title} — created ${formatLocal(e.task.created_at)}; completion time not recorded — evidence: ${evidenceText(e.evidence)}`,
+      '');
+  }
+  md += renderSection('🚫 Blocked (open now)', outcomes.blocked,
+    e => `${e.task.title} — reason: ${e.task.notes ? e.task.notes : 'no reason recorded'}`,
+    'Nothing blocked.');
+  md += renderSection('🔄 In progress (open now)', outcomes.inProgress, e => e.task.title, 'Nothing in progress.');
+  md += renderSection('⬚ Pending (open now)', outcomes.pending, e => e.task.title, 'Nothing pending.');
+  return md;
 }
 
 export function reportCommand(opts) {
   // --json is shorthand for --format json
   if (opts.json) opts.format = 'json';
 
-  const { since, until, label } = getDateRange(opts.date);
+  const range = getDateRange(opts.date);
+  const { since, until, label } = range;
 
   let projectFilter = '';
   let reportProject = null;
-  let params = [since, until];
+  const params = [];
 
   if (opts.project) {
     const project = resolveProject(opts.project);
@@ -485,18 +611,25 @@ export function reportCommand(opts) {
     projectFilter = 'AND (project IS NULL OR project NOT IN (SELECT name FROM projects WHERE hidden = 1))';
   }
 
-  const tasks = allRows(`
+  const scopedTasks = allRows(`
     SELECT * FROM todos
-    WHERE date(created_at) BETWEEN ? AND ?
+    WHERE 1=1
     ${projectFilter}
     ORDER BY project, completed, created_at
   `, params);
+  // Tasks created in the period, compared as local-day instants.
+  const tasks = scopedTasks.filter(t => inPeriod(t.created_at, range));
 
-  const usage = collectUsage(since, until);
-  const efficiency = collectEfficiency(since, until);
+  if (opts.compact) {
+    console.log(JSON.stringify(compactOutcomes(buildOutcomes(scopedTasks, range), range)));
+    return;
+  }
+
+  const usage = collectUsage(range.start, range.end);
+  const efficiency = collectEfficiency(range.start, range.end);
   const taskGroups = groupTasks(tasks);
   const chronicle = opts.includeChronicle
-    ? collectChronicleReport(since, until, tasks, { project: reportProject })
+    ? collectChronicleReport(range, tasks, { project: reportProject }, opts.format !== 'json')
     : null;
 
   // --format json
@@ -520,51 +653,21 @@ export function reportCommand(opts) {
   }
 
   // Default: markdown
-  const byProject = {};
-  for (const t of tasks) {
-    const p = t.project || 'manual';
-    if (!byProject[p]) byProject[p] = [];
-    byProject[p].push(t);
-  }
+  const outcomes = buildOutcomes(scopedTasks, range);
 
-  const completed = taskGroups.completed;
-  const pending = tasks.filter(t => !t.completed);
-
-  let md = `# 📋 taskbean report — ${label}\n\n`;
+  let md = `# 📋 taskbean report — ${label} (${since}${since === until ? '' : ` to ${until}`})\n\n`;
   md += `**Generated**: ${new Date().toLocaleString()}\n\n`;
   md += `## Summary\n`;
-  md += `- **Completed**: ${completed.length}\n`;
-  md += `- **Pending**: ${pending.length}\n`;
-  md += `- **Total**: ${tasks.length}\n\n`;
-
-  for (const [project, projectTasks] of Object.entries(byProject)) {
-    md += `## 📁 ${project}\n\n`;
-
-    const done = projectTasks.filter(t => t.completed);
-    const pend = projectTasks.filter(t => !t.completed);
-
-    if (done.length) {
-      md += `### ✅ Completed\n`;
-      md += `| Task | Source | Created |\n|------|--------|--------|\n`;
-      for (const t of done) {
-        md += `| ${t.title} | ${t.source} | ${t.created_at} |\n`;
-      }
-      md += '\n';
-    }
-
-    if (pend.length) {
-      md += `### ⬚ Pending\n`;
-      md += `| Task | Source | Created |\n|------|--------|--------|\n`;
-      for (const t of pend) {
-        md += `| ${t.title} | ${t.source} | ${t.created_at} |\n`;
-      }
-      md += '\n';
-    }
+  md += `- **Delivered** (completed in period): ${outcomes.delivered.length}\n`;
+  if (outcomes.completedTimeUnknown.length) {
+    md += `- **Completed, time unknown** (created in period): ${outcomes.completedTimeUnknown.length}\n`;
   }
+  md += `- **Blocked**: ${outcomes.blocked.length}\n`;
+  md += `- **In progress**: ${outcomes.inProgress.length}\n`;
+  md += `- **Pending**: ${outcomes.pending.length}\n\n`;
+  md += `Open counts are as of report time, across the report scope.\n\n`;
 
-  if (tasks.length === 0) {
-    md += `*No tasks found for this period.*\n\n`;
-  }
+  md += renderOutcomesMd(outcomes);
 
   if (usage) {
     md += renderUsageMd(usage);

@@ -58,7 +58,8 @@ describe('BUNDLED_VERSION', () => {
 describe('bean update-skill', () => {
   const TEST_HOME = join(tmpdir(), 'taskbean-update-skill-test-' + Date.now());
   const TEST_PROJECT = join(TEST_HOME, 'my-project');
-  const env = { ...process.env, HOME: TEST_HOME, USERPROFILE: TEST_HOME };
+  const env = { ...process.env, HOME: TEST_HOME, USERPROFILE: TEST_HOME,
+    TASKBEAN_HOME: join(TEST_HOME, '.taskbean'), TASKBEAN_DB: join(TEST_HOME, '.taskbean', 'taskbean.db') };
 
   before(() => {
     mkdirSync(TEST_PROJECT, { recursive: true });

@@ -39,6 +39,8 @@ const { packageCommand } = await import('../src/commands/package.js');
 const { upgradeCommand } = await import('../src/commands/upgrade.js');
 const { uninstallCommand } = await import('../src/commands/uninstall.js');
 const { updateSkillCommand } = await import('../src/commands/update-skill.js');
+const { rebuildCommand } = await import('../src/commands/rebuild.js');
+const { migrateEventsCommand } = await import('../src/commands/migrate-events.js');
 
 // Fire-and-forget update check. Internally throttled to once per 24h, silent
 // in CI / non-TTY / when TASKBEAN_NO_UPGRADE_NOTICE=1.
@@ -48,15 +50,15 @@ process.on('exit', maybePrintSkillDriftNotice);
 
 program
   .name('bean')
-  .description('🫘 Task management CLI for AI coding agents')
+  .description('🫘 Outcomes and execution evidence for AI-assisted coding work.\nTaskbean links delivered outcomes to session evidence for standups and reports.\nPlanner and To Do own commitments; Copilot sessions are evidence, not tasks.')
   .version(VERSION)
   .enablePositionalOptions();
 
-// === Agent Contract (3 commands) ===
+// === Outcomes ===
 
 program
   .command('add')
-  .description('Log a task')
+  .description('Record one outcome (use --key to update instead of duplicating)')  .helpGroup('Outcomes:')
   .argument('<title>', 'Task title/description')
   .option('--key <key>', 'Stable key for upsert (prevents duplicates)')
   .option('--agent <name>', 'Coding agent: copilot | claude-code | codex | opencode')
@@ -67,7 +69,7 @@ program
 
 program
   .command('done')
-  .description('Mark a task as complete')
+  .description('Mark an outcome delivered')  .helpGroup('Outcomes:')
   .argument('<id>', 'Task ID or position number')
   .option('--json', 'Output as JSON')
   .option('--project <path>', 'Override project path')
@@ -76,7 +78,7 @@ program
 program
   .command('list')
   .alias('ls')
-  .description('List tasks')
+  .description('List outcomes')  .helpGroup('Outcomes:')
   .option('--status <status>', 'Filter by status (pending, in_progress, done, blocked)')
   .option('--all', 'Show tasks across all projects')
   .option('--count', 'Show counts instead of task list')
@@ -87,7 +89,7 @@ program
 
 program
   .command('edit')
-  .description('Edit a task')
+  .description('Correct an outcome record (title, notes, tags, due date)')  .helpGroup('Outcomes:')
   .argument('<id>', 'Task ID or position number')
   .option('--title <title>', 'New title')
   .option('--priority <level>', 'Priority: high, medium, low, none')
@@ -101,7 +103,7 @@ program
 program
   .command('remove')
   .alias('rm')
-  .description('Delete a task')
+  .description('Delete an outcome record')  .helpGroup('Outcomes:')
   .argument('<id>', 'Task ID or position number')
   .option('--json', 'Output as JSON')
   .option('--project <path>', 'Override project path')
@@ -109,7 +111,7 @@ program
 
 program
   .command('start')
-  .description('Mark a task as in-progress')
+  .description('Mark an outcome in progress')  .helpGroup('Outcomes:')
   .argument('<id>', 'Task ID or position number')
   .option('--json', 'Output as JSON')
   .option('--project <path>', 'Override project path')
@@ -117,7 +119,7 @@ program
 
 program
   .command('block')
-  .description('Mark a task as blocked')
+  .description('Mark an outcome blocked')  .helpGroup('Outcomes:')
   .argument('<id>', 'Task ID or position number')
   .option('--json', 'Output as JSON')
   .option('--project <path>', 'Override project path')
@@ -125,28 +127,29 @@ program
 
 program
   .command('remind')
-  .description('Create a task with a reminder')
+  .description('Create a record with a reminder (legacy)')  .helpGroup('Legacy:')
   .argument('<title>', 'Reminder text')
   .argument('<when>', 'When to remind (e.g. "tomorrow", "friday 9am", "in 2 hours")')
   .option('--json', 'Output as JSON')
   .option('--project <path>', 'Override project path')
   .action(remindCommand);
 
-// === Human Contract (2 commands) ===
+// === Reports and evidence ===
 
 program
   .command('report')
-  .description('Generate a report')
+  .description('Report outcomes, blockers, evidence, and agent usage')  .helpGroup('Reports:')
   .option('--date <range>', 'Date range: today, yesterday, week, all', 'today')
   .option('--format <fmt>', 'Output format: md, json, csv', 'md')
   .option('--include-chronicle', 'Include Chronicle/session evidence and pending suggestions')
   .option('--json', 'Shorthand for --format json')
+  .option('--compact', 'Compact JSON for agents: delivered with evidence, blocked with reasons, in progress')
   .option('--project <path>', 'Filter to specific project')
   .action(reportCommand);
 
 const chronicle = program
   .command('chronicle')
-  .description('Inspect and reconcile Chronicle/session evidence');
+  .description('Collect and review evidence from local Copilot session metadata')  .helpGroup('Evidence and review:');
 
 chronicle
   .command('doctor')
@@ -156,9 +159,12 @@ chronicle
 
 chronicle
   .command('reconcile')
-  .description('Create review-only suggestions from local Chronicle/session evidence')
-  .option('--since <date>', 'Start date, YYYY-MM-DD (default: 7 days ago)')
+  .description('Propose outcomes from local Chronicle/session evidence for review')
+  .option('--since <date>', 'Start date, YYYY-MM-DD (default: 7 days ago, or the observe checkpoint)')
   .option('--until <date>', 'End date, YYYY-MM-DD (default: today)')
+  .option('--observe', 'Observe only: collect proposals and advance a checkpoint; never auto-link or change tasks')
+  .option('--limit <n>', 'Maximum sessions to scan in one run (observe default: 200)')
+  .option('--exclude-session <ids>', 'Comma-separated session ids to skip (observe also skips the current agent session)')
   .option('--json', 'Output as JSON')
   .action(chronicleReconcileCommand);
 
@@ -208,7 +214,7 @@ chronicle
 
 program
   .command('track')
-  .description('Set up a project for tracking')
+  .description('Set up a project for tracking')  .helpGroup('Projects and setup:')
   .option('--path <path>', 'Project path (default: cwd)')
   .option('--global', 'Install agent skill globally (~/.agents/skills/)')
   .option('--name <name>', 'Project display name')
@@ -217,9 +223,9 @@ program
 
 program
   .command('install')
-  .description('Install agent skill into a project')
+  .description('Install agent skill into a project')  .helpGroup('Projects and setup:')
   .option('--global', 'Install globally (~/)')
-  .option('--agent <agent>', 'Target agent: copilot, claude, codex, opencode, all')
+  .option('--agent <agent>', 'Target agent: copilot, claude-code (or claude), codex, opencode, all, auto')
   .option('--force', 'Overwrite existing SKILL.md (upgrade)')
   .option('--codex-sandbox', 'Also configure ~/.codex/config.toml to allow Codex to write to ~/.taskbean (use with --agent codex or --agent all)')
   .option('--json', 'Output as JSON')
@@ -227,14 +233,14 @@ program
 
 program
   .command('untrack')
-  .description('Stop tracking a project')
+  .description('Stop tracking a project')  .helpGroup('Projects and setup:')
   .option('--path <path>', 'Project path (default: cwd)')
   .option('--json', 'Output as JSON')
   .action(untrackCommand);
 
 const projects = program
   .command('projects')
-  .description('List and manage tracked projects')
+  .description('List and manage tracked projects')  .helpGroup('Projects and setup:')
   .passThroughOptions()
   .option('--json', 'Output as JSON')
   .option('--all', 'Include hidden projects')
@@ -276,7 +282,7 @@ projects
 
 program
   .command('package')
-  .description('Generate exportable work packages with session context')
+  .description('Generate exportable work packages with session context')  .helpGroup('Reports:')
   .argument('[id]', 'Task ID (optional — omit for batch mode)')
   .option('--date <range>', 'Date range: today, yesterday, week, all', 'today')
   .option('--format <fmt>', 'Output format: md, json', 'md')
@@ -286,13 +292,13 @@ program
 
 program
   .command('serve')
-  .description('Start the taskbean PWA server')
+  .description('Start the local web dashboard server (legacy)')  .helpGroup('Legacy:')
   .option('--port <port>', 'Port to listen on', '3000')
   .action(serveCommand);
 
 program
   .command('upgrade')
-  .description('Upgrade taskbean to the latest release')
+  .description('Upgrade taskbean to the latest release')  .helpGroup('Maintenance:')
   .option('--check', 'Report status only, do not install')
   .option('-y, --yes', 'Skip confirmation prompt')
   .option('--dry-run', 'Print the planned action and exit without changes')
@@ -302,7 +308,7 @@ program
 
 program
   .command('uninstall')
-  .description('Remove taskbean artifacts from this system')
+  .description('Remove taskbean artifacts from this system')  .helpGroup('Maintenance:')
   .option('--keep-data', 'Keep ~/.taskbean/ (preserves your task database)')
   .option('--scan [dir]', 'Scan filesystem for manually installed skill files')
   .option('--dry-run', 'Print what would be removed without doing it')
@@ -312,8 +318,23 @@ program
   .action(uninstallCommand);
 
 program
+  .command('rebuild')
+  .description('Replay project events and check or rebuild the project cache')  .helpGroup('Maintenance:')
+  .option('--write', 'Write the project cache from the event history (refused if history differs from the ledger)')
+  .option('--project <path>', 'Project path (default: cwd)')
+  .option('--json', 'Output as JSON')
+  .action(rebuildCommand);
+
+program
+  .command('migrate-events')
+  .description('Synthesize events for older tasks missing from project history')  .helpGroup('Maintenance:')
+  .option('--project <path>', 'Project path (default: cwd)')
+  .option('--json', 'Output as JSON')
+  .action(migrateEventsCommand);
+
+program
   .command('update-skill')
-  .description('Detect and refresh stale on-disk taskbean SKILL.md copies')
+  .description('Detect and refresh stale on-disk taskbean SKILL.md copies')  .helpGroup('Maintenance:')
   .option('--apply', 'Rewrite stale copies in place (default: report only)')
   .option('--project', 'Only scan project-scoped skill dirs (cwd)')
   .option('--global', 'Only scan global/user-scoped skill dirs (~)')

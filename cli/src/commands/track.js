@@ -1,7 +1,9 @@
 import { writeFileSync, existsSync, rmSync } from 'fs';
 import { resolve, basename, join } from 'path';
-import { run, getRow, ensureProject } from '../data/store.js';
-import { resolveProject } from '../data/project.js';
+import { run, getRow, ensureProject, ensureProjectAlias, findProjectByPath } from '../data/store.js';
+import { ensureProjectUuid, resolveProject } from '../data/project.js';
+import { canonicalCwd } from '../data/attribution.js';
+import { appendEvent } from '../data/events.js';
 import { installCommand } from './install.js';
 import { PROJECT_SKILL_DIRS } from '../data/skill-dirs.js';
 
@@ -14,10 +16,10 @@ export function trackCommand(opts) {
 
   const targetPath = opts.path || process.cwd();
   const project = resolveProject(targetPath);
-  ensureProject(project.path, project.name);
+  const projectId = ensureProject(project.path, project.name);
 
   // Mark as tracked
-  run('UPDATE projects SET tracked = 1 WHERE path = ?', [project.path]);
+  run('UPDATE projects SET tracked = 1 WHERE id = ?', [projectId]);
 
   // Auto-create .taskbean.json if missing
   const configPath = resolve(project.path, '.taskbean.json');
@@ -26,12 +28,23 @@ export function trackCommand(opts) {
     writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
   }
 
+  const projectUuid = project.projectUuid || ensureProjectUuid(project.path);
+  ensureProjectAlias(projectUuid, canonicalCwd(project.path));
+  run('UPDATE projects SET project_uuid = ? WHERE id = ?', [projectUuid, projectId]);
+  appendEvent({
+    projectPath: project.path,
+    projectUuid,
+    projectName: project.name,
+    type: 'project.track',
+    payload: { schemaVersion: 1, cwdAtTrack: process.cwd() },
+  });
+
   // Auto-install agent skill into the project
   const originalCwd = process.cwd();
   try {
     process.chdir(project.path);
     installCommand({ json: opts.json, global: false });
-    run('UPDATE projects SET skill_installed = 1 WHERE path = ?', [project.path]);
+    run('UPDATE projects SET skill_installed = 1 WHERE id = ?', [projectId]);
   } catch (e) {
     if (!opts.json) {
       console.error(`⚠️  Could not install agent skill: ${e.message}`);
@@ -41,7 +54,7 @@ export function trackCommand(opts) {
   }
 
   if (opts.json) {
-    const proj = getRow('SELECT * FROM projects WHERE path = ?', [project.path]);
+    const proj = getRow('SELECT * FROM projects WHERE id = ?', [projectId]);
     console.log(JSON.stringify(proj));
   } else {
     console.log(`📍 Now tracking: ${project.name} (${project.path})`);
@@ -52,7 +65,7 @@ export function untrackCommand(opts) {
   const targetPath = opts.path || process.cwd();
   const project = resolveProject(targetPath);
 
-  const existing = getRow('SELECT * FROM projects WHERE path = ?', [project.path]);
+  const existing = findProjectByPath(project.path);
   if (!existing) {
     if (opts.json) {
       console.log(JSON.stringify({ error: 'not_found', message: `Project not tracked: ${project.path}` }));

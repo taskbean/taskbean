@@ -74,6 +74,16 @@ function timeExpr(columns) {
   return `COALESCE(${found.map(quoteIdent).join(', ')})`;
 }
 
+// Latest-change time, used as the observe-mode cursor so sessions that keep
+// working after a previous run are re-read and their evidence refreshed.
+function changeExpr(columns) {
+  const candidates = ['updated_at', 'timestamp', 'created_at', 'started_at'];
+  const found = candidates.filter(name => columns.includes(name));
+  if (!found.length) return null;
+  if (found.length === 1) return quoteIdent(found[0]);
+  return `COALESCE(${found.map(quoteIdent).join(', ')})`;
+}
+
 function orderByExisting(columns, candidates) {
   return candidates
     .filter(name => columns.includes(name))
@@ -92,11 +102,12 @@ function readRows(db, sql, params = []) {
 }
 
 function refsForSession(db, sessionId) {
-  if (!hasTable(db, 'session_refs')) return { prRefs: [], issueRefs: [] };
+  const none = { prRefs: [], issueRefs: [], commitRefs: [] };
+  if (!hasTable(db, 'session_refs')) return none;
   const cols = tableColumns(db, 'session_refs');
-  if (!cols.includes('session_id')) return { prRefs: [], issueRefs: [] };
+  if (!cols.includes('session_id')) return none;
   if (!['ref_value', 'value', 'ref'].some(name => cols.includes(name))) {
-    return { prRefs: [], issueRefs: [] };
+    return none;
   }
   const order = orderByExisting(cols, ['created_at', 'ref_type', 'type', 'ref_value', 'value', 'ref']);
   const orderClause = order ? ` ORDER BY ${order}` : '';
@@ -111,18 +122,20 @@ function refsForSession(db, sessionId) {
       [sessionId]
     );
   } catch {
-    return { prRefs: [], issueRefs: [] };
+    return none;
   }
   const prRefs = [];
   const issueRefs = [];
+  const commitRefs = [];
   for (const row of rows) {
     const type = String(row.type || '').toLowerCase();
     const value = String(row.value || '').trim();
     if (!value) continue;
-    if (type.includes('pr') || type.includes('pull')) prRefs.push(value);
+    if (type.includes('commit')) commitRefs.push(value);
+    else if (type.includes('pr') || type.includes('pull')) prRefs.push(value);
     else if (type.includes('issue')) issueRefs.push(value);
   }
-  return { prRefs: [...new Set(prRefs)], issueRefs: [...new Set(issueRefs)] };
+  return { prRefs: [...new Set(prRefs)], issueRefs: [...new Set(issueRefs)], commitRefs: [...new Set(commitRefs)] };
 }
 
 function filesForSession(db, sessionId) {
@@ -438,11 +451,27 @@ function suggestionTitle(session, summary) {
   return title || `Review Copilot session ${String(session.sessionId).slice(0, 8)}`;
 }
 
-function readSessions(db, since, until) {
+function readSessions(db, since, until, options = {}) {
   if (!hasTable(db, 'sessions')) return [];
   const cols = tableColumns(db, 'sessions');
   const when = timeExpr(cols);
   if (!when) return [];
+  const idCol = ['id', 'native_id', 'session_id'].find(name => cols.includes(name));
+  const changed = changeExpr(cols) || when;
+  const observe = Boolean(options.observe);
+  const windowExpr = observe ? changed : when;
+  const where = [`date(${windowExpr}) BETWEEN ? AND ?`];
+  const params = [since, until];
+  if (observe && options.cursor?.last_changed_at && idCol) {
+    where.push(`(${changed} > ? OR (${changed} = ? AND ${quoteIdent(idCol)} > ?))`);
+    params.push(options.cursor.last_changed_at, options.cursor.last_changed_at, options.cursor.last_session_id || '');
+  }
+  const order = observe ? 'changed_at, sessionId' : 'occurred_at, sessionId';
+  let limitSql = '';
+  if (Number.isInteger(options.limit)) {
+    limitSql = ' LIMIT ?';
+    params.push(options.limit);
+  }
 
   const rows = readRows(
     db,
@@ -452,11 +481,12 @@ function readSessions(db, since, until) {
             ${selectExpr(cols, ['branch', 'git_branch'], 'branch')},
             ${selectExpr(cols, ['title'], 'title')},
             ${selectExpr(cols, ['summary'], 'summary')},
-            ${when} AS occurred_at
+            ${when} AS occurred_at,
+            ${changed} AS changed_at
        FROM sessions
-      WHERE date(${when}) BETWEEN ? AND ?
-      ORDER BY occurred_at, sessionId`,
-    [since, until]
+      WHERE ${where.join(' AND ')}
+      ORDER BY ${order}${limitSql}`,
+    params
   );
 
   return rows
@@ -496,6 +526,7 @@ function buildSuggestion(db, session) {
       branch: session.branch || null,
       pr_refs: refs.prRefs,
       issue_refs: refs.issueRefs,
+      commit_refs: refs.commitRefs,
       files_changed: files,
       summary,
       confidence,
@@ -533,28 +564,64 @@ function sameSuggestion(existing, suggestion) {
     && (existing.occurred_at || null) === (suggestion.occurred_at || null);
 }
 
+// Stored as NULL when a session has no commit refs, so replays of older rows stay no-ops.
+function commitRefsColumn(refs) {
+  return refs?.length ? JSON.stringify(refs) : null;
+}
+
 function sameEvidence(existing, evidence) {
   return existing.repo === evidence.repo
     && existing.project_path === evidence.project_path
     && existing.branch === evidence.branch
     && existing.pr_refs === JSON.stringify(evidence.pr_refs)
     && existing.issue_refs === JSON.stringify(evidence.issue_refs)
+    && commitRefsColumn(evidence.commit_refs) === (existing.commit_refs ?? null)
     && existing.files_changed === JSON.stringify(evidence.files_changed)
     && existing.summary === evidence.summary
     && Number(existing.confidence) === evidence.confidence
     && (existing.occurred_at || null) === (evidence.occurred_at || null);
 }
 
-function persistSuggestions(suggestions) {
+function compareCursor(a, b) {
+  const at = String(a?.last_changed_at || '');
+  const bt = String(b?.last_changed_at || '');
+  if (at !== bt) return at < bt ? -1 : 1;
+  const ai = String(a?.last_session_id || '');
+  const bi = String(b?.last_session_id || '');
+  if (ai === bi) return 0;
+  return ai < bi ? -1 : 1;
+}
+
+function readCheckpoint(taskbean) {
+  return taskbean.prepare(
+    'SELECT source, last_changed_at, last_session_id, runs, last_run_at, updated_at FROM reconciliation_checkpoints WHERE source = ?'
+  ).get(SOURCE) || null;
+}
+
+function serializeCheckpoint(row) {
+  if (!row) return null;
+  return {
+    source: row.source,
+    last_changed_at: row.last_changed_at,
+    last_session_id: row.last_session_id,
+    runs: Number(row.runs || 0),
+    last_run_at: row.last_run_at,
+  };
+}
+
+function persistSuggestions(suggestions, options = {}) {
   const taskbean = getDb();
   const now = new Date().toISOString();
   const counts = { created: 0, updated: 0, linked: 0 };
   const ids = [];
+  const observe = Boolean(options.observe);
+  let checkpoint = null;
 
   taskbean.exec('BEGIN IMMEDIATE');
   try {
-    for (const suggestion of suggestions) {
-      const autoLink = findAutoLinkForSuggestion(taskbean, suggestion);
+    for (const [index, suggestion] of suggestions.entries()) {
+      // Observe-only runs never decide anything: no auto-link, no todo writes.
+      const autoLink = observe ? null : findAutoLinkForSuggestion(taskbean, suggestion);
       const autoLinkedTodoId = autoLink?.todoId || null;
       const existing = taskbean.prepare(
         'SELECT * FROM reconciliation_suggestions WHERE evidence_key = ?'
@@ -646,8 +713,8 @@ function persistSuggestions(suggestions) {
         taskbean.prepare(`
           INSERT INTO task_evidence (
             id, todo_id, suggestion_id, source, source_session_id, repo, project_path, branch,
-            pr_refs, issue_refs, files_changed, summary, confidence, occurred_at, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            pr_refs, issue_refs, commit_refs, files_changed, summary, confidence, occurred_at, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           e.id,
           allowedAutoLinkedTodoId,
@@ -659,6 +726,7 @@ function persistSuggestions(suggestions) {
           e.branch,
           JSON.stringify(e.pr_refs),
           JSON.stringify(e.issue_refs),
+          commitRefsColumn(e.commit_refs),
           JSON.stringify(e.files_changed),
           e.summary,
           e.confidence,
@@ -674,6 +742,7 @@ function persistSuggestions(suggestions) {
                  branch = ?,
                  pr_refs = ?,
                  issue_refs = ?,
+                 commit_refs = ?,
                  files_changed = ?,
                  summary = ?,
                  confidence = ?,
@@ -685,6 +754,7 @@ function persistSuggestions(suggestions) {
           e.branch,
           JSON.stringify(e.pr_refs),
           JSON.stringify(e.issue_refs),
+          commitRefsColumn(e.commit_refs),
           JSON.stringify(e.files_changed),
           e.summary,
           e.confidence,
@@ -698,6 +768,31 @@ function persistSuggestions(suggestions) {
       }
 
       ids.push(suggestionId);
+      options.onPersistStep?.({ index, suggestionId });
+    }
+
+    if (options.cursor) {
+      const current = readCheckpoint(taskbean);
+      const advance = !current || compareCursor(options.cursor, current) > 0;
+      taskbean.prepare(`
+        INSERT INTO reconciliation_checkpoints (source, last_changed_at, last_session_id, runs, last_run_at, updated_at)
+        VALUES (?, ?, ?, 1, ?, ?)
+        ON CONFLICT(source) DO UPDATE SET
+          last_changed_at = CASE WHEN ? THEN excluded.last_changed_at ELSE last_changed_at END,
+          last_session_id = CASE WHEN ? THEN excluded.last_session_id ELSE last_session_id END,
+          runs = runs + 1,
+          last_run_at = excluded.last_run_at,
+          updated_at = excluded.updated_at
+      `).run(
+        SOURCE,
+        options.cursor.last_changed_at,
+        options.cursor.last_session_id,
+        now,
+        now,
+        advance ? 1 : 0,
+        advance ? 1 : 0
+      );
+      checkpoint = readCheckpoint(taskbean);
     }
 
     taskbean.exec('COMMIT');
@@ -713,21 +808,89 @@ function persistSuggestions(suggestions) {
         ORDER BY created_at, id`
     ).all(...ids)
     : [];
-  return { ...counts, suggestions: rows.map(serializeSuggestion) };
+  return { ...counts, suggestions: rows.map(serializeSuggestion), checkpoint: serializeCheckpoint(checkpoint) };
+}
+
+const OBSERVE_DEFAULT_LIMIT = 200;
+const MAX_LIMIT = 1000;
+const OBSERVE_MAX_WINDOW_DAYS = 31;
+const SELF_SESSION_ENV = ['COPILOT_CLI_SESSION_ID', 'TASKBEAN_NATIVE_SESSION_ID'];
+
+function parseLimit(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_LIMIT) {
+    throw new Error(`--limit must be an integer from 1 to ${MAX_LIMIT}`);
+  }
+  return n;
+}
+
+function parseExcludes(value, observe) {
+  const raw = Array.isArray(value) ? value : value ? [value] : [];
+  const ids = raw.flatMap(v => String(v).split(',')).map(s => s.trim()).filter(Boolean);
+  if (observe) {
+    // Never treat the run that is doing the observing as evidence of work.
+    for (const name of SELF_SESSION_ENV) {
+      const id = String(process.env[name] || '').trim();
+      if (id) ids.push(id);
+    }
+  }
+  return new Set(ids);
+}
+
+function daysBetween(since, until) {
+  return Math.round((Date.parse(`${until}T00:00:00Z`) - Date.parse(`${since}T00:00:00Z`)) / 86400000);
+}
+
+function shiftDate(value, days) {
+  const d = new Date(`${value}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return isoDate(d);
+}
+
+function observeWindow(opts, checkpoint, notes) {
+  if (opts.since) {
+    const window = dateWindow(opts);
+    if (daysBetween(window.since, window.until) > OBSERVE_MAX_WINDOW_DAYS) {
+      throw new Error(`observe mode scans at most ${OBSERVE_MAX_WINDOW_DAYS} days; narrow --since/--until`);
+    }
+    return { ...window, useCursor: false };
+  }
+  const base = dateWindow({ until: opts.until });
+  const cursorDate = String(checkpoint?.last_changed_at || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cursorDate)) return { ...base, useCursor: false };
+  const floor = shiftDate(base.until, -OBSERVE_MAX_WINDOW_DAYS);
+  if (cursorDate < floor) {
+    notes.push(`checkpoint is older than ${OBSERVE_MAX_WINDOW_DAYS} days; changes before ${floor} were not scanned`);
+    return { since: floor, until: base.until, useCursor: false };
+  }
+  if (cursorDate > base.until) return { since: base.until, until: base.until, useCursor: true };
+  return { since: cursorDate, until: base.until, useCursor: true };
 }
 
 export function reconcileChronicleSessions(opts = {}) {
-  const { since, until } = dateWindow(opts);
+  const observe = Boolean(opts.observe);
+  const mode = observe ? 'observe' : 'review';
+  const limit = parseLimit(opts.limit, observe ? OBSERVE_DEFAULT_LIMIT : undefined);
+  const excludes = parseExcludes(opts.excludeSession, observe);
+  const notes = [];
+  const priorCheckpoint = observe ? serializeCheckpoint(readCheckpoint(getDb())) : null;
+  const { since, until, useCursor } = observe ? observeWindow(opts, priorCheckpoint, notes) : { ...dateWindow(opts), useCursor: false };
   const capabilities = discoverChronicleCapabilities(opts);
+  const observeFields = observe
+    ? { window_basis: 'change_time', checkpoint: priorCheckpoint, has_more: false, excluded: 0, notes }
+    : {};
   const unavailable = (reason) => ({
     available: false,
     reason,
+    mode,
     since,
     until,
     counts: { discovered: 0, created: 0, updated: 0, linked: 0, pending: 0 },
     suggestions: [],
     evidence: [],
     limitations: capabilities.limitations,
+    ...observeFields,
   });
 
   if (capabilities.localSessionStore.status !== 'available') {
@@ -740,13 +903,31 @@ export function reconcileChronicleSessions(opts = {}) {
   let sessionDb;
   try {
     sessionDb = openSessionStore(opts);
-    const sessions = readSessions(sessionDb, since, until);
+    const scanned = readSessions(sessionDb, since, until, {
+      observe,
+      cursor: useCursor ? priorCheckpoint : null,
+      limit: Number.isInteger(limit) ? limit + 1 : undefined,
+    });
+    const hasMore = Number.isInteger(limit) && scanned.length > limit;
+    const window = hasMore ? scanned.slice(0, limit) : scanned;
+    const sessions = window.filter(s => !excludes.has(s.sessionId));
     const suggestions = sessions.map(session => buildSuggestion(sessionDb, session));
-    const persisted = persistSuggestions(suggestions);
+    const last = window[window.length - 1];
+    const cursor = !observe
+      ? null
+      : last
+        ? { last_changed_at: last.changed_at, last_session_id: last.sessionId }
+        : priorCheckpoint;
+    const persisted = persistSuggestions(suggestions, {
+      observe,
+      cursor,
+      onPersistStep: opts.onPersistStep,
+    });
     const pending = persisted.suggestions.filter(s => s.state === 'pending').length;
-    return {
+    const result = {
       available: true,
       reason: null,
+      mode,
       since,
       until,
       counts: {
@@ -757,9 +938,24 @@ export function reconcileChronicleSessions(opts = {}) {
         pending,
       },
       suggestions: persisted.suggestions,
-      evidence: suggestions.map(s => s.evidence),
+      evidence: suggestions.map(s => {
+        const { commit_refs, ...evidence } = s.evidence;
+        return evidence;
+      }),
       limitations: capabilities.limitations,
     };
+    if (observe) {
+      Object.assign(result, {
+        window_basis: 'change_time',
+        checkpoint: persisted.checkpoint || priorCheckpoint,
+        has_more: hasMore,
+        excluded: window.length - sessions.length,
+        notes,
+      });
+    } else if (hasMore) {
+      result.has_more = true;
+    }
+    return result;
   } finally {
     if (sessionDb) {
       try { sessionDb.close(); } catch {}

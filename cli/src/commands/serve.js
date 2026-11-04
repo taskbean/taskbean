@@ -3,6 +3,8 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { getDb, allRows, getRow, run } from '../data/store.js';
+import { recordTaskCreation, recordTaskEvents } from '../data/task-events.js';
+import { recordCompletion, clearCompletion } from '../data/completions.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PWA_PATH = join(__dirname, '..', '..', 'pwa', 'index.html');
@@ -59,8 +61,17 @@ function handleApi(req, res) {
     }
     readBody(req).then(body => {
       const data = JSON.parse(body);
-      if (data.completed !== undefined) {
-        run('UPDATE todos SET completed = ? WHERE id = ?', [data.completed ? 1 : 0, id]);
+      if (data.completed !== undefined && Boolean(data.completed) !== Boolean(existing.completed)) {
+        const completed = data.completed ? 1 : 0;
+        run('UPDATE todos SET completed = ?, status = ? WHERE id = ?', [completed, completed ? 'done' : 'pending', id]);
+        const updated = getRow('SELECT * FROM todos WHERE id = ?', [id]);
+        if (completed) recordCompletion(id);
+        else clearCompletion(id);
+        if (completed) {
+          recordTaskEvents(null, updated, [{ type: 'task.complete', payload: { taskId: id } }]);
+        } else {
+          recordTaskCreation(null, updated, undefined, { reopened: true });
+        }
       }
       const task = getRow('SELECT * FROM todos WHERE id = ?', [id]);
       res.writeHead(200);
@@ -115,4 +126,5 @@ export function serveCommand(opts) {
     console.log(`   API: http://localhost:${port}/api/projects`);
     console.log(`   Press Ctrl+C to stop`);
   });
+  return server;
 }

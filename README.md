@@ -12,8 +12,7 @@
 [![Website](https://img.shields.io/badge/site-taskbean.ai-E8863C)](https://taskbean.ai)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows)](https://www.microsoft.com/windows)
-[![PWA](https://img.shields.io/badge/install-PWA-5A0FC8?logo=pwa)](https://web.dev/progressive-web-apps/)
-[![Foundry Local](https://img.shields.io/badge/AI-Foundry%20Local-742774?logo=microsoft)](https://github.com/microsoft/foundry-local)
+[![GitHub Copilot plugin](https://img.shields.io/badge/GitHub%20Copilot-plugin-24292F?logo=github)](docs/copilot-plugin.md)
 
 </div>
 
@@ -21,16 +20,15 @@
 
 ## What is taskbean?
 
-A local-first task manager for developers whose day job involves a coding agent. Two halves, one SQLite file:
+A local-first task ledger for developers whose day job involves a coding agent, packaged as a GitHub Copilot plugin. Three parts, one SQLite file:
 
-| | CLI (`cli/`) | Desktop app (`app/`) |
-|---|---|---|
-| **For** | The agent (Copilot, Claude, Codex, OpenCode) | You |
-| **Does** | Logs tasks as the agent works | Dashboard, chat, reminders, reports |
-| **How** | `bean add "fix auth bug"` → `bean done` | PWA with Foundry Local on-device inference |
-| **Tech** | Node.js, commander, SQLite | FastAPI + Express, Foundry Local SDK, vanilla JS PWA |
+| | CLI (`cli/`) | Agent Skill (`.agents/skills/taskbean`) | Dashboard canvas (`extensions/taskbean-dashboard`) |
+|---|---|---|---|
+| **For** | Agents and scripts | The agent | You, inside the GitHub Copilot app |
+| **Does** | Stores outcomes and evidence, builds reports | Tells the agent when to record one outcome, correct it, or report | Board, quick add, start/block/complete, session/PR links, observe-only evidence, weekly report |
+| **Tech** | Node.js, commander, SQLite | Agent Skills spec | Copilot SDK canvas, loopback UI |
 
-Both halves read and write `~/.taskbean/taskbean.db`. The agent does the typing; you do the reviewing. Nothing leaves the machine.
+All parts read and write `~/.taskbean/taskbean.db`. The agent does the typing; you do the reviewing. Nothing leaves the machine.
 
 ```mermaid
 flowchart LR
@@ -42,16 +40,20 @@ flowchart LR
 
     CLI["<b>bean</b> CLI<br/><i>add · done · report</i>"]
     DB[("SQLite<br/>~/.taskbean/taskbean.db")]
-    APP["Desktop App (PWA)<br/><i>bean serve</i>"]
-    AI["Foundry Local<br/><i>optional · on-device AI</i>"]
+    CANVAS["Dashboard canvas<br/><i>GitHub Copilot app</i>"]
 
-    A1 & A2 & A3 -->|"Skill auto-logs"| CLI
+    A1 & A2 & A3 -->|"Skill records outcomes"| CLI
     CLI -->|write| DB
-    DB -->|read| APP
-    APP <-->|"chat · voice · reminders"| AI
+    CANVAS -->|"bean --json"| CLI
 ```
 
 ## Quick start
+
+### GitHub Copilot plugin
+
+Taskbean 0.7 brings the Agent Skill and Dashboard canvas into one Copilot plugin.
+The CLI remains an explicit prerequisite.
+See [installation, compatibility and migration](docs/copilot-plugin.md).
 
 ### CLI (agent skill)
 
@@ -89,22 +91,6 @@ Pick **one** install channel and stick with it. If you install via both `npm` an
 
 **Recovering from a double install.** `which bean` (POSIX) / `where bean` (Windows) lists every `bean` on `PATH` when you have more than one. Remove whichever you don't want — `npm uninstall -g taskbean` for the npm path, or `rm "$(command -v bean)"` for the standalone binary — then re-run `bean upgrade` to bring the remaining one up to date.
 
-### Desktop app
-
-```bash
-cd app
-
-# Portless-backed local HTTPS URL (Node 24+)
-npm install
-npm run dev
-# Open https://taskbean.localhost
-
-# Or manual Python backend fallback
-pip install -r agent/requirements.txt
-python agent/main.py
-# Open http://127.0.0.1:8275
-```
-
 ## Project structure
 
 ```
@@ -118,7 +104,9 @@ taskbean/
 │   ├── evals/              # Agent skill evaluation scenarios
 │   └── package.json        # npm: "taskbean"
 │
-├── app/                    # Human-facing desktop PWA
+├── extensions/taskbean-dashboard/  # Copilot dashboard canvas (plugin)
+├── plugin.json             # Copilot plugin manifest
+├── app/                    # Legacy desktop PWA (not part of the plugin)
 │   ├── agent/              # Python backend (FastAPI + Foundry Local)
 │   ├── public/             # Single-file vanilla JS PWA
 │   ├── tests/              # Playwright test suite (21 specs)
@@ -159,28 +147,13 @@ bean install --agent all                     # install everywhere
 
 ### The CLI is the robot
 
-12 commands (`add`, `done`, `list`, `report`, `track`, `untrack`, `projects`, `install`, `init`, `package`, `serve`, `upgrade`). The agent picks up the skill, notices a task is underway, and calls `bean add`. It closes with `bean done`. You never type any of this. You open the dashboard at the end of the day and there it is: a receipt of what got built.
+Run `bean --help` for the grouped command list (outcomes, evidence and review, reports, projects, maintenance, legacy). The skill records one outcome per meaningful result, with `bean add --key` and `bean done` or `bean block`. Commands, retries, branches and sub-steps are evidence, not separate tasks. Planner and To Do own commitments, owners and dates; Copilot sessions and plan mode are execution evidence. Manual `bean edit`/`bean done` calls are corrections. Turn hooks (#115) are not shipped yet.
 
-### The app is the human side
+### The dashboard is the human side
 
-A single-page PWA behind a FastAPI backend (`agent/main.py`). All inference is on-device through [Microsoft Foundry Local](https://github.com/microsoft/foundry-local), which auto-routes to the best silicon on the box: NPU via VitisAI, GPU via MIGraphX or CUDA, CPU as a fallback. Pick a model (Phi-4, Qwen, Llama, anything in the Foundry Local catalog) and switch between them from the settings panel.
+The Taskbean Dashboard canvas runs inside the GitHub Copilot app. It reads the ledger through `bean --json`, groups work by workspace, and lets you add, start, block and complete tasks or generate a weekly report without leaving the session. **Resume**, **Review blocker** and **Open PR** start a system link launcher; they cannot confirm navigation and never send a message or change a task. **Collect evidence (observe only)** gathers pending suggestions from local session metadata and shows them as not accepted outcomes. See [installation](docs/copilot-plugin.md).
 
-Chat rides the [AG-UI protocol](https://github.com/ag-ui-protocol/ag-ui) over SSE. Tools like `add_task`, `set_reminder`, and `complete_task` run on the backend while state deltas stream back to the UI, so you watch tasks appear as the model invents them.
-
-What's in the box:
-
-- Natural-language task management with multi-turn tool calling 💬
-- Reminders that fire real Windows toasts ⏰
-- Recurring task templates 🔄
-- In-app model switching across the Foundry Local catalog 🧠
-- Voice input 🎤
-- Paste a meeting transcript or drop a PDF; MCP + MarkItDown chew it into tasks 📎
-- Four coffee-themed palettes: Dark Roast, Latte, Espresso, Black Coffee ☕
-- A nerd panel with live OpenTelemetry traces (Events, Metrics, Traces, Logs tabs) plus a bundled [Jaeger v2](http://localhost:16686) waterfall 🤓
-- Multi-agent usage tracking that watches Copilot CLI, Claude Code, Codex, and OpenCode session files on disk and attributes each task to the session that spawned it 📊
-- Chronicle-backed weekly reviews that reconcile local session metadata into a review inbox before anything becomes a task 🧾
-
-On that last one: only metadata and aggregate token counts are stored. Prompts, tool outputs, and code blocks stay in the agent's own logs where you left them. Toggle agents on and off under **Settings → Agents**.
+> The older desktop PWA in `app/` (FastAPI, Foundry Local) is no longer part of Taskbean's direction. Its code stays in the repository but it is not shipped, tested or supported by the plugin.
 
 ### Chronicle/session diagnostics
 
@@ -196,6 +169,15 @@ Daily reconciliation:
 bean chronicle reconcile --since 2026-04-20 --until 2026-04-20 --json
 bean chronicle suggestions --status pending --json
 ```
+
+Observe-only collection:
+
+```bash
+bean chronicle reconcile --observe --json             # resume from the last checkpoint
+bean chronicle reconcile --observe --limit 50 --json  # bound one run
+```
+
+`--observe` never auto-links, creates, completes or edits tasks. It writes only pending suggestions, unlinked evidence and a checkpoint, so a replay or a run after a crash creates no duplicates. It skips the current agent session (and any `--exclude-session` ids) so its own runs do not become evidence.
 
 Each pending suggestion includes a stable `id`, `suggested_title`, `evidence_summary`, `confidence`, source session ids, `occurred_at` work time, and privacy-safe evidence metadata such as branch, refs, and changed file paths. Exact session matches to existing Taskbean tasks are auto-linked as evidence and suppressed from the pending inbox; fuzzy matches still stay pending for human review. A suggestion is not a task until you explicitly approve it or link it:
 
@@ -222,14 +204,6 @@ Privacy and availability:
 - Chronicle/session evidence is local-machine evidence. If local Copilot session files are missing, enterprise policy blocks access, the user opts out, or the work happened only in a cloud agent with no local sync, reconciliation returns an unavailable/zero-suggestion JSON result and reports continue from canonical Taskbean tasks.
 - Business/Enterprise retention and sync behavior is controlled outside Taskbean. Use `bean chronicle doctor --json` to see what this machine can access, and treat unknown remote-sync state as a limitation rather than proof that no work happened.
 - Privacy hardening follow-up: when Chronicle schemas evolve, keep reconciliation's metadata/summary allowlist and doctor diagnostics' raw-content denylist in sync so new fields do not weaken the metadata-only guarantee.
-
-### How updates work
-
-Back the PWA is a service worker. When a new version is deployed, the SW enters a waiting state and the app shows a **"A new version of taskbean is available"** toast with **Reload** / **Dismiss**. Reload activates the new SW; Dismiss snoozes the toast until the next update. Long-lived tabs also poll `/api/version` on focus so a backend restart (from `git pull` + `launch.ps1`) triggers the same toast even if the service worker didn't change.
-
-### How the two halves stay honest
-
-Same SQLite file, different lanes. The CLI writes `todos`. The Python backend writes `agent_sessions`, `agent_turns`, and `agent_sources` by tailing each agent's log files forward-only, with rotation detection so a crashed scan never double-counts. When a new session appears within 30 minutes of a fresh task in the same cwd, it backfills `todos.agent_session_id` so every todo can be traced back to the run that created it.
 
 ## Storage
 

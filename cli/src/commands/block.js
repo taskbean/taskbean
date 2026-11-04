@@ -1,6 +1,7 @@
 import { getRow, run } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { resolveTask } from '../data/resolve-task.js';
+import { recordTaskEvents } from '../data/task-events.js';
 
 export function blockCommand(id, opts) {
   const project = resolveProject(opts.project);
@@ -31,6 +32,7 @@ export function blockCommand(id, opts) {
   );
 
   const updated = getRow('SELECT * FROM todos WHERE id = ?', [task.id]);
+  recordTaskEvents(project, updated, [{ type: 'task.block', payload: { taskId: task.id } }]);
   if (opts.json) {
     console.log(JSON.stringify(updated));
   } else {

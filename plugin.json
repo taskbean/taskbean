@@ -1,0 +1,12 @@
+{
+  "name": "taskbean",
+  "version": "0.7.0",
+  "description": "Local Taskbean task capture and dashboard for GitHub Copilot. Requires the Taskbean CLI.",
+  "author": {
+    "name": "Nick Brady"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/taskbean/taskbean",
+  "skills": ".agents/skills",
+  "extensions": ["extensions/taskbean-dashboard"]
+}

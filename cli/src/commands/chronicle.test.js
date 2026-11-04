@@ -9,6 +9,7 @@ import { discoverChronicleCapabilities } from '../chronicle/adapter.js';
 
 const BEAN = join(process.cwd(), 'bin', 'taskbean.js');
 const TEST_HOME = join(tmpdir(), 'taskbean-chronicle-test-' + Date.now());
+const TEST_PROJECT = join(TEST_HOME, 'synthetic-project', 'taskbean');
 
 function fixtureHome(name) {
   const home = join(TEST_HOME, name);
@@ -104,7 +105,7 @@ function createSessionStore(home, opts = {}) {
         id, cwd, repository, host_type, branch, summary, created_at, updated_at
       ) VALUES (
         's1',
-        'C:\\\\dev\\\\taskbean',
+        '${TEST_PROJECT.replaceAll("'", "''")}',
         'taskbean/taskbean',
         'copilot-cli',
         'chronicle-weekly-reviews-prd',
@@ -142,7 +143,7 @@ function beanJson(args, home) {
   const output = execFileSync(process.execPath, [BEAN, ...args, '--json'], {
     encoding: 'utf-8',
     cwd: TEST_HOME,
-    env: { ...process.env, HOME: home, USERPROFILE: home },
+    env: fixtureEnv(home),
   }).trim();
   return JSON.parse(output);
 }
@@ -151,7 +152,7 @@ function beanOutput(args, home) {
   return execFileSync(process.execPath, [BEAN, ...args], {
     encoding: 'utf-8',
     cwd: TEST_HOME,
-    env: { ...process.env, HOME: home, USERPROFILE: home },
+    env: fixtureEnv(home),
   });
 }
 
@@ -159,10 +160,15 @@ function beanJsonError(args, home) {
   const result = spawnSync(process.execPath, [BEAN, ...args, '--json'], {
     encoding: 'utf-8',
     cwd: TEST_HOME,
-    env: { ...process.env, HOME: home, USERPROFILE: home },
+    env: fixtureEnv(home),
   });
   assert.notEqual(result.status, 0);
   return JSON.parse(result.stdout.trim());
+}
+
+function fixtureEnv(home) {
+  const data = join(home, '.taskbean');
+  return { ...process.env, HOME: home, USERPROFILE: home, TASKBEAN_HOME: data, TASKBEAN_DB: join(data, 'taskbean.db') };
 }
 
 function taskbeanDb(home) {
@@ -365,7 +371,7 @@ describe('bean chronicle reconcile', () => {
       'add',
       'Chronicle reconciliation review inbox',
       '--project',
-      'C:\\dev\\taskbean',
+      TEST_PROJECT,
     ], home);
     const db = taskbeanDb(home);
     try {
@@ -380,7 +386,7 @@ describe('bean chronicle reconcile', () => {
         'copilot',
         'older-session',
         'taskbean/taskbean',
-        'C:\\dev\\taskbean',
+        TEST_PROJECT,
         'chronicle-weekly-reviews-prd',
         JSON.stringify([]),
         JSON.stringify([]),
@@ -426,8 +432,8 @@ describe('bean chronicle reconcile', () => {
   it('keeps ambiguous non-exact matches pending when runner-up is too close', () => {
     const home = fixtureHome('reconcile-ambiguous-match');
     createSessionStore(home, { withSession: true });
-    const first = beanJson(['add', 'Chronicle reconciliation review inbox', '--project', 'C:\\dev\\taskbean'], home);
-    const second = beanJson(['add', 'Chronicle reconciliation review inbox duplicate', '--project', 'C:\\dev\\taskbean'], home);
+    const first = beanJson(['add', 'Chronicle reconciliation review inbox', '--project', TEST_PROJECT], home);
+    const second = beanJson(['add', 'Chronicle reconciliation review inbox duplicate', '--project', TEST_PROJECT], home);
     const db = taskbeanDb(home);
     try {
       for (const [idx, task] of [first, second].entries()) {
@@ -442,7 +448,7 @@ describe('bean chronicle reconcile', () => {
           'copilot',
           `older-session-${idx}`,
           'taskbean/taskbean',
-          'C:\\dev\\taskbean',
+          TEST_PROJECT,
           'chronicle-weekly-reviews-prd',
           JSON.stringify(['#41']),
           JSON.stringify(['#40']),
@@ -482,7 +488,7 @@ describe('bean chronicle reconcile', () => {
       'add',
       'Chronicle reconciliation review inbox',
       '--project',
-      'C:\\dev\\taskbean',
+      TEST_PROJECT,
     ], home);
 
     const db = taskbeanDb(home);
@@ -498,7 +504,7 @@ describe('bean chronicle reconcile', () => {
         'copilot',
         'older-session',
         'taskbean/taskbean',
-        'C:\\dev\\taskbean',
+        TEST_PROJECT,
         'chronicle-weekly-reviews-prd',
         JSON.stringify([]),
         JSON.stringify([]),
@@ -699,6 +705,12 @@ describe('bean chronicle suggestions decisions', () => {
 });
 
 describe('bean report --include-chronicle', () => {
+  const legacyEvidenceKeys = [
+    'id', 'todo_id', 'suggestion_id', 'source', 'source_session_id', 'repo',
+    'project_path', 'branch', 'pr_refs', 'issue_refs', 'files_changed', 'summary',
+    'confidence', 'occurred_at', 'created_at',
+  ].sort();
+
   it('keeps canonical reports working when Chronicle data is unavailable', () => {
     const home = fixtureHome('report-unavailable');
     const task = beanJson(['add', 'Canonical task without Chronicle'], home);
@@ -742,6 +754,7 @@ describe('bean report --include-chronicle', () => {
     assert.equal(report.chronicle.evidence[0].todo_id, approved.task.id);
     assert.deepEqual(report.chronicle.evidence[0].issue_refs, ['#40']);
     assert.deepEqual(report.chronicle.evidence[0].pr_refs, ['#41']);
+    assert.equal(Object.hasOwn(report.chronicle.evidence[0], 'commit_refs'), false, 'evidence shape unchanged without commits');
     assert.equal(report.chronicle.pendingSuggestions.length, 0);
     assert.equal(JSON.stringify(report).includes('DO-NOT-EXPORT'), false);
 
@@ -770,6 +783,108 @@ describe('bean report --include-chronicle', () => {
     assert.match(md, /## Needs review/);
     assert.match(md, /Implemented Chronicle reconciliation review inbox/);
   });
+
+  it('captures commit refs from Copilot session_refs as evidence and replays idempotently', () => {
+    const home = fixtureHome('report-commit-evidence');
+    createSessionStore(home, { withSession: true });
+    const store = new DatabaseSync(copilotPath(home, 'session-store.db'));
+    store.exec(`INSERT INTO session_refs (session_id, ref_type, ref_value, turn_index, created_at)
+      VALUES ('s1', 'commit', 'abc1234', 1, '2026-01-01T10:07:00Z')`);
+    store.close();
+    const first = beanJson(['chronicle', 'reconcile', '--since', '2026-01-01', '--until', '2026-01-02'], home);
+    const second = beanJson(['chronicle', 'reconcile', '--since', '2026-01-01', '--until', '2026-01-02'], home);
+    assert.equal(second.counts.created, 0);
+    assert.equal(second.counts.updated, 0, 'replay is a no-op');
+    const reconcileKeys = legacyEvidenceKeys.filter(k => k !== 'todo_id' && k !== 'created_at');
+    for (const result of [first, second]) {
+      assert.deepEqual(Object.keys(result.evidence[0]).sort(), reconcileKeys, 'legacy reconcile evidence keys');
+    }
+    const suggestions = beanJson(['chronicle', 'suggestions'], home);
+    assert.deepEqual(Object.keys(suggestions.suggestions[0].evidence[0]).sort(), legacyEvidenceKeys);
+    const approved = beanJson(['chronicle', 'approve', first.suggestions[0].id, '--title', 'Commit-backed outcome', '--status', 'done'], home);
+    assert.deepEqual(Object.keys(approved.suggestion.evidence[0]).sort(), legacyEvidenceKeys, 'legacy approve evidence keys');
+    const db = taskbeanDb(home);
+    assert.deepEqual(JSON.parse(db.prepare('SELECT commit_refs FROM task_evidence WHERE todo_id = ?').get(approved.task.id).commit_refs), ['abc1234']);
+    db.close();
+
+    const report = beanJson(['report', '--date', 'all', '--include-chronicle'], home);
+    const ev = report.chronicle.evidence.find(e => e.todo_id === approved.task.id);
+    assert.deepEqual(Object.keys(ev).sort(), legacyEvidenceKeys, 'legacy report evidence keys even with stored commits');
+    const formatJson = JSON.parse(beanOutput(['report', '--date', 'all', '--include-chronicle', '--format', 'json'], home));
+    assert.deepEqual(Object.keys(formatJson.chronicle.evidence[0]).sort(), legacyEvidenceKeys, '--format json matches --json');
+    assert.deepEqual(ev.pr_refs, ['#41']);
+    const md = beanOutput(['report', '--date', 'all', '--include-chronicle'], home);
+    assert.match(md, /Commit-backed outcome — .*evidence: PR #41; issue #40; commit abc1234; branch chronicle-weekly-reviews-prd; session \S*s1/);
+    assert.match(md.split('## Chronicle evidence')[1], /commit abc1234/, 'Chronicle evidence section lists the commit');
+    const compact = JSON.parse(beanOutput(['report', '--date', 'all', '--compact'], home));
+    const item = [...compact.delivered, ...compact.completedTimeUnknown].find(d => d.id === approved.task.id);
+    assert.deepEqual(item.evidence.commits, ['abc1234']);
+  });
+
+  for (const action of ['link', 'ignore', 'undo']) {
+    it(`keeps legacy ${action} JSON evidence keys with nonempty commits`, () => {
+      const home = fixtureHome(`commit-contract-${action}`);
+      createSessionStore(home, { withSession: true });
+      const store = new DatabaseSync(copilotPath(home, 'session-store.db'));
+      store.exec(`INSERT INTO session_refs (session_id, ref_type, ref_value, turn_index, created_at)
+        VALUES ('s1', 'commit', 'abc1234', 1, '2026-01-01T10:07:00Z')`);
+      store.close();
+      const reconciled = beanJson(['chronicle', 'reconcile', '--observe', '--since', '2026-01-01', '--until', '2026-01-02'], home);
+      assert.deepEqual(Object.keys(reconciled.evidence[0]).sort(), legacyEvidenceKeys.filter(k => k !== 'todo_id' && k !== 'created_at'), 'observe JSON evidence keys');
+      const id = reconciled.suggestions[0].id;
+      let args = ['chronicle', action, id];
+      if (action === 'link' || action === 'undo') {
+        const task = beanJson(['add', 'Synthetic linked outcome'], home);
+        if (action === 'link') {
+          args.push(task.id);
+        } else {
+          const db = taskbeanDb(home);
+          db.prepare("UPDATE reconciliation_suggestions SET state = 'linked', auto_linked = 1, linked_todo_id = ? WHERE id = ?").run(task.id, id);
+          db.prepare('UPDATE task_evidence SET todo_id = ? WHERE suggestion_id = ?').run(task.id, id);
+          db.close();
+        }
+      }
+      const result = beanJson(args, home);
+      assert.deepEqual(Object.keys(result.suggestion.evidence[0]).sort(), legacyEvidenceKeys);
+      const listed = beanJson(['chronicle', 'suggestions', '--status', result.suggestion.state], home);
+      assert.deepEqual(Object.keys(listed.suggestions[0].evidence[0]).sort(), legacyEvidenceKeys);
+      const db = taskbeanDb(home);
+      assert.deepEqual(JSON.parse(db.prepare('SELECT commit_refs FROM task_evidence WHERE suggestion_id = ?').get(id).commit_refs), ['abc1234']);
+      db.close();
+    });
+  }
+
+  for (const [tz, hour, minute] of [['America/Los_Angeles', 23, 30], ['Asia/Tokyo', 0, 30]]) {
+    it(`filters Chronicle suggestions by local day in ${tz}`, () => {
+      const home = fixtureHome(`report-chronicle-tz-${tz.replace('/', '-')}`);
+      const env = { ...fixtureEnv(home), TZ: tz };
+      const run = args => JSON.parse(execFileSync(process.execPath, [BEAN, ...args, '--json'], { encoding: 'utf-8', cwd: TEST_HOME, env }));
+      run(['chronicle', 'suggestions']);
+      const local = (dayShift) => execFileSync(process.execPath, ['-e',
+        `const n=new Date(); console.log(new Date(n.getFullYear(), n.getMonth(), n.getDate() + ${dayShift}, ${hour}, ${minute}).toISOString())`],
+      { env, encoding: 'utf-8' }).trim();
+      const todayIso = local(0);
+      const yesterdayIso = local(-1);
+      // The UTC date prefix differs from the local date at these times.
+      const localToday = execFileSync(process.execPath, ['-e',
+        'const n=new Date(); console.log(`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`)'],
+      { env, encoding: 'utf-8' }).trim();
+      assert.notEqual(todayIso.slice(0, 10), localToday);
+      const db = taskbeanDb(home);
+      const insert = db.prepare(`
+        INSERT INTO reconciliation_suggestions (
+          id, evidence_key, suggested_title, suggested_status, source_session_ids, evidence_summary,
+          confidence, state, occurred_at, created_at, updated_at
+        ) VALUES (?, ?, ?, 'pending', '[]', 'metadata only', 0.6, 'pending', ?, ?, ?)`);
+      insert.run('tz-today', 'tz-today', 'Local today suggestion', todayIso, todayIso, todayIso);
+      insert.run('tz-yesterday', 'tz-yesterday', 'Local yesterday suggestion', yesterdayIso, yesterdayIso, yesterdayIso);
+      db.close();
+      const today = run(['report', '--date', 'today', '--include-chronicle']);
+      assert.deepEqual(today.chronicle.pendingSuggestions.map(s => s.id), ['tz-today']);
+      const yesterday = run(['report', '--date', 'yesterday', '--include-chronicle']);
+      assert.deepEqual(yesterday.chronicle.pendingSuggestions.map(s => s.id), ['tz-yesterday']);
+    });
+  }
 
   it('filters pending suggestions by work time rather than reconcile time', () => {
     const home = fixtureHome('report-pending-work-time');

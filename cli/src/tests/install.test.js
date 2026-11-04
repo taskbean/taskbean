@@ -10,11 +10,16 @@ const BEAN = 'node ' + join(process.cwd(), 'bin', 'taskbean.js');
 const TEST_HOME = join(tmpdir(), 'taskbean-install-test-' + Date.now());
 const TEST_PROJECT = join(TEST_HOME, 'my-project');
 
+function fixtureEnv(home) {
+  const data = join(home, '.taskbean');
+  return { ...process.env, HOME: home, USERPROFILE: home, TASKBEAN_HOME: data, TASKBEAN_DB: join(data, 'taskbean.db') };
+}
+
 function bean(args, cwd = TEST_PROJECT) {
   try {
     return execSync(`${BEAN} ${args}`, {
       encoding: 'utf-8',
-      env: { ...process.env, HOME: TEST_HOME, USERPROFILE: TEST_HOME },
+      env: fixtureEnv(TEST_HOME),
       cwd,
     }).trim();
   } catch (e) {
@@ -153,7 +158,7 @@ describe('bean install', () => {
     try {
       execSync(`${BEAN} install --codex-sandbox --force --json`, {
         encoding: 'utf-8',
-        env: { ...process.env, HOME: TEST_HOME, USERPROFILE: TEST_HOME },
+        env: fixtureEnv(TEST_HOME),
         cwd: TEST_PROJECT,
       });
     } catch (e) {
@@ -302,6 +307,7 @@ describe('bean add/done/list with TASKBEAN_DB override', () => {
     const env = Object.assign({}, process.env, {
       HOME: DB_HOME,
       USERPROFILE: DB_HOME,
+      TASKBEAN_HOME: join(DB_HOME, '.taskbean'),
       TASKBEAN_DB: DB_PATH,
     });
     try {
@@ -336,7 +342,7 @@ describe('JSON output contract', () => {
     try {
       return execSync(`${BEAN} ${args}`, {
         encoding: 'utf-8',
-        env: { ...process.env, HOME: JSON_HOME, USERPROFILE: JSON_HOME },
+        env: fixtureEnv(JSON_HOME),
         cwd: JSON_PROJECT,
       }).trim();
     } catch (e) { if (e.stdout) return e.stdout.trim(); throw e; }

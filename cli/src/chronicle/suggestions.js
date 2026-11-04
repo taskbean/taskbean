@@ -3,6 +3,7 @@ import { basename, isAbsolute } from 'path';
 import { allRows, ensureProject, getDb, getRow, run } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { resolveTask } from '../data/resolve-task.js';
+import { recordTaskCreation } from '../data/task-events.js';
 
 const STATES = new Set(['pending', 'approved', 'linked', 'ignored']);
 const TASK_STATUSES = new Set(['pending', 'in_progress', 'blocked', 'done']);
@@ -46,7 +47,7 @@ function serializeSuggestion(row, evidence = []) {
     auto_linked: Boolean(row.auto_linked),
     decision_reason: row.decision_reason,
     decision_details: parseJsonObject(row.decision_details),
-    occurred_at: row.occurred_at,
+    occurred_at: row.occurred_at || row.created_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
     decided_at: row.decided_at,
@@ -69,7 +70,7 @@ function serializeEvidence(row) {
     files_changed: parseJsonArray(row.files_changed),
     summary: row.summary,
     confidence: Number(row.confidence),
-    occurred_at: row.occurred_at,
+    occurred_at: row.occurred_at || row.created_at,
     created_at: row.created_at,
   };
 }
@@ -177,9 +178,12 @@ function parseWorkDate(value) {
 }
 
 function createdAtForApproval(suggestion, evidenceRows, opts) {
+  const evidence = evidenceRows.find(row => row.occurred_at || row.created_at);
   return parseWorkDate(opts.workDate)
-    || evidenceRows.find(e => e.occurred_at)?.occurred_at
+    || evidence?.occurred_at
+    || evidence?.created_at
     || suggestion.occurred_at
+    || suggestion.created_at
     || new Date().toISOString();
 }
 
@@ -259,6 +263,7 @@ export function approveSuggestion(suggestionId, opts = {}) {
   }
 
   const task = getRow('SELECT * FROM todos WHERE id = ?', [todoId]);
+  recordTaskCreation(null, task);
   const updated = getRow('SELECT * FROM reconciliation_suggestions WHERE id = ?', [suggestion.id]);
   return {
     action: 'approve',
