@@ -1,6 +1,7 @@
 import { run } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { resolveTask } from '../data/resolve-task.js';
+import { recordTaskEvents } from '../data/task-events.js';
 
 export function removeCommand(id, opts) {
   const project = resolveProject(opts.project);
@@ -17,6 +18,7 @@ export function removeCommand(id, opts) {
   }
 
   run('DELETE FROM todos WHERE id = ?', [task.id]);
+  recordTaskEvents(project, task, [{ type: 'task.remove', payload: { taskId: task.id } }], { removed: true });
 
   if (opts.json) {
     console.log(JSON.stringify({ deleted: task.id, title: task.title }));

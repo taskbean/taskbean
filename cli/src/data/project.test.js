@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveProject } from './project.js';
-import { resolve, basename } from 'path';
+import { resolve, basename, join } from 'path';
+import { tmpdir } from 'os';
 
 test('--project with bare name does NOT join with cwd (regression: duplicate project rows)', () => {
   const cwdName = basename(process.cwd());
@@ -21,14 +22,16 @@ test('--project with bare name overrides the detected name only', () => {
 });
 
 test('--project with absolute path still uses that path verbatim', () => {
-  const abs = process.platform === 'win32' ? 'C:\\tmp\\foo' : '/tmp/foo';
+  const abs = join(tmpdir(), `taskbean-project-${process.pid}`, 'foo');
   const result = resolveProject(abs);
   assert.equal(result.path, resolve(abs));
   assert.equal(result.name, 'foo');
 });
 
 test('--project with Windows absolute path is portable across runners', () => {
-  const winPath = 'C:\\dev\\taskbean';
+  const winPath = process.platform === 'win32'
+    ? join(tmpdir(), `taskbean-project-${process.pid}`, 'taskbean')
+    : 'C:\\dev\\taskbean';
   const result = resolveProject(winPath);
   assert.equal(result.path, winPath);
   assert.equal(result.name, 'taskbean');

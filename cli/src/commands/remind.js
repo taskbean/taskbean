@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { getRow, run, ensureProject } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { parseDate } from '../data/parse-date.js';
+import { recordTaskCreation } from '../data/task-events.js';
 
 export function remindCommand(title, when, opts) {
   const project = resolveProject(opts.project);
@@ -27,6 +28,7 @@ export function remindCommand(title, when, opts) {
   );
 
   const task = getRow('SELECT * FROM todos WHERE id = ?', [id]);
+  recordTaskCreation(project, task);
   if (opts.json) {
     console.log(JSON.stringify(task));
   } else {

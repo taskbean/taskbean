@@ -1,6 +1,8 @@
 import { getRow, run } from '../data/store.js';
 import { resolveProject } from '../data/project.js';
 import { resolveTask } from '../data/resolve-task.js';
+import { recordTaskEvents } from '../data/task-events.js';
+import { recordCompletion } from '../data/completions.js';
 
 export function doneCommand(id, opts) {
   const project = resolveProject(opts.project);
@@ -27,8 +29,10 @@ export function doneCommand(id, opts) {
   }
 
   run('UPDATE todos SET completed = 1, status = \'done\' WHERE id = ?', [task.id]);
+  recordCompletion(task.id);
 
   const updated = getRow('SELECT * FROM todos WHERE id = ?', [task.id]);
+  recordTaskEvents(project, updated, [{ type: 'task.complete', payload: { taskId: task.id } }]);
   if (opts.json) {
     console.log(JSON.stringify(updated));
   } else {

@@ -102,11 +102,12 @@ function readRows(db, sql, params = []) {
 }
 
 function refsForSession(db, sessionId) {
-  if (!hasTable(db, 'session_refs')) return { prRefs: [], issueRefs: [] };
+  const none = { prRefs: [], issueRefs: [], commitRefs: [] };
+  if (!hasTable(db, 'session_refs')) return none;
   const cols = tableColumns(db, 'session_refs');
-  if (!cols.includes('session_id')) return { prRefs: [], issueRefs: [] };
+  if (!cols.includes('session_id')) return none;
   if (!['ref_value', 'value', 'ref'].some(name => cols.includes(name))) {
-    return { prRefs: [], issueRefs: [] };
+    return none;
   }
   const order = orderByExisting(cols, ['created_at', 'ref_type', 'type', 'ref_value', 'value', 'ref']);
   const orderClause = order ? ` ORDER BY ${order}` : '';
@@ -121,18 +122,20 @@ function refsForSession(db, sessionId) {
       [sessionId]
     );
   } catch {
-    return { prRefs: [], issueRefs: [] };
+    return none;
   }
   const prRefs = [];
   const issueRefs = [];
+  const commitRefs = [];
   for (const row of rows) {
     const type = String(row.type || '').toLowerCase();
     const value = String(row.value || '').trim();
     if (!value) continue;
-    if (type.includes('pr') || type.includes('pull')) prRefs.push(value);
+    if (type.includes('commit')) commitRefs.push(value);
+    else if (type.includes('pr') || type.includes('pull')) prRefs.push(value);
     else if (type.includes('issue')) issueRefs.push(value);
   }
-  return { prRefs: [...new Set(prRefs)], issueRefs: [...new Set(issueRefs)] };
+  return { prRefs: [...new Set(prRefs)], issueRefs: [...new Set(issueRefs)], commitRefs: [...new Set(commitRefs)] };
 }
 
 function filesForSession(db, sessionId) {
@@ -523,6 +526,7 @@ function buildSuggestion(db, session) {
       branch: session.branch || null,
       pr_refs: refs.prRefs,
       issue_refs: refs.issueRefs,
+      commit_refs: refs.commitRefs,
       files_changed: files,
       summary,
       confidence,
@@ -560,12 +564,18 @@ function sameSuggestion(existing, suggestion) {
     && (existing.occurred_at || null) === (suggestion.occurred_at || null);
 }
 
+// Stored as NULL when a session has no commit refs, so replays of older rows stay no-ops.
+function commitRefsColumn(refs) {
+  return refs?.length ? JSON.stringify(refs) : null;
+}
+
 function sameEvidence(existing, evidence) {
   return existing.repo === evidence.repo
     && existing.project_path === evidence.project_path
     && existing.branch === evidence.branch
     && existing.pr_refs === JSON.stringify(evidence.pr_refs)
     && existing.issue_refs === JSON.stringify(evidence.issue_refs)
+    && commitRefsColumn(evidence.commit_refs) === (existing.commit_refs ?? null)
     && existing.files_changed === JSON.stringify(evidence.files_changed)
     && existing.summary === evidence.summary
     && Number(existing.confidence) === evidence.confidence
@@ -703,8 +713,8 @@ function persistSuggestions(suggestions, options = {}) {
         taskbean.prepare(`
           INSERT INTO task_evidence (
             id, todo_id, suggestion_id, source, source_session_id, repo, project_path, branch,
-            pr_refs, issue_refs, files_changed, summary, confidence, occurred_at, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            pr_refs, issue_refs, commit_refs, files_changed, summary, confidence, occurred_at, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           e.id,
           allowedAutoLinkedTodoId,
@@ -716,6 +726,7 @@ function persistSuggestions(suggestions, options = {}) {
           e.branch,
           JSON.stringify(e.pr_refs),
           JSON.stringify(e.issue_refs),
+          commitRefsColumn(e.commit_refs),
           JSON.stringify(e.files_changed),
           e.summary,
           e.confidence,
@@ -731,6 +742,7 @@ function persistSuggestions(suggestions, options = {}) {
                  branch = ?,
                  pr_refs = ?,
                  issue_refs = ?,
+                 commit_refs = ?,
                  files_changed = ?,
                  summary = ?,
                  confidence = ?,
@@ -742,6 +754,7 @@ function persistSuggestions(suggestions, options = {}) {
           e.branch,
           JSON.stringify(e.pr_refs),
           JSON.stringify(e.issue_refs),
+          commitRefsColumn(e.commit_refs),
           JSON.stringify(e.files_changed),
           e.summary,
           e.confidence,
@@ -925,7 +938,10 @@ export function reconcileChronicleSessions(opts = {}) {
         pending,
       },
       suggestions: persisted.suggestions,
-      evidence: suggestions.map(s => s.evidence),
+      evidence: suggestions.map(s => {
+        const { commit_refs, ...evidence } = s.evidence;
+        return evidence;
+      }),
       limitations: capabilities.limitations,
     };
     if (observe) {

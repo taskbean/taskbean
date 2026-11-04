@@ -39,6 +39,8 @@ const { packageCommand } = await import('../src/commands/package.js');
 const { upgradeCommand } = await import('../src/commands/upgrade.js');
 const { uninstallCommand } = await import('../src/commands/uninstall.js');
 const { updateSkillCommand } = await import('../src/commands/update-skill.js');
+const { rebuildCommand } = await import('../src/commands/rebuild.js');
+const { migrateEventsCommand } = await import('../src/commands/migrate-events.js');
 
 // Fire-and-forget update check. Internally throttled to once per 24h, silent
 // in CI / non-TTY / when TASKBEAN_NO_UPGRADE_NOTICE=1.
@@ -141,6 +143,7 @@ program
   .option('--format <fmt>', 'Output format: md, json, csv', 'md')
   .option('--include-chronicle', 'Include Chronicle/session evidence and pending suggestions')
   .option('--json', 'Shorthand for --format json')
+  .option('--compact', 'Compact JSON for agents: delivered with evidence, blocked with reasons, in progress')
   .option('--project <path>', 'Filter to specific project')
   .action(reportCommand);
 
@@ -222,7 +225,7 @@ program
   .command('install')
   .description('Install agent skill into a project')  .helpGroup('Projects and setup:')
   .option('--global', 'Install globally (~/)')
-  .option('--agent <agent>', 'Target agent: copilot, claude, codex, opencode, all')
+  .option('--agent <agent>', 'Target agent: copilot, claude-code (or claude), codex, opencode, all, auto')
   .option('--force', 'Overwrite existing SKILL.md (upgrade)')
   .option('--codex-sandbox', 'Also configure ~/.codex/config.toml to allow Codex to write to ~/.taskbean (use with --agent codex or --agent all)')
   .option('--json', 'Output as JSON')
@@ -313,6 +316,21 @@ program
   .option('--force', 'Skip confirmation (alias for --yes)')
   .option('--json', 'Machine-readable output')
   .action(uninstallCommand);
+
+program
+  .command('rebuild')
+  .description('Replay project events and check or rebuild the project cache')  .helpGroup('Maintenance:')
+  .option('--write', 'Write the project cache from the event history (refused if history differs from the ledger)')
+  .option('--project <path>', 'Project path (default: cwd)')
+  .option('--json', 'Output as JSON')
+  .action(rebuildCommand);
+
+program
+  .command('migrate-events')
+  .description('Synthesize events for older tasks missing from project history')  .helpGroup('Maintenance:')
+  .option('--project <path>', 'Project path (default: cwd)')
+  .option('--json', 'Output as JSON')
+  .action(migrateEventsCommand);
 
 program
   .command('update-skill')

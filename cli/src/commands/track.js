@@ -1,7 +1,9 @@
 import { writeFileSync, existsSync, rmSync } from 'fs';
 import { resolve, basename, join } from 'path';
-import { run, getRow, ensureProject } from '../data/store.js';
-import { resolveProject } from '../data/project.js';
+import { run, getRow, ensureProject, ensureProjectAlias } from '../data/store.js';
+import { ensureProjectUuid, resolveProject } from '../data/project.js';
+import { canonicalCwd } from '../data/attribution.js';
+import { appendEvent } from '../data/events.js';
 import { installCommand } from './install.js';
 import { PROJECT_SKILL_DIRS } from '../data/skill-dirs.js';
 
@@ -25,6 +27,17 @@ export function trackCommand(opts) {
     const config = { name: opts.name || basename(project.path), version: 1 };
     writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
   }
+
+  const projectUuid = project.projectUuid || ensureProjectUuid(project.path);
+  ensureProjectAlias(projectUuid, canonicalCwd(project.path));
+  run('UPDATE projects SET project_uuid = ? WHERE path = ?', [projectUuid, project.path]);
+  appendEvent({
+    projectPath: project.path,
+    projectUuid,
+    projectName: project.name,
+    type: 'project.track',
+    payload: { schemaVersion: 1, cwdAtTrack: process.cwd() },
+  });
 
   // Auto-install agent skill into the project
   const originalCwd = process.cwd();

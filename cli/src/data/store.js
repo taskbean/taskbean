@@ -1,325 +1,341 @@
 import { DatabaseSync } from 'node:sqlite';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
+import { detectHost } from './host.js';
 
-const DB_DIR = process.env.TASKBEAN_HOME || join(homedir(), '.taskbean');
-const DB_PATH = process.env.TASKBEAN_DB || join(DB_DIR, 'taskbean.db');
+export function resolveDbPaths(env = process.env, getHost = detectHost, home = homedir()) {
+  if (env.TASKBEAN_DB) {
+    return { dir: dirname(env.TASKBEAN_DB), path: env.TASKBEAN_DB, redirected: false };
+  }
+  if (env.TASKBEAN_HOME) {
+    return { dir: env.TASKBEAN_HOME, path: join(env.TASKBEAN_HOME, 'taskbean.db'), redirected: false };
+  }
+  if (env.TASKBEAN_NO_WSL_REDIRECT === '1') {
+    const dir = join(home, '.taskbean');
+    return { dir, path: join(dir, 'taskbean.db'), redirected: false };
+  }
 
+  const host = getHost();
+  if (host.isWSL && host.windowsTaskbeanFromWSL) {
+    return {
+      dir: host.windowsTaskbeanFromWSL,
+      path: join(host.windowsTaskbeanFromWSL, 'taskbean.db'),
+      redirected: true,
+      windowsHome: host.windowsHomeFromWSL,
+    };
+  }
+  const dir = join(home, '.taskbean');
+  return { dir, path: join(dir, 'taskbean.db'), redirected: false };
+}
+
+const DB_LOCATION = resolveDbPaths();
+const DB_PATH = DB_LOCATION.path;
 let _db = null;
+
+function maybeShowWslNotice() {
+  if (!DB_LOCATION.redirected || process.env.TASKBEAN_QUIET === '1' || !process.stderr.isTTY) return;
+  const marker = join(DB_LOCATION.dir, '.wsl-notice-shown');
+  try {
+    writeFileSync(marker, `${new Date().toISOString()}\n`, { flag: 'wx' });
+  } catch (error) {
+    if (error.code === 'EEXIST') return;
+    console.error(`[taskbean] Could not save the WSL notice marker: ${error.message}`);
+  }
+  console.error(
+    `taskbean: WSL is using ${DB_LOCATION.windowsHome || '<windows-home>'}/.taskbean/. ` +
+    'Set TASKBEAN_NO_WSL_REDIRECT=1 to use the Linux home instead.'
+  );
+}
+
+function addMissingColumns(db, table, columns) {
+  const existing = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(row => row.name));
+  for (const [name, definition] of Object.entries(columns)) {
+    if (!existing.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  }
+}
 
 export function getDb() {
   if (_db) return _db;
+  mkdirSync(dirname(DB_PATH), { recursive: true });
 
-  // Ensure parent directory of the DB file exists
-  const dbParent = dirname(DB_PATH);
-  if (!existsSync(dbParent)) {
-    mkdirSync(dbParent, { recursive: true });
-  }
-
-  _db = new DatabaseSync(DB_PATH);
-  // Set the busy timeout first: the journal_mode pragma needs a lock and fails
-  // at once with "database is locked" while another process closes the WAL.
-  _db.exec('PRAGMA busy_timeout = 5000');
-  _db.exec('PRAGMA journal_mode = WAL');
-  _db.exec('PRAGMA synchronous = NORMAL');
-  _db.exec('PRAGMA foreign_keys = ON');
-
-  // Ensure todos table exists (same schema as the main PWA app)
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS todos (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      emoji TEXT,
-      due_date TEXT,
-      due_time TEXT,
-      completed INTEGER DEFAULT 0,
-      reminder INTEGER DEFAULT 0,
-      remind_at TEXT,
-      reminder_fired INTEGER DEFAULT 0,
-      source TEXT DEFAULT 'manual',
-      priority TEXT DEFAULT 'none',
-      notes TEXT,
-      tags TEXT DEFAULT '[]',
-      project TEXT,
-      upsert_key TEXT,
-      created_at TEXT NOT NULL
-    )
-  `);
-  // Add project/upsert_key columns if missing (migration for existing DBs)
-  try { _db.exec('ALTER TABLE todos ADD COLUMN project TEXT'); } catch {}
-  try { _db.exec('ALTER TABLE todos ADD COLUMN upsert_key TEXT'); } catch {}
-  try { _db.exec('ALTER TABLE todos ADD COLUMN session_id TEXT'); } catch {}
-  // Multi-agent attribution: which coding agent created the task and its native session id
-  try { _db.exec('ALTER TABLE todos ADD COLUMN agent TEXT'); } catch {}
-  try { _db.exec('ALTER TABLE todos ADD COLUMN agent_session_id TEXT'); } catch {}
-  // Stable project identity: canonical path set at write-time. `project`
-  // (the name) is not unique — two "app" repos would collide in backfill —
-  // so the Python backfill prefers this column when present.
-  try { _db.exec('ALTER TABLE todos ADD COLUMN project_path TEXT'); } catch {}
-  // Task lifecycle status: pending → in_progress → done, or pending → blocked
-  try { _db.exec("ALTER TABLE todos ADD COLUMN status TEXT DEFAULT 'pending'"); } catch {}
-  // Backfill status from completed for existing rows
-  try { _db.exec("UPDATE todos SET status = 'done' WHERE completed = 1 AND (status IS NULL OR status = 'pending')"); } catch {}
-  try { _db.exec("UPDATE todos SET status = 'pending' WHERE completed = 0 AND status IS NULL"); } catch {}
-  try { _db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_todos_upsert ON todos(project, upsert_key)'); } catch {}
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_todos_agent_session ON todos(agent, agent_session_id)'); } catch {}
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_todos_project_path ON todos(project_path)'); } catch {}
-
-  // One-time backfill of project_path for existing rows where project name
-  // resolves unambiguously to a single projects row. Leave NULL on collision.
+  const db = new DatabaseSync(DB_PATH);
+  let inTransaction = false;
   try {
-    _db.exec(`
-      UPDATE todos
-         SET project_path = (
-           SELECT p.path FROM projects p WHERE p.name = todos.project
-         )
-       WHERE project_path IS NULL
-         AND project IS NOT NULL
-         AND (SELECT COUNT(*) FROM projects p WHERE p.name = todos.project) = 1
+    db.exec('PRAGMA busy_timeout = 5000');
+    db.exec('PRAGMA foreign_keys = ON');
+    db.exec('BEGIN IMMEDIATE');
+    inTransaction = true;
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS todos (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        emoji TEXT,
+        due_date TEXT,
+        due_time TEXT,
+        completed INTEGER DEFAULT 0,
+        reminder INTEGER DEFAULT 0,
+        remind_at TEXT,
+        reminder_fired INTEGER DEFAULT 0,
+        source TEXT DEFAULT 'manual',
+        priority TEXT DEFAULT 'none',
+        notes TEXT,
+        tags TEXT DEFAULT '[]',
+        project TEXT,
+        upsert_key TEXT,
+        session_id TEXT,
+        agent TEXT,
+        agent_session_id TEXT,
+        project_path TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at TEXT NOT NULL
+      )
     `);
-  } catch {}
+    // Existing rows retain NULL status rather than being silently backfilled.
+    addMissingColumns(db, 'todos', {
+      project: 'TEXT',
+      upsert_key: 'TEXT',
+      session_id: 'TEXT',
+      agent: 'TEXT',
+      agent_session_id: 'TEXT',
+      project_path: 'TEXT',
+      status: 'TEXT',
+    });
 
-  // Keep projects table for skill-install tracking (CLI-only metadata)
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      path TEXT NOT NULL UNIQUE,
-      tracked INTEGER DEFAULT 0,
-      skill_installed INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now', 'localtime'))
-    )
-  `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        path TEXT NOT NULL UNIQUE,
+        tracked INTEGER DEFAULT 0,
+        skill_installed INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now', 'localtime')),
+        hidden INTEGER DEFAULT 0,
+        category TEXT,
+        project_uuid TEXT,
+        tasks_db_path TEXT
+      )
+    `);
+    addMissingColumns(db, 'projects', {
+      hidden: 'INTEGER DEFAULT 0',
+      category: 'TEXT DEFAULT NULL',
+      project_uuid: 'TEXT',
+      tasks_db_path: 'TEXT',
+    });
 
-  // Migrate: add hidden + category columns for project management
-  try { _db.exec('ALTER TABLE projects ADD COLUMN hidden INTEGER DEFAULT 0'); } catch {}
-  try { _db.exec("ALTER TABLE projects ADD COLUMN category TEXT DEFAULT NULL"); } catch {}
-
-  // One-time de-dupe of phantom doubled-segment project rows (e.g. from an
-  // older bug where `bean add --project <name>` resolved <name> relative to
-  // cwd and wrote `<cwd>/<name>` as project_path). Any row whose path is
-  // exactly `<other_row.path>/<name>` with the same name is a phantom —
-  // migrate its todos to the canonical path and delete the phantom row.
-  try {
-    const dupes = _db.prepare(`
-      SELECT p.id AS phantom_id, p.path AS phantom_path, p.name AS name,
-             c.path AS canonical_path,
-             c.tracked AS canonical_tracked, p.tracked AS phantom_tracked,
-             c.skill_installed AS canonical_skill, p.skill_installed AS phantom_skill
-        FROM projects p
-        JOIN projects c ON c.name = p.name AND c.id != p.id
-       WHERE p.path = c.path || '/' || p.name OR p.path = c.path || '\\' || p.name
-    `).all();
-    for (const d of dupes) {
-      _db.prepare('UPDATE todos SET project_path = ? WHERE project_path = ?')
-        .run(d.canonical_path, d.phantom_path);
-      // Preserve tracked / skill_installed flags — union of both rows.
-      _db.prepare(
-        'UPDATE projects SET tracked = ?, skill_installed = ? WHERE id = ?'
-      ).run(
-        d.canonical_tracked || d.phantom_tracked ? 1 : 0,
-        d.canonical_skill || d.phantom_skill ? 1 : 0,
-        _db.prepare('SELECT id FROM projects WHERE path = ?').get(d.canonical_path).id
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS project_aliases (
+        project_uuid TEXT NOT NULL,
+        host TEXT,
+        path TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+        PRIMARY KEY (project_uuid, path)
       );
-      _db.prepare('DELETE FROM projects WHERE id = ?').run(d.phantom_id);
+      CREATE TABLE IF NOT EXISTS agent_sessions (
+        id TEXT PRIMARY KEY,
+        agent TEXT NOT NULL,
+        native_id TEXT NOT NULL,
+        cwd TEXT,
+        project_id TEXT,
+        title TEXT,
+        model TEXT,
+        provider TEXT,
+        cli_version TEXT,
+        git_branch TEXT,
+        repository TEXT,
+        source_path TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        ingested_at TEXT NOT NULL,
+        UNIQUE (agent, native_id)
+      );
+    `);
+    addMissingColumns(db, 'agent_sessions', { repository: 'TEXT' });
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS agent_turns (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+        agent TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        occurred_at TEXT NOT NULL,
+        model TEXT,
+        provider TEXT,
+        input_tokens INTEGER DEFAULT 0,
+        cached_input_tokens INTEGER DEFAULT 0,
+        output_tokens INTEGER DEFAULT 0,
+        reasoning_tokens INTEGER DEFAULT 0,
+        total_tokens INTEGER DEFAULT 0,
+        tool_calls INTEGER DEFAULT 0,
+        finish_reason TEXT,
+        UNIQUE (session_id, seq)
+      );
+      CREATE TABLE IF NOT EXISTS agent_sources (
+        agent TEXT NOT NULL,
+        source_path TEXT NOT NULL,
+        last_offset INTEGER DEFAULT 0,
+        last_mtime INTEGER DEFAULT 0,
+        last_native_id TEXT,
+        scanned_at TEXT NOT NULL,
+        PRIMARY KEY (agent, source_path)
+      );
+      CREATE TABLE IF NOT EXISTS agent_settings (
+        agent TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        detected_at TEXT,
+        last_active_at TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS reconciliation_suggestions (
+        id TEXT PRIMARY KEY,
+        evidence_key TEXT NOT NULL UNIQUE,
+        suggested_title TEXT NOT NULL,
+        suggested_project TEXT,
+        suggested_status TEXT DEFAULT 'pending',
+        source_session_ids TEXT NOT NULL DEFAULT '[]',
+        evidence_summary TEXT NOT NULL,
+        confidence REAL NOT NULL DEFAULT 0,
+        state TEXT NOT NULL DEFAULT 'pending',
+        linked_todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+        auto_linked INTEGER DEFAULT 0,
+        decision_reason TEXT,
+        decision_details TEXT,
+        occurred_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        decided_at TEXT
+      );
+    `);
+    addMissingColumns(db, 'reconciliation_suggestions', {
+      occurred_at: 'TEXT',
+      auto_linked: 'INTEGER DEFAULT 0',
+      decision_reason: 'TEXT',
+      decision_details: 'TEXT',
+    });
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS task_evidence (
+        id TEXT PRIMARY KEY,
+        todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
+        suggestion_id TEXT REFERENCES reconciliation_suggestions(id) ON DELETE CASCADE,
+        source TEXT NOT NULL,
+        source_session_id TEXT NOT NULL,
+        repo TEXT,
+        project_path TEXT,
+        branch TEXT,
+        pr_refs TEXT NOT NULL DEFAULT '[]',
+        issue_refs TEXT NOT NULL DEFAULT '[]',
+        commit_refs TEXT,
+        files_changed TEXT NOT NULL DEFAULT '[]',
+        summary TEXT,
+        confidence REAL NOT NULL DEFAULT 0,
+        occurred_at TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE (source, source_session_id, suggestion_id)
+      );
+    `);
+    addMissingColumns(db, 'task_evidence', { occurred_at: 'TEXT', commit_refs: 'TEXT' });
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS todo_completions (
+        todo_id TEXT PRIMARY KEY REFERENCES todos(id) ON DELETE CASCADE,
+        completed_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS reconciliation_checkpoints (
+        source TEXT PRIMARY KEY,
+        last_changed_at TEXT,
+        last_session_id TEXT,
+        runs INTEGER NOT NULL DEFAULT 0,
+        last_run_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_todos_upsert ON todos(project, upsert_key);
+      CREATE INDEX IF NOT EXISTS idx_todos_agent_session ON todos(agent, agent_session_id);
+      CREATE INDEX IF NOT EXISTS idx_todos_project_path ON todos(project_path);
+      CREATE INDEX IF NOT EXISTS idx_projects_uuid ON projects(project_uuid);
+      CREATE INDEX IF NOT EXISTS idx_aliases_path ON project_aliases(path);
+      CREATE INDEX IF NOT EXISTS idx_sessions_agent_started ON agent_sessions(agent, started_at);
+      CREATE INDEX IF NOT EXISTS idx_sessions_project_started ON agent_sessions(project_id, started_at);
+      CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON agent_sessions(cwd);
+      CREATE INDEX IF NOT EXISTS idx_turns_agent_when ON agent_turns(agent, occurred_at);
+      CREATE INDEX IF NOT EXISTS idx_turns_model ON agent_turns(model);
+      CREATE INDEX IF NOT EXISTS idx_reconciliation_state_created ON reconciliation_suggestions(state, created_at);
+      CREATE INDEX IF NOT EXISTS idx_reconciliation_state_occurred ON reconciliation_suggestions(state, occurred_at);
+      CREATE INDEX IF NOT EXISTS idx_reconciliation_updated ON reconciliation_suggestions(updated_at);
+      CREATE INDEX IF NOT EXISTS idx_task_evidence_todo ON task_evidence(todo_id);
+      CREATE INDEX IF NOT EXISTS idx_task_evidence_suggestion ON task_evidence(suggestion_id);
+    `);
+
+    db.exec('COMMIT');
+    inTransaction = false;
+    maybeShowWslNotice();
+    _db = db;
+    return db;
+  } catch (error) {
+    if (inTransaction) {
+      try { db.exec('ROLLBACK'); } catch (rollbackError) {
+        console.error(`[taskbean] Database initialization rollback failed: ${rollbackError.message}`);
+      }
     }
-  } catch { /* safe no-op on first run / schema mismatch */ }
-
-  // ── Multi-agent usage tracking ──────────────────────────────────────────
-  // One row per detected session across all coding agents (Copilot, Claude
-  // Code, Codex, OpenCode). Written by the Python ingester and read by both
-  // halves of taskbean.
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS agent_sessions (
-      id TEXT PRIMARY KEY,
-      agent TEXT NOT NULL,
-      native_id TEXT NOT NULL,
-      cwd TEXT,
-      project_id TEXT,
-      title TEXT,
-      model TEXT,
-      provider TEXT,
-      cli_version TEXT,
-      git_branch TEXT,
-      repository TEXT,
-      source_path TEXT NOT NULL,
-      started_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      ingested_at TEXT NOT NULL,
-      UNIQUE (agent, native_id)
-    )
-  `);
-  try { _db.exec('ALTER TABLE agent_sessions ADD COLUMN repository TEXT'); } catch {}
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_agent_started ON agent_sessions(agent, started_at)'); } catch {}
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project_started ON agent_sessions(project_id, started_at)'); } catch {}
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON agent_sessions(cwd)'); } catch {}
-
-  // One row per "turn" — an assistant response with usage attached.
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS agent_turns (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
-      agent TEXT NOT NULL,
-      seq INTEGER NOT NULL,
-      occurred_at TEXT NOT NULL,
-      model TEXT,
-      provider TEXT,
-      input_tokens INTEGER DEFAULT 0,
-      cached_input_tokens INTEGER DEFAULT 0,
-      output_tokens INTEGER DEFAULT 0,
-      reasoning_tokens INTEGER DEFAULT 0,
-      total_tokens INTEGER DEFAULT 0,
-      tool_calls INTEGER DEFAULT 0,
-      finish_reason TEXT,
-      UNIQUE (session_id, seq)
-    )
-  `);
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_turns_agent_when ON agent_turns(agent, occurred_at)'); } catch {}
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_turns_model ON agent_turns(model)'); } catch {}
-
-  // Bookkeeping for incremental, resumable ingestion. Forward-only: on first
-  // scan of a new source, last_offset/last_mtime/last_native_id is pinned to
-  // the current state so we never backfill old history.
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS agent_sources (
-      agent TEXT NOT NULL,
-      source_path TEXT NOT NULL,
-      last_offset INTEGER DEFAULT 0,
-      last_mtime INTEGER DEFAULT 0,
-      last_native_id TEXT,
-      scanned_at TEXT NOT NULL,
-      PRIMARY KEY (agent, source_path)
-    )
-  `);
-
-  // Per-agent settings: { enabled, detected_at, last_active_at }.
-  // Auto-populated on first detection; user can toggle enabled via Settings UI.
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS agent_settings (
-      agent TEXT PRIMARY KEY,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      detected_at TEXT,
-      last_active_at TEXT,
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Chronicle-backed reconciliation. Suggestions are review-only proposals;
-  // they must not mutate todos until a later explicit approval/link action.
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS reconciliation_suggestions (
-      id TEXT PRIMARY KEY,
-      evidence_key TEXT NOT NULL UNIQUE,
-      suggested_title TEXT NOT NULL,
-      suggested_project TEXT,
-      suggested_status TEXT DEFAULT 'pending',
-      source_session_ids TEXT NOT NULL DEFAULT '[]',
-      evidence_summary TEXT NOT NULL,
-      confidence REAL NOT NULL DEFAULT 0,
-      state TEXT NOT NULL DEFAULT 'pending',
-      linked_todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
-      auto_linked INTEGER DEFAULT 0,
-      decision_reason TEXT,
-      decision_details TEXT,
-      occurred_at TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      decided_at TEXT
-    )
-  `);
-  try { _db.exec('ALTER TABLE reconciliation_suggestions ADD COLUMN occurred_at TEXT'); } catch {}
-  try { _db.exec('ALTER TABLE reconciliation_suggestions ADD COLUMN auto_linked INTEGER DEFAULT 0'); } catch {}
-  try { _db.exec('ALTER TABLE reconciliation_suggestions ADD COLUMN decision_reason TEXT'); } catch {}
-  try { _db.exec('ALTER TABLE reconciliation_suggestions ADD COLUMN decision_details TEXT'); } catch {}
-  try { _db.exec('UPDATE reconciliation_suggestions SET occurred_at = created_at WHERE occurred_at IS NULL'); } catch {}
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_reconciliation_state_created ON reconciliation_suggestions(state, created_at)'); } catch {}
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_reconciliation_state_occurred ON reconciliation_suggestions(state, occurred_at)'); } catch {}
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_reconciliation_updated ON reconciliation_suggestions(updated_at)'); } catch {}
-
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS task_evidence (
-      id TEXT PRIMARY KEY,
-      todo_id TEXT REFERENCES todos(id) ON DELETE SET NULL,
-      suggestion_id TEXT REFERENCES reconciliation_suggestions(id) ON DELETE CASCADE,
-      source TEXT NOT NULL,
-      source_session_id TEXT NOT NULL,
-      repo TEXT,
-      project_path TEXT,
-      branch TEXT,
-      pr_refs TEXT NOT NULL DEFAULT '[]',
-      issue_refs TEXT NOT NULL DEFAULT '[]',
-      files_changed TEXT NOT NULL DEFAULT '[]',
-      summary TEXT,
-      confidence REAL NOT NULL DEFAULT 0,
-      occurred_at TEXT,
-      created_at TEXT NOT NULL,
-      UNIQUE (source, source_session_id, suggestion_id)
-    )
-  `);
-  try { _db.exec('ALTER TABLE task_evidence ADD COLUMN occurred_at TEXT'); } catch {}
-  try { _db.exec('UPDATE task_evidence SET occurred_at = created_at WHERE occurred_at IS NULL'); } catch {}
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_task_evidence_todo ON task_evidence(todo_id)'); } catch {}
-  try { _db.exec('CREATE INDEX IF NOT EXISTS idx_task_evidence_suggestion ON task_evidence(suggestion_id)'); } catch {}
-
-  // Observe-only reconciliation cursor. Advanced in the same transaction as
-  // the suggestions it covers, so an interrupted run replays from the last
-  // committed position.
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS reconciliation_checkpoints (
-      source TEXT PRIMARY KEY,
-      last_changed_at TEXT,
-      last_session_id TEXT,
-      runs INTEGER NOT NULL DEFAULT 0,
-      last_run_at TEXT,
-      updated_at TEXT NOT NULL
-    )
-  `);
-
-  return _db;
+    db.close();
+    throw new Error(`Taskbean database initialization failed: ${error.message}`, { cause: error });
+  }
 }
 
 export function getDbPath() {
   return DB_PATH;
 }
 
-// Graceful shutdown: optimize stats, checkpoint WAL, close, null singleton.
-// Idempotent — safe to call even if DB was never opened.
 export function closeDb() {
   if (!_db) return;
-  try { _db.exec('PRAGMA optimize'); } catch {}
-  try { _db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch {}
   _db.close();
   _db = null;
 }
 
-// Query helpers
 export function allRows(sql, params = []) {
-  const db = getDb();
-  return db.prepare(sql).all(...params);
+  return getDb().prepare(sql).all(...params).map(normalizeTaskStatus);
 }
 
 export function getRow(sql, params = []) {
-  const db = getDb();
-  return db.prepare(sql).get(...params) || null;
+  return normalizeTaskStatus(getDb().prepare(sql).get(...params) || null);
+}
+
+export function normalizeTaskStatus(row) {
+  if (!row || !Object.hasOwn(row, 'completed') || !Object.hasOwn(row, 'status')) return row;
+  if (row.status == null || (row.completed && row.status === 'pending')) {
+    row.status = row.completed ? 'done' : 'pending';
+  }
+  return row;
 }
 
 export function run(sql, params = []) {
-  const db = getDb();
-  return db.prepare(sql).run(...params);
+  return getDb().prepare(sql).run(...params);
 }
 
-// Ensure a project exists and is tracked (so PWA + backfill see it), return its id
 export function ensureProject(projectPath, projectName) {
-  const existing = getRow('SELECT id, tracked FROM projects WHERE path = ?', [projectPath]);
-  if (existing) {
-    if (!existing.tracked) {
-      run('UPDATE projects SET tracked = 1 WHERE id = ?', [existing.id]);
-    }
-    return existing.id;
-  }
-
   const id = projectPath.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase().slice(-60);
-  run('INSERT INTO projects (id, name, path, tracked) VALUES (?, ?, ?, 1)', [id, projectName, projectPath]);
-  return id;
+  run('INSERT INTO projects (id, name, path, tracked) VALUES (?, ?, ?, 1) ON CONFLICT DO NOTHING',
+    [id, projectName, projectPath]);
+  const project = getRow('SELECT id, tracked FROM projects WHERE path = ?', [projectPath]);
+  if (!project) {
+    throw new Error(`Cannot register project ${projectPath}: its generated ID is already in use`);
+  }
+  if (!project.tracked) run('UPDATE projects SET tracked = 1 WHERE id = ?', [project.id]);
+  return project.id;
+}
+
+export function ensureProjectAlias(projectUuid, projectPath, host = null) {
+  run(`
+    INSERT INTO project_aliases (project_uuid, host, path, last_seen_at)
+    VALUES (?, ?, ?, datetime('now', 'localtime'))
+    ON CONFLICT (project_uuid, path) DO UPDATE SET
+      last_seen_at = excluded.last_seen_at,
+      host = COALESCE(excluded.host, host)
+  `, [projectUuid, host, projectPath]);
+}
+
+export function getAliasPathsForUuid(projectUuid) {
+  return allRows('SELECT path FROM project_aliases WHERE project_uuid = ?', [projectUuid])
+    .map(row => row.path);
 }

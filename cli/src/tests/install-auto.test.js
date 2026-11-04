@@ -98,12 +98,12 @@ describe('install --agent auto', () => {
     makeFakeBin(binDir, 'claude');
     const detected = detectAgents();
     assert.ok(detected.includes('copilot'));
-    assert.ok(detected.includes('claude'));
+    assert.ok(detected.includes('claude-code'));
     const { stdout } = captureOutput(() => {
       installCommand({ agent: 'auto', json: true });
     });
     const parsed = JSON.parse(stdout.trim());
-    assert.deepEqual(parsed.detected.sort(), ['claude', 'copilot']);
+    assert.deepEqual(parsed.detected.sort(), ['claude-code', 'copilot']);
     assert.ok(existsSync(join(projectDir, '.agents', 'skills', 'taskbean', 'SKILL.md')),
       '.agents skill exists (from copilot)');
     assert.ok(existsSync(join(projectDir, '.claude', 'skills', 'taskbean', 'SKILL.md')),

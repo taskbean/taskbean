@@ -19,7 +19,8 @@ function bean(args, opts = {}) {
   try {
     return execSync(`${BEAN} ${args}`, {
       encoding: 'utf-8',
-      env: { ...process.env, HOME: TEST_DIR, USERPROFILE: TEST_DIR },
+      env: { ...process.env, HOME: TEST_DIR, USERPROFILE: TEST_DIR,
+        TASKBEAN_HOME: join(TEST_DIR, '.taskbean'), TASKBEAN_DB: DB_PATH },
       cwd: opts.cwd || PROJECT_A,
       timeout: 15000,
     }).trim();

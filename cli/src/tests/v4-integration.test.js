@@ -12,7 +12,8 @@ function bean(args) {
   try {
     return execSync(`${BEAN} ${args}`, {
       encoding: 'utf-8',
-      env: { ...process.env, HOME: TEST_DIR, USERPROFILE: TEST_DIR },
+      env: { ...process.env, HOME: TEST_DIR, USERPROFILE: TEST_DIR,
+        TASKBEAN_HOME: join(TEST_DIR, '.taskbean'), TASKBEAN_DB: join(TEST_DIR, '.taskbean', 'taskbean.db') },
       cwd: TEST_DIR,
     }).trim();
   } catch (e) {
@@ -124,7 +125,8 @@ describe('v0.4 agent workflow E2E', () => {
     try {
       return execSync(`${BEAN} ${args}`, {
         encoding: 'utf-8',
-        env: { ...process.env, HOME: DIR2, USERPROFILE: DIR2 },
+        env: { ...process.env, HOME: DIR2, USERPROFILE: DIR2,
+          TASKBEAN_HOME: join(DIR2, '.taskbean'), TASKBEAN_DB: join(DIR2, '.taskbean', 'taskbean.db') },
         cwd: DIR2,
       }).trim();
     } catch (e) { if (e.stdout) return e.stdout.trim(); throw e; }

@@ -3,6 +3,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir, platform } from 'os';
 import { delimiter } from 'path';
+import { AGENT_REGISTRY, getAgent } from '../data/agents.js';
 
 // Absolute path (forward-slash form) to ~/.taskbean. TOML accepts forward
 // slashes on Windows so we avoid backslash escaping.
@@ -277,27 +278,17 @@ export function isOnPath(name, env = process.env) {
   return false;
 }
 
-// Agent binary names to probe for `--agent auto`.
-const AUTO_AGENTS = ['copilot', 'claude', 'codex', 'opencode'];
-
 export function detectAgents(env = process.env) {
-  return AUTO_AGENTS.filter((name) => isOnPath(name, env));
+  return AGENT_REGISTRY.filter(agent => isOnPath(agent.cliName, env)).map(agent => agent.id);
 }
 
 // Map an --agent value to the set of skill directories we should write into.
-// Keep in sync with the block comment in installCommand() below.
 function skillTargetsFor(agent, base) {
-  const targets = [];
-  if (!agent || agent === 'copilot' || agent === 'codex' || agent === 'opencode' || agent === 'all') {
-    targets.push(join(base, '.agents', 'skills', 'taskbean'));
-  }
-  if (agent === 'copilot' || agent === 'all') {
-    targets.push(join(base, '.github', 'skills', 'taskbean'));
-  }
-  if (agent === 'claude' || agent === 'all') {
-    targets.push(join(base, '.claude', 'skills', 'taskbean'));
-  }
-  return [...new Set(targets)];
+  if (!agent) return [join(base, '.agents', 'skills', 'taskbean')];
+  const dirs = agent === 'all'
+    ? AGENT_REGISTRY.flatMap(entry => entry.projectSkillDirs)
+    : getAgent(agent)?.projectSkillDirs || [];
+  return [...new Set(dirs)].map(dir => join(base, dir));
 }
 
 function installSkillForAgent(agent, base, force) {
@@ -320,8 +311,16 @@ function installSkillForAgent(agent, base, force) {
 export function installCommand(opts) {
   const isGlobal = opts.global;
   const force = opts.force || false;
-  let agent = opts.agent;
+  const agent = opts.agent;
   const base = isGlobal ? homedir() : process.cwd();
+
+  if (agent && agent !== 'all' && agent !== 'auto' && !getAgent(agent)) {
+    const message = `Unsupported agent: ${agent}`;
+    if (opts.json) console.error(JSON.stringify({ error: 'invalid_agent', message }));
+    else console.error(message);
+    process.exitCode = 2;
+    return;
+  }
 
   // --agent auto: probe PATH and install into every detected agent.
   if (agent === 'auto') {
@@ -365,13 +364,14 @@ export function installCommand(opts) {
   const results = [];
   for (const targetDir of uniqueTargets) {
     const targetFile = join(targetDir, 'SKILL.md');
-    if (existsSync(targetFile) && !force) {
+    const already = existsSync(targetFile);
+    if (already && !force) {
       results.push({ status: 'already_installed', path: targetFile });
       continue;
     }
     mkdirSync(targetDir, { recursive: true });
     writeFileSync(targetFile, SKILL_MD);
-    results.push({ status: force && existsSync(targetFile) ? 'updated' : 'installed', path: targetFile });
+    results.push({ status: already ? 'updated' : 'installed', path: targetFile });
   }
 
   // Optional: configure Codex sandbox to allow ~/.taskbean writes. Only
