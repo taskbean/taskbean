@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 _INGEST_LOCK = asyncio.Lock()
 _LAST_INGEST_AT: float = 0.0
 _MIN_INGEST_INTERVAL = 2.0  # seconds — rate-limit overlapping callers
+MINUTES_PER_TURN = 3
 
 
 def _run_scanner_sync(scanner: AgentScanner) -> None:
@@ -188,6 +189,57 @@ def _compute_usage_sync(period: str, agents_filter: list[str] | None) -> dict:
         for r in seed_sessions:
             by_agent[r["agent"]]["sessions"] += r["n"]
 
+        # Match `bean report` exactly: effort is turns × 3, and token
+        # efficiency only includes tokens from sessions linked to tasks.
+        for stats in by_agent.values():
+            stats["estimatedEffortMinutes"] = stats["turns"] * MINUTES_PER_TURN
+
+        efficiency_rows = conn.execute(
+            f"""
+            WITH period_turns AS (
+                SELECT session_id,
+                       COUNT(*) AS turns,
+                       COALESCE(SUM(total_tokens), 0) AS total_tokens
+                FROM agent_turns
+                WHERE {turn_clause}
+                GROUP BY session_id
+            ),
+            linked_tasks AS (
+                SELECT agent_session_id AS session_id,
+                       COUNT(DISTINCT id) AS linked_tasks
+                FROM todos
+                WHERE agent_session_id IS NOT NULL
+                GROUP BY agent_session_id
+            )
+            SELECT s.agent,
+                   COALESCE(SUM(lt.linked_tasks), 0) AS linked_tasks,
+                   COALESCE(SUM(
+                       CASE WHEN COALESCE(lt.linked_tasks, 0) > 0
+                            THEN COALESCE(pt.total_tokens, 0)
+                            ELSE 0
+                       END
+                   ), 0) AS linked_session_tokens
+            FROM agent_sessions s
+            LEFT JOIN period_turns pt ON pt.session_id = s.id
+            LEFT JOIN linked_tasks lt ON lt.session_id = s.id
+            WHERE s.agent IN ({placeholders})
+              AND (pt.session_id IS NOT NULL OR {sess_clause})
+            GROUP BY s.agent
+            """,
+            enabled_agents,
+        ).fetchall()
+        linked_tasks_total = 0
+        linked_session_tokens_total = 0
+        for r in efficiency_rows:
+            linked_tasks = r["linked_tasks"]
+            linked_session_tokens = r["linked_session_tokens"]
+            linked_tasks_total += linked_tasks
+            linked_session_tokens_total += linked_session_tokens
+            if linked_tasks > 0:
+                by_agent[r["agent"]]["tokensPerTask"] = (
+                    linked_session_tokens / linked_tasks
+                )
+
         # Per-model breakdown.
         model_rows = conn.execute(
             f"""
@@ -237,8 +289,12 @@ def _compute_usage_sync(period: str, agents_filter: list[str] | None) -> dict:
         # Totals across all enabled agents.
         totals = _empty_totals()
         for a in enabled_agents:
-            for k, v in by_agent[a].items():
-                totals[k] += v
+            for key in totals:
+                totals[key] += by_agent[a][key]
+        if linked_tasks_total > 0:
+            totals["tokensPerTask"] = (
+                linked_session_tokens_total / linked_tasks_total
+            )
 
         return {
             "available": True,
@@ -260,6 +316,7 @@ def _empty_totals() -> dict:
         "inputTokens": 0, "cachedInputTokens": 0,
         "outputTokens": 0, "reasoningTokens": 0,
         "totalTokens": 0, "toolCalls": 0,
+        "estimatedEffortMinutes": 0,
     }
 
 
