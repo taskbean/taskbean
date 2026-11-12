@@ -110,3 +110,26 @@ test('classifies CLI failures into specific kinds', () => {
   }
   assert.equal(classifyFailure({ error: { code: 7 }, stderr: 'Error: boom', mode: 'direct' }).exitCode, 7);
 });
+
+test('finds the actionable Node error after startup context and warnings', () => {
+  const failure = classifyFailure({
+    error: { code: 1 },
+    stderr: "(node:123) ExperimentalWarning: SQLite is experimental\nnode:internal/modules/package_json_reader:343\n  throw new ERR_MODULE_NOT_FOUND();\n  ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package 'commander'\n    at main (file.js:1:1)\n",
+    args: ['add', 'A task', '--json'],
+    mode: 'direct',
+  });
+  assert.equal(failure.message, "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'commander'");
+  assert.equal(failure.stderrSummary, failure.message);
+  assert.equal(failure.errorCode, 'ERR_MODULE_NOT_FOUND');
+});
+
+test('retains the CLI error code separately from the process exit code', () => {
+  const failure = classifyFailure({
+    error: { code: 1 },
+    stdout: '{"error":"project_key_conflict","message":"Choose a different key."}',
+    mode: 'direct',
+  });
+  assert.equal(failure.errorCode, 'project_key_conflict');
+  assert.equal(failure.exitCode, 1);
+  assert.equal(failure.stderrSummary, '');
+});

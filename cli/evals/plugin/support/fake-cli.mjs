@@ -15,6 +15,10 @@ switch (mode) {
     process.stderr.write(`Error: boom while reading ${home}\\private\\taskbean.db\n    at main (file.js:1:1)\n`);
     process.exit(3);
     break;
+  case 'startup-error':
+    process.stderr.write(`node:internal/modules/package_json_reader:343\n  throw new ERR_MODULE_NOT_FOUND();\n  ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package 'commander' at ${home}\\private; token=${process.env.TEST_API_TOKEN}; Authorization: Bearer test-bearer-secret\n    at main (file.js:1:1)\n`);
+    process.exit(1);
+    break;
   case 'garbage':
     process.stdout.write('this is not json');
     break;

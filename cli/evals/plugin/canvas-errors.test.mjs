@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { delimiter, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, test } from 'node:test';
-import { cliEntry, cliRoot, createSandbox, fakeCli, loadExtension, rejectsWithCode, useEnv } from './support/harness.mjs';
+import { CONTEXT, canvasRequestHeaders, cliEntry, cliRoot, createSandbox, fakeCli, loadExtension, rejectsWithCode, useEnv } from './support/harness.mjs';
 
 const sandbox = createSandbox('errors');
 const base = { ...sandbox.env, TASKBEAN_CLI_ENTRY: cliEntry };
 useEnv(base);
 process.chdir(sandbox.dirs.project);
-const { invoke, captured } = await loadExtension();
+const { canvas, invoke, captured } = await loadExtension();
 
 after(() => {
   useEnv(base);
@@ -53,6 +53,35 @@ test('unexpected CLI failures map to taskbean_cli_failed with exit code and reda
   assert.match(error.message, /boom while reading ~/);
   assert.ok(!error.message.includes(sandbox.dirs.home), 'home path is redacted');
   assert.ok(!error.message.includes(' at main'), 'stack frames are not surfaced');
+});
+
+test('native and HTTP failures expose safe operation, stderr, exit and error codes', async () => {
+  useEnv({ ...base, TASKBEAN_CLI_ENTRY: fakeCli, FAKE_BEAN_MODE: 'startup-error', TEST_API_TOKEN: 'test-env-secret' });
+  const error = await canvasError(invoke('add_task', { title: 'Private task title' }));
+  assert.equal(error.code, 'taskbean_cli_failed');
+  for (const text of ['add_task', 'taskbean_cli_failed', 'exit 1', 'ERR_MODULE_NOT_FOUND', "Cannot find package 'commander'"]) {
+    assert.ok(error.message.includes(text), text);
+  }
+  const opened = await canvas.open({ ...CONTEXT, input: {} });
+  try {
+    const response = await fetch(new URL('/api/action', opened.url), {
+      method: 'POST', headers: canvasRequestHeaders(opened.url),
+      body: JSON.stringify({ action: 'add_task', input: { title: 'Private task title' } }),
+    });
+    assert.equal(response.status, 502);
+    const { error: detail } = await response.json();
+    assert.equal(detail.operation, 'add_task');
+    assert.equal(detail.exitCode, 1);
+    assert.equal(detail.errorCode, 'ERR_MODULE_NOT_FOUND');
+    assert.match(detail.stderrSummary, /Cannot find package 'commander'/);
+    assert.match(detail.message, /taskbean_cli_failed/);
+    const surfaced = JSON.stringify({ error: error.message, detail, logs: captured.logs });
+    for (const secret of ['test-env-secret', 'test-bearer-secret', sandbox.dirs.home, 'Private task title', ' at main']) {
+      assert.ok(!surfaced.includes(secret), `must not surface ${secret}`);
+    }
+  } finally {
+    await canvas.onClose({ ...CONTEXT });
+  }
 });
 
 test('non-JSON output and JSON error payloads map to specific codes', async () => {

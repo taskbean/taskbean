@@ -148,3 +148,20 @@ test('HTTP surface serves the UI and routes actions with safe errors', async () 
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).error.code, 'invalid_request');
 });
+
+test('#120 accepts both reported payloads and preserves dashboard retrieval', async () => {
+  const title = 'Align CoreAI comparison prototype with live component contracts';
+  const keyed = await invoke('add_task', {
+    title,
+    project: 'foundry-devx-compass',
+    key: 'coreai-comparison-contract-alignment',
+  });
+  const minimal = await invoke('add_task', { title });
+  assert.equal(keyed.title, title);
+  assert.equal(keyed.project, 'foundry-devx-compass');
+  assert.equal(keyed.upsert_key, 'coreai-comparison-contract-alignment');
+  assert.equal(minimal.title, title);
+  assert.notEqual(keyed.id, minimal.id);
+  const board = await invoke('get_dashboard', { period: 'all', search: title });
+  assert.deepEqual(new Set(board.tasks.map((task) => task.id)), new Set([keyed.id, minimal.id]));
+});

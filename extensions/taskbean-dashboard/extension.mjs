@@ -123,7 +123,17 @@ function errorText(error) {
 }
 
 function redact(text) {
-    let value = String(text || "").replace(/\s+/g, " ").trim();
+    let value = String(text || "");
+    for (const [name, secret] of Object.entries(process.env)) {
+        if (secret && /token|secret|password|credential|api_?key|private_?key|authorization/i.test(name)) {
+            value = value.split(secret).join("[redacted]");
+        }
+    }
+    value = value
+        .replace(/\b(Bearer|Basic)\s+\S+/gi, "$1 [redacted]")
+        .replace(/\b((?:[\w-]*(?:token|secret|password|credential|api[_-]?key)[\w-]*)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s;,]+)/gi, "$1[redacted]")
+        .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[redacted]@")
+        .replace(/\s+/g, " ").trim();
     for (const dir of [homedir(), process.env.USERPROFILE, process.env.HOME].filter(Boolean)) {
         value = value.split(dir).join("~");
     }
@@ -140,7 +150,7 @@ const BEAN_ERRORS = {
     cli_failed: ["taskbean_cli_failed", 502, true, (e) => `Taskbean CLI failed (exit ${e.exitCode ?? "unknown"}): ${redact(e.message)}`],
 };
 
-function sanitizeError(error) {
+function sanitizeError(error, operation) {
     const message = errorText(error);
 
     if (error instanceof LinkError) {
@@ -150,7 +160,19 @@ function sanitizeError(error) {
 
     if (error instanceof BeanCommandError && BEAN_ERRORS[error.kind]) {
         const [code, status, retryable, describe] = BEAN_ERRORS[error.kind];
-        return { code, message: describe(error), status, retryable };
+        const diagnostics = {
+            operation,
+            exitCode: error.exitCode,
+            errorCode: error.errorCode ? redact(error.errorCode) : null,
+            stderrSummary: redact(error.stderrSummary),
+        };
+        const context = [
+            `code ${code}`,
+            `exit ${diagnostics.exitCode ?? "unknown"}`,
+            diagnostics.errorCode ? `error ${diagnostics.errorCode}` : "",
+            diagnostics.stderrSummary ? `stderr: ${diagnostics.stderrSummary}` : "",
+        ].filter(Boolean).join("; ");
+        return { code, message: `${operation ? `${operation}: ` : ""}${describe(error)} [${context}]`, status, retryable, ...diagnostics };
     }
 
     if (/database is locked|SQLITE_BUSY|ERR_SQLITE_ERROR|errcode:\s*5/i.test(message)) {
@@ -233,18 +255,15 @@ function sanitizeError(error) {
     };
 }
 
-async function logError(scope, error) {
-    const detail = error instanceof Error
-        ? { name: error.name, message: error.message, stack: error.stack }
-        : { message: String(error) };
+async function logError(scope, safe) {
     try {
         await session?.log(`Taskbean Dashboard ${scope} failed.`, {
             level: "error",
             ephemeral: true,
-            data: detail,
+            data: safe,
         });
     } catch {
-        console.error(`Taskbean Dashboard ${scope} failed.`, detail);
+        console.error(`Taskbean Dashboard ${scope} failed.`, safe);
     }
 }
 
@@ -252,8 +271,8 @@ async function withSafeErrors(scope, operation) {
     try {
         return await operation();
     } catch (error) {
-        await logError(scope, error);
-        const safe = sanitizeError(error);
+        const safe = sanitizeError(error, scope.replace(/^canvas action /, ""));
+        await logError(scope, safe);
         throw new CanvasError(safe.code, safe.message);
     }
 }
@@ -737,6 +756,7 @@ async function startServer(instanceId) {
         error: { code, message, status, retryable: false },
     });
     const server = createServer(async (req, res) => {
+        let operation;
         try {
             res.setHeader("Referrer-Policy", "no-referrer");
             res.setHeader("X-Content-Type-Options", "nosniff");
@@ -774,6 +794,7 @@ async function startServer(instanceId) {
                     return;
                 }
                 const body = await parseJsonBody(req);
+                operation = typeof body.action === "string" && /^[a-z_]{1,40}$/.test(body.action) ? body.action : undefined;
                 const result = await routeApi(body.action, body.input || {});
                 sendJson(res, 200, { result });
                 return;
@@ -781,8 +802,8 @@ async function startServer(instanceId) {
 
             sendJson(res, 404, { error: "not_found" });
         } catch (error) {
-            await logError("HTTP request", error);
-            const safe = sanitizeError(error);
+            const safe = sanitizeError(error, operation);
+            await logError("HTTP request", safe);
             sendJson(res, safe.status, { error: safe });
         }
     });

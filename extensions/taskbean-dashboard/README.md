@@ -48,8 +48,20 @@ cross-spawn style cmd escaping. This fixes the quoting failures in
 [#119](https://github.com/taskbean/taskbean/issues/119) and
 [#120](https://github.com/taskbean/taskbean/issues/120). CLI failures map to
 `taskbean_cli_unavailable`, `taskbean_cli_usage`, `taskbean_cli_rejected`,
-`taskbean_cli_failed`, `taskbean_busy` and `taskbean_task_not_found` with
-home-directory paths redacted.
+`taskbean_cli_failed`, `taskbean_busy` and `task_not_found`.
+Native action errors include the operation, dashboard error code, process exit
+code, CLI/runtime error code (when available), and a bounded stderr summary.
+HTTP errors and session logs also carry `operation`, `exitCode`, `errorCode`,
+and `stderrSummary` fields. Summaries select the actual error line instead of
+Node startup context or warnings. Home-directory paths, known secret environment
+values, and common credential assignments are redacted; raw arguments, stdout,
+stderr, stacks, and environment dumps are not logged.
+
+The Windows quoting fix is already in the repository source. The separate
+plugin extension-root discovery change does not change task creation or CLI
+error handling. An older user-scoped copy will keep its old behavior until the
+user explicitly updates it; neither running these checks nor installing the
+plugin replaces that copy.
 
 ## Links
 
