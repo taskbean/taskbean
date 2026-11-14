@@ -102,8 +102,13 @@ function parseJsonError(stdout) {
 
 export function classifyFailure({ error, stdout = "", stderr = "", args, mode }) {
     const exitCode = typeof error?.code === "number" ? error.code : null;
-    const details = { exitCode, stdout: String(stdout), stderr: String(stderr), args, mode };
     const payload = parseJsonError(stdout);
+    const lines = String(stderr).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const stderrSummary = lines.find((line) => /^(?:\w*Error|error)(?:\s*\[[\w]+\])?:/i.test(line))
+        || lines.find((line) => !/^(?:at\s|node:internal\/|\^|\(node:\d+\).*Warning:)/.test(line)) || "";
+    const errorCode = payload?.error || stderrSummary.match(/\[([A-Z][A-Z0-9_]+)\]/)?.[1]
+        || (typeof error?.code === "string" ? error.code : null);
+    const details = { exitCode, errorCode, stderrSummary, stdout: String(stdout), stderr: String(stderr), args, mode };
     const text = `${payload?.message || ""}\n${stderr}`;
     if (error?.code === "ENOENT" || (mode !== "direct" && /is not recognized|command not found|No such file/i.test(stderr))) {
         return new BeanCommandError("cli_unavailable", "Could not find the taskbean CLI (`bean`) on PATH.", details);
@@ -120,11 +125,10 @@ export function classifyFailure({ error, stdout = "", stderr = "", args, mode })
     if (payload) {
         return new BeanCommandError("cli_rejected", payload.message || payload.error, { ...details, payload });
     }
-    const firstLine = String(stderr).split(/\r?\n/).map((line) => line.trim()).find(Boolean);
-    if (/^error: (too many arguments|missing required argument|unknown option|option .* argument missing)/i.test(firstLine || "")) {
-        return new BeanCommandError("cli_usage", firstLine, details);
+    if (/^error: (too many arguments|missing required argument|unknown option|option .* argument missing)/i.test(stderrSummary)) {
+        return new BeanCommandError("cli_usage", stderrSummary, details);
     }
-    return new BeanCommandError("cli_failed", firstLine || `Taskbean CLI exited with code ${exitCode ?? "unknown"}.`, details);
+    return new BeanCommandError("cli_failed", stderrSummary || `Taskbean CLI exited with code ${exitCode ?? "unknown"}.`, details);
 }
 
 export function runBean(args, { env = process.env, platform = process.platform, execPath = process.execPath } = {}) {
