@@ -195,6 +195,7 @@ export function makeUpgradeCommand(deps = {}) {
   const prompter = deps.prompter ?? defaultPrompter;
   const fetchRelease = deps.fetchRelease ?? fetchLatestRelease;
   const now = deps.now ?? (() => Date.now());
+  const getPlatform = deps.platform ?? platform;
 
   return async function upgradeCommand(opts = {}) {
     const channel = detectChannel();
@@ -267,17 +268,35 @@ export function makeUpgradeCommand(deps = {}) {
     if (channel === 'npm') {
       emit(opts, { status: 'upgrading', channel, current: VERSION, latest: latestVersion, method: 'npm' },
         () => console.log(`⬆️  Upgrading taskbean ${VERSION} → ${latestVersion} via npm…`));
-      // Windows resolves `npm.cmd` via PATHEXT, so `shell: true` is unnecessary
-      // here — and `shell: true` would re-expand argv through cmd.exe.
-      const npmCmd = platform() === 'win32' ? 'npm.cmd' : 'npm';
-      const child = spawner(npmCmd, ['install', '-g', 'taskbean@latest'], {
-        stdio: opts.json ? 'ignore' : 'inherit',
-      });
-      await new Promise((resolve) => child.on('exit', resolve));
-      if (child.exitCode !== 0) {
-        emit(opts, { status: 'error', error: 'npm_failed', exit_code: child.exitCode },
-          () => console.error(`❌ npm install failed (exit ${child.exitCode})`));
-        process.exitCode = child.exitCode || 1;
+      // .cmd shims require cmd.exe. Keep the shell command constant: never
+      // interpolate release metadata, paths, or user input into it.
+      const windows = getPlatform() === 'win32';
+      const npmCmd = windows ? (process.env.ComSpec || 'cmd.exe') : 'npm';
+      const npmArgs = windows
+        ? ['/d', '/s', '/c', 'npm install -g taskbean@latest']
+        : ['install', '-g', 'taskbean@latest'];
+      let result;
+      try {
+        result = await new Promise((resolve, reject) => {
+          const child = spawner(npmCmd, npmArgs, {
+            stdio: opts.json ? 'ignore' : 'inherit',
+          });
+          child.on('error', reject);
+          child.on('exit', (code, signal) => resolve({ code, signal }));
+        });
+      } catch (err) {
+        const message = String(err.message || err);
+        emit(opts, { status: 'error', error: 'npm_failed', exit_code: null, message },
+          () => console.error(`❌ Could not start npm install: ${message}`));
+        process.exitCode = 1;
+        return;
+      }
+      if (result.code !== 0) {
+        emit(opts, {
+          status: 'error', error: 'npm_failed', exit_code: result.code,
+          ...(result.signal ? { signal: result.signal } : {}),
+        }, () => console.error(`❌ npm install failed (${result.signal ? `signal ${result.signal}` : `exit ${result.code}`})`));
+        process.exitCode = result.code || 1;
         return;
       }
       emit(opts, { status: 'upgraded', channel, from: VERSION, to: latestVersion, method: 'npm' },

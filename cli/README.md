@@ -23,6 +23,15 @@ brew install taskbean
 winget install taskbean.taskbean
 ```
 
+### Upgrade
+
+Run `bean upgrade` to update through the detected install channel. Use
+`bean upgrade --yes --json` for a non-interactive upgrade.
+
+On Windows, npm installs of 0.5.2 can fail with `Error: spawn EINVAL` before
+npm starts. Run `npm install -g taskbean@latest` directly to recover, then
+run `bean --version` to confirm the installed version.
+
 ## Quick Start
 
 ```bash

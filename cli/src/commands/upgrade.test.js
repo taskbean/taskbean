@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { EventEmitter } from 'node:events';
+import { spawn } from 'node:child_process';
 
 const TEST_HOME = join(tmpdir(), 'taskbean-upgrade-test-' + Date.now());
 mkdirSync(TEST_HOME, { recursive: true });
@@ -278,15 +280,18 @@ describe('upgrade confirmation gate (fix 3)', () => {
   });
 });
 
-describe('npm channel spawn (fix 1 — no shell:true)', () => {
+describe('npm channel spawn', () => {
   const origFetch = globalThis.fetch;
   const origLog = console.log;
   const origErr = console.error;
+  let output;
 
   beforeEach(() => {
     writeMarker('npm');
     globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ tag_name: 'v999.0.0' }) });
-    console.log = () => {}; console.error = () => {};
+    output = [];
+    console.log = (line) => output.push(JSON.parse(line));
+    console.error = () => {};
   });
 
   afterEach(() => {
@@ -307,6 +312,65 @@ describe('npm channel spawn (fix 1 — no shell:true)', () => {
     await cmd({ yes: true, json: true });
     assert.ok(capturedOpts, 'spawner received opts');
     assert.notEqual(capturedOpts.shell, true, 'spawn opts must not include shell:true');
+  });
+
+  for (const os of ['win32', 'linux']) {
+    it(`uses the correct npm launcher on ${os}`, async () => {
+      let captured;
+      const cmd = makeUpgradeCommand({
+        platform: () => os,
+        spawner: (...args) => {
+          captured = args;
+          const child = new EventEmitter();
+          setImmediate(() => child.emit('exit', 0, null));
+          return child;
+        },
+      });
+      await cmd({ yes: true, json: true });
+      assert.equal(captured[0], os === 'win32' ? (process.env.ComSpec || 'cmd.exe') : 'npm');
+      assert.deepEqual(captured[1], os === 'win32'
+        ? ['/d', '/s', '/c', 'npm install -g taskbean@latest']
+        : ['install', '-g', 'taskbean@latest']);
+      assert.equal(output.at(-1).status, 'upgraded');
+    });
+  }
+
+  for (const failure of ['throw', 'error', 'exit', 'signal']) {
+    it(`reports npm ${failure} failures without claiming success`, async () => {
+      const cmd = makeUpgradeCommand({
+        spawner: () => {
+          if (failure === 'throw') throw new Error('spawn EINVAL');
+          const child = new EventEmitter();
+          setImmediate(() => {
+            if (failure === 'error') child.emit('error', new Error('spawn npm ENOENT'));
+            else child.emit('exit', failure === 'exit' ? 7 : null, failure === 'signal' ? 'SIGTERM' : null);
+          });
+          return child;
+        },
+      });
+      await cmd({ yes: true, json: true });
+      const payload = output.at(-1);
+      assert.equal(payload.error, 'npm_failed');
+      assert.equal(payload.exit_code, failure === 'exit' ? 7 : null);
+      if (failure === 'throw') assert.equal(payload.message, 'spawn EINVAL');
+      if (failure === 'error') assert.equal(payload.message, 'spawn npm ENOENT');
+      if (failure === 'signal') assert.equal(payload.signal, 'SIGTERM');
+      assert.equal(process.exitCode, failure === 'exit' ? 7 : 1);
+      assert.ok(!output.some((event) => event.status === 'upgraded'));
+    });
+  }
+
+  it('executes a Windows npm shim through the real launcher without installing packages', {
+    skip: process.platform !== 'win32',
+  }, async () => {
+    const shimDir = join(TEST_HOME, 'npm shim with spaces & metacharacters');
+    mkdirSync(shimDir, { recursive: true });
+    writeFileSync(join(shimDir, 'npm.cmd'), '@echo off\r\nif "%*"=="install -g taskbean@latest" exit /b 0\r\nexit /b 9\r\n');
+    const cmd = makeUpgradeCommand({
+      spawner: (command, args, opts) => spawn(command, args, { ...opts, cwd: shimDir }),
+    });
+    await cmd({ yes: true, json: true });
+    assert.equal(output.at(-1).status, 'upgraded');
   });
 });
 
