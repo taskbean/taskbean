@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { delimiter, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, test } from 'node:test';
+import { pathToFileURL } from 'node:url';
 import { CONTEXT, canvasRequestHeaders, cliEntry, cliRoot, createSandbox, fakeCli, loadExtension, rejectsWithCode, useEnv } from './support/harness.mjs';
 
 const sandbox = createSandbox('errors');
@@ -78,6 +79,65 @@ test('native and HTTP failures expose safe operation, stderr, exit and error cod
     const surfaced = JSON.stringify({ error: error.message, detail, logs: captured.logs });
     for (const secret of ['test-env-secret', 'test-bearer-secret', sandbox.dirs.home, 'Private task title', ' at main']) {
       assert.ok(!surfaced.includes(secret), `must not surface ${secret}`);
+    }
+  } finally {
+    await canvas.onClose({ ...CONTEXT });
+  }
+});
+
+test('redacts Windows home paths in native, HTTP, and log diagnostics', async () => {
+  const home = process.platform === 'win32' ? 'C:\\Taskbean Synthetic Home' : '/tmp/taskbean synthetic home';
+  const env = { ...base, HOME: home, USERPROFILE: home, TASKBEAN_CLI_ENTRY: fakeCli, FAKE_BEAN_MODE: 'home-format-error' };
+  useEnv(env);
+  const opened = await canvas.open({ ...CONTEXT, input: {} });
+  try {
+    const leaks = [];
+    for (const [format, exposed] of [['forward-slash', home.replaceAll('\\', '/')], ['file-url', pathToFileURL(home).href]]) {
+      useEnv({ ...env, FAKE_HOME_FORMAT: format });
+      const logStart = captured.logs.length;
+      const error = await canvasError(invoke('add_task', { title: 'Synthetic task' }));
+      const response = await fetch(new URL('/api/action', opened.url), {
+        method: 'POST', headers: canvasRequestHeaders(opened.url),
+        body: JSON.stringify({ action: 'add_task', input: { title: 'Synthetic task' } }),
+      });
+      assert.equal(response.status, 502);
+      const { error: detail } = await response.json();
+      assert.equal(error.code, 'taskbean_cli_failed');
+      assert.equal(detail.errorCode, 'ERR_MODULE_NOT_FOUND');
+      const surfaces = [
+        ['native', error.message],
+        ['HTTP', JSON.stringify(detail)],
+        ['logs', JSON.stringify(captured.logs.slice(logStart))],
+      ];
+      for (const [name, surface] of surfaces) {
+        assert.match(surface, /Cannot find package 'commander'/);
+        assert.match(surface, /~\/private/);
+        if (surface.includes(exposed)) leaks.push(`${name}: ${format} home`);
+      }
+    }
+    assert.deepEqual(leaks, []);
+  } finally {
+    await canvas.onClose({ ...CONTEXT });
+  }
+});
+
+test('redacts quoted credential fields in native, HTTP, and log diagnostics', async () => {
+  withFake('quoted-credentials');
+  const logStart = captured.logs.length;
+  const error = await canvasError(invoke('add_task', { title: 'Synthetic task' }));
+  const opened = await canvas.open({ ...CONTEXT, input: {} });
+  try {
+    const response = await fetch(new URL('/api/action', opened.url), {
+      method: 'POST', headers: canvasRequestHeaders(opened.url),
+      body: JSON.stringify({ action: 'add_task', input: { title: 'Synthetic task' } }),
+    });
+    assert.equal(response.status, 502);
+    const { error: detail } = await response.json();
+    const surfaces = [error.message, JSON.stringify(detail), JSON.stringify(captured.logs.slice(logStart))];
+    for (const surface of surfaces) {
+      assert.match(surface, /Cannot load/);
+      assert.ok(!surface.includes('synthetic-json-secret'));
+      assert.ok(!surface.includes('synthetic-opaque-secret'));
     }
   } finally {
     await canvas.onClose({ ...CONTEXT });

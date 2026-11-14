@@ -1,4 +1,6 @@
 // Fake Taskbean CLI entry. FAKE_BEAN_MODE selects the failure to simulate.
+import { pathToFileURL } from 'node:url';
+
 const mode = process.env.FAKE_BEAN_MODE || 'echo';
 const args = process.argv.slice(2);
 const home = process.env.USERPROFILE || process.env.HOME || '';
@@ -17,6 +19,14 @@ switch (mode) {
     break;
   case 'startup-error':
     process.stderr.write(`node:internal/modules/package_json_reader:343\n  throw new ERR_MODULE_NOT_FOUND();\n  ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package 'commander' at ${home}\\private; token=${process.env.TEST_API_TOKEN}; Authorization: Bearer test-bearer-secret\n    at main (file.js:1:1)\n`);
+    process.exit(1);
+    break;
+  case 'home-format-error':
+    process.stderr.write(`Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'commander' at ${process.env.FAKE_HOME_FORMAT === 'file-url' ? pathToFileURL(home).href : home.replaceAll('\\', '/')}/private\n`);
+    process.exit(1);
+    break;
+  case 'quoted-credentials':
+    process.stderr.write('Error [ERR_SYNTHETIC]: Cannot load {"token":"synthetic-json-secret","Authorization":"synthetic-opaque-secret"}\n');
     process.exit(1);
     break;
   case 'garbage':

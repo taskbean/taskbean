@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
 import { resolveTrustedCopilotSession, resolveTrustedPullRequest, sessionDeepLink, validatedUuid } from "./session-links.mjs";
 import { getAvailability as describeAvailability } from "./availability.mjs";
@@ -131,11 +131,13 @@ function redact(text) {
     }
     value = value
         .replace(/\b(Bearer|Basic)\s+\S+/gi, "$1 [redacted]")
-        .replace(/\b((?:[\w-]*(?:token|secret|password|credential|api[_-]?key)[\w-]*)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s;,]+)/gi, "$1[redacted]")
+        .replace(/\b((?:[\w-]*(?:token|secret|password|credential|api[_-]?key|authorization)[\w-]*)["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s;,]+)/gi, "$1[redacted]")
         .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[redacted]@")
         .replace(/\s+/g, " ").trim();
     for (const dir of [homedir(), process.env.USERPROFILE, process.env.HOME].filter(Boolean)) {
-        value = value.split(dir).join("~");
+        for (const path of [pathToFileURL(dir).href, dir.replaceAll("\\", "/"), dir]) {
+            value = value.split(path).join("~");
+        }
     }
     return value.length > 200 ? `${value.slice(0, 197)}...` : value;
 }
