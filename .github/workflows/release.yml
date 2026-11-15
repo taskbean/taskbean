@@ -50,6 +50,7 @@ jobs:
         working-directory: cli
         shell: bash
         run: |
+          mkdir -p ../dist
           bun build bin/taskbean.js \
             --compile \
             --target=bun-${{ matrix.target }} \
