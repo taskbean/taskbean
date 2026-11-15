@@ -142,9 +142,15 @@ gh workflow run release.yml --repo taskbean/taskbean --ref main -f tag=v0.7.0
 ```
 
 This manual run publishes only npm, checks out the existing tag, and derives the npm
-version from it. Missing or invalid tags fail. An already-published version is skipped
-with a message; other registry errors fail the run. Do not move or recreate a released
-tag to retry npm publication.
+version from it. Missing or invalid tags fail, and the tag must have a published,
+non-draft, non-prerelease GitHub release. An already-published version is skipped with
+a message; other registry errors fail the run. Do not move or recreate a released tag to
+retry npm publication.
+
+Tag pushes publish with npm provenance. A recovery dispatch publishes without
+provenance, because the attestation would name the dispatching `main` commit instead of
+the tag commit. A dispatch publishes to the `latest` dist-tag, so use it only for the
+newest release; npm rejects a version below the current `latest` without an explicit tag.
 
 ## Works with
 

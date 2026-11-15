@@ -145,6 +145,27 @@ jobs:
           git checkout --detach "$commit"
           echo "value=${TAG#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Require published GitHub release for dispatched tag
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! release=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease); then
+            echo "::error::No published GitHub release exists for ${TAG}; npm publication requires one."
+            exit 1
+          fi
+          if [[ "$(jq -r '.isDraft' <<<"$release")" != "false" ]]; then
+            echo "::error::GitHub release ${TAG} is a draft; publish the release before npm publication."
+            exit 1
+          fi
+          if [[ "$(jq -r '.isPrerelease' <<<"$release")" != "false" ]]; then
+            echo "::error::GitHub release ${TAG} is a prerelease; only stable releases publish to npm."
+            exit 1
+          fi
+          echo "GitHub release ${TAG} is published and stable."
+
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -200,7 +221,14 @@ jobs:
       - name: Publish to npm
         if: steps.published.outputs.exists == 'false'
         working-directory: cli
-        run: npm publish --access public
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "::notice::Publishing without provenance: a dispatch run's attestation would name the dispatching commit, not the release tag commit."
+            npm publish --access public --provenance=false
+          else
+            npm publish --access public
+          fi
 
   winget:
     # Submits a PR to microsoft/winget-pkgs. Gated on the repo secret
