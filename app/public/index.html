@@ -5917,6 +5917,9 @@ async function loadUsageStats() {
                 </div>`;
             }).join('')}
         </div>` : '';
+        const tokensPerTaskCard = Object.hasOwn(totals, 'tokensPerTask')
+            ? `<div class="usage-stat accent"><div class="usage-stat-value">${formatTokens(totals.tokensPerTask)}</div><div class="usage-stat-label">Tokens / Task</div></div>`
+            : '';
 
         container.innerHTML = `
             <div class="usage-grid">
@@ -5924,6 +5927,8 @@ async function loadUsageStats() {
                 <div class="usage-stat green"><div class="usage-stat-value">${totals.sessions || 0}</div><div class="usage-stat-label">Sessions</div></div>
                 <div class="usage-stat orange"><div class="usage-stat-value">${totals.turns || 0}</div><div class="usage-stat-label">Turns</div></div>
                 <div class="usage-stat purple"><div class="usage-stat-value">${totals.toolCalls || 0}</div><div class="usage-stat-label">Tool Calls</div></div>
+                <div class="usage-stat orange"><div class="usage-stat-value">${totals.estimatedEffortMinutes || 0}</div><div class="usage-stat-label">Effort Minutes</div></div>
+                ${tokensPerTaskCard}
             </div>
             ${panelNote}
             ${seedHint}
@@ -5956,7 +5961,7 @@ async function loadUsageStats() {
 }
 
 function _emptyUsageTotals() {
-    return { turns: 0, sessions: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningTokens: 0, totalTokens: 0, toolCalls: 0 };
+    return { turns: 0, sessions: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningTokens: 0, totalTokens: 0, toolCalls: 0, estimatedEffortMinutes: 0 };
 }
 
 function _safeDomId(value) {
