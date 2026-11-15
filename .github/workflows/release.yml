@@ -3,12 +3,19 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing stable release tag to publish to npm (e.g. v0.7.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   build:
+    if: github.event_name == 'push'
     strategy:
       matrix:
         include:
@@ -63,6 +70,7 @@ jobs:
           path: dist/${{ matrix.artifact }}
 
   release:
+    if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
     outputs:
@@ -104,41 +112,123 @@ jobs:
   npm-publish:
     needs: release
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.ref_name, '-') }}
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: npm-publish-${{ inputs.tag || github.ref_name }}
+      cancel-in-progress: false
+    if: >-
+      ${{ !cancelled() &&
+          (github.event_name == 'workflow_dispatch' ||
+           (needs.release.result == 'success' && !contains(github.ref_name, '-'))) }}
     steps:
-      - name: Check for NPM_TOKEN
-        id: gate
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate and check out release tag
+        id: version
         shell: bash
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
-          if [ -z "${NPM_TOKEN:-}" ]; then
-            echo "NPM_TOKEN secret not set — skipping npm publish."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Expected an existing stable release tag in vX.Y.Z format."
+            exit 1
           fi
+          if ! commit=$(git rev-parse --verify "refs/tags/${TAG}^{commit}"); then
+            echo "::error::Release tag ${TAG} does not exist or does not point to a commit."
+            exit 1
+          fi
+          git checkout --detach "$commit"
+          echo "value=${TAG#v}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
-        if: steps.gate.outputs.skip == 'false'
+      - name: Require published GitHub release for dispatched tag
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! release=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease); then
+            echo "::error::No published GitHub release exists for ${TAG}; npm publication requires one."
+            exit 1
+          fi
+          if [[ "$(jq -r '.isDraft' <<<"$release")" != "false" ]]; then
+            echo "::error::GitHub release ${TAG} is a draft; publish the release before npm publication."
+            exit 1
+          fi
+          if [[ "$(jq -r '.isPrerelease' <<<"$release")" != "false" ]]; then
+            echo "::error::GitHub release ${TAG} is a prerelease; only stable releases publish to npm."
+            exit 1
+          fi
+          echo "GitHub release ${TAG} is published and stable."
 
       - uses: actions/setup-node@v4
-        if: steps.gate.outputs.skip == 'false'
         with:
-          node-version: '22'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Verify publishing toolchain
+        shell: bash
+        run: |
+          node --version
+          npm --version
+          NPM_VERSION=$(npm --version) node <<'NODE'
+          const version = process.env.NPM_VERSION;
+          const [major, minor, patch] = version.split('.').map(Number);
+          if (!/^\d+\.\d+\.\d+$/.test(version) ||
+              !(major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1))))) {
+            throw new Error(`npm >= 11.5.1 is required for trusted publishing; found ${version}`);
+          }
+          NODE
+
+      - name: Check whether npm version is already published
+        id: published
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          const version = process.env.VERSION;
+          const response = await fetch(`https://registry.npmjs.org/taskbean/${version}`);
+          if (response.status === 404) {
+            console.log(`taskbean@${version} is not published; continuing with OIDC.`);
+            appendFileSync(process.env.GITHUB_OUTPUT, 'exists=false\n');
+          } else {
+            if (!response.ok) {
+              throw new Error(`npm registry lookup failed: HTTP ${response.status}`);
+            }
+            const metadata = await response.json();
+            if (metadata.name !== 'taskbean' || metadata.version !== version) {
+              throw new Error('npm registry returned unexpected package metadata');
+            }
+            console.log(`taskbean@${version} is already published; skipping npm publish.`);
+            appendFileSync(process.env.GITHUB_OUTPUT, 'exists=true\n');
+          }
+          NODE
+
       - name: Set version from tag
-        if: steps.gate.outputs.skip == 'false'
+        if: steps.published.outputs.exists == 'false'
         working-directory: cli
-        run: npm version "${{ needs.release.outputs.version }}" --no-git-tag-version --allow-same-version
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version --ignore-scripts
 
       - name: Publish to npm
-        if: steps.gate.outputs.skip == 'false'
+        if: steps.published.outputs.exists == 'false'
         working-directory: cli
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "::notice::Publishing without provenance: a dispatch run's attestation would name the dispatching commit, not the release tag commit."
+            npm publish --access public --provenance=false
+          else
+            npm publish --access public
+          fi
 
   winget:
     # Submits a PR to microsoft/winget-pkgs. Gated on the repo secret
@@ -147,7 +237,7 @@ jobs:
     # skips gracefully so normal releases aren't blocked.
     needs: release
     runs-on: windows-latest
-    if: ${{ !contains(github.ref_name, '-') }}
+    if: ${{ github.event_name == 'push' && !contains(github.ref_name, '-') }}
     steps:
       - name: Check for WINGET_TOKEN
         id: gate
