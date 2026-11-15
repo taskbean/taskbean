@@ -122,6 +122,30 @@ taskbean/
 └── README.md               # ← you are here
 ```
 
+## Publishing releases
+
+Stable `vX.Y.Z` tag pushes build the binaries and GitHub release, then publish the CLI
+to npm using [trusted publishing (OIDC)](https://docs.npmjs.com/trusted-publishers/).
+The npm job uses Node 24, requires npm >= 11.5.1, and does not use an npm token.
+
+Before publishing, configure the `taskbean` package's trusted publisher on npmjs.com:
+GitHub organization **taskbean**, repository **taskbean**, workflow filename
+**release.yml**, and no environment. Allow direct **npm publish**, not only staged
+publishing. A new trusted publisher must complete its first successful publish within
+two days; if it expires, recreate it before retrying.
+
+After this workflow is on `main`, publish an existing stable tag without rebuilding
+binaries or changing its GitHub release:
+
+```bash
+gh workflow run release.yml --repo taskbean/taskbean --ref main -f tag=v0.7.0
+```
+
+This manual run publishes only npm, checks out the existing tag, and derives the npm
+version from it. Missing or invalid tags fail. An already-published version is skipped
+with a message; other registry errors fail the run. Do not move or recreate a released
+tag to retry npm publication.
+
 ## Works with
 
 taskbean ships as an [Agent Skill](https://agentskills.io). Drop it in the right folder and the agent picks it up on its next run. `bean install` handles the folder.
